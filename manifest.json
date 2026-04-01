@@ -3,7 +3,7 @@
   "name": "장원급제반",
   "short_name": "장원급제",
   "description": "공직의 길을 걷는 자들의 모임",
-  "start_url": "/",
+  "start_url": "./",
   "display": "standalone",
   "orientation": "portrait",
   "background_color": "#F5F5DC",
