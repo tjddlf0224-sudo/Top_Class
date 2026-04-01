@@ -1,0 +1,26 @@
+{
+  "id": "장원급제반",
+  "name": "장원급제반",
+  "short_name": "장원급제",
+  "description": "공직의 길을 걷는 자들의 모임",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#F5F5DC",
+  "theme_color": "#5D4037",
+  "lang": "ko",
+  "icons": [
+    {
+      "src": "icon.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
