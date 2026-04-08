@@ -1034,24 +1034,23 @@
         </div>
     </section>
 
-</div><!-- /#app -->
-
-    <!-- =====================================================
-         [화면] 내 QR 코드 (#sec-my-qr) - 학생 전용
-    ====================================================== -->
+    <!-- 학생: 내 QR 코드 -->
     <section id="sec-my-qr" class="hidden">
         <div class="header"><h2 class="title">📱 내 QR 코드</h2></div>
         <div class="container">
             <div class="card" style="text-align:center; padding:24px 16px;">
                 <div style="font-size:1rem; font-weight:bold; margin-bottom:6px;" id="my-qr-name"></div>
-                <div style="font-size:0.82rem; color:#888; margin-bottom:18px;">
-                    선생님께 이 QR을 보여주시오.<br>선생님이 스캔하면 엽전을 받을 수 있소.
+                <div style="font-size:0.82rem; color:#888; margin-bottom:20px; line-height:1.6;">
+                    선생님께 이 QR을 보여주시오.<br>스캔하면 엽전을 받을 수 있소.
                 </div>
-                <div id="my-qr-canvas" style="display:flex; justify-content:center; margin-bottom:18px;"></div>
-                <div style="font-size:0.78rem; color:#aaa; margin-bottom:18px;" id="my-qr-url"></div>
+                <div id="my-qr-canvas"
+                     style="display:flex; justify-content:center; align-items:center;
+                            margin-bottom:16px; min-height:230px;"></div>
+                <div style="font-size:0.7rem; color:#bbb; word-break:break-all;
+                            line-height:1.5; margin-bottom:20px;" id="my-qr-url"></div>
                 <button onclick="downloadMyQR()"
                         style="width:100%; background:var(--primary); color:white; border:none;
-                               padding:12px; border-radius:8px; cursor:pointer;
+                               padding:13px; border-radius:8px; cursor:pointer;
                                font-family:inherit; font-size:0.95rem; font-weight:bold;">
                     📥 이미지로 저장
                 </button>
@@ -1061,9 +1060,7 @@
         </div>
     </section>
 
-    <!-- =====================================================
-         [화면] QR 관리 (#sec-qr-manager) - 교사 전용
-    ====================================================== -->
+    <!-- 교사: QR 관리 -->
     <section id="sec-qr-manager" class="hidden">
         <div class="header"><h2 class="title">📱 학생 QR 관리</h2></div>
         <div class="container">
@@ -1086,6 +1083,8 @@
                     onclick="showSection('sec-home')">뒤로 가기</button>
         </div>
     </section>
+
+</div><!-- /#app -->
 
 <script>
 /* =========================================================
@@ -2201,7 +2200,7 @@ async function openPointLog(tab) {
     const listDiv = document.getElementById('point-log-list');
 
     const tabStyle = (t, active) =>
-        `flex:1; padding:8px; border:none; border-radius:6px; cursor:pointer; font-family:inherit; font-size:0.82rem;` +
+        `flex:1; padding:6px 2px; border:none; border-radius:6px; cursor:pointer; font-family:inherit; font-size:0.76rem; line-height:1.3;` +
         `background:${active===t ? 'var(--primary)' : '#eee'};` +
         `color:${active===t ? 'white' : '#555'};` +
         `font-weight:${active===t ? 'bold' : 'normal'};`;
@@ -2209,10 +2208,10 @@ async function openPointLog(tab) {
     if (currentUser.role === 'teacher') {
         const activeTab = tab || 'pending';
         tabsDiv.innerHTML = `
-            <button onclick="openPointLog('pending')" style="${tabStyle('pending', activeTab)}">🔔 승인대기</button>
-            <button onclick="openPointLog('grant')"   style="${tabStyle('grant',   activeTab)}">✏️ 엽전부여</button>
+            <button onclick="openPointLog('pending')" style="${tabStyle('pending', activeTab)}">🔔 승인<br>대기</button>
+            <button onclick="openPointLog('grant')"   style="${tabStyle('grant',   activeTab)}">✏️ 엽전<br>부여</button>
             <button onclick="openPointLog('status')"  style="${tabStyle('status',  activeTab)}">🪙 현황</button>
-            <button onclick="openAbsence()"           style="${tabStyle('absence', activeTab)}">📋 결석사유</button>`;
+            <button onclick="openAbsence()"           style="${tabStyle('absence', activeTab)}">📋 결석<br>사유</button>`;
         listDiv.innerHTML = '<p style="text-align:center;color:#999;">불러오는 중...</p>';
 
         if (activeTab === 'pending') {
@@ -2484,7 +2483,7 @@ async function openMarket(tab) {
 
     const activeTab = tab || 'buy';
     const tabStyle  = (t) =>
-        `flex:1; padding:8px; border:none; border-radius:6px; cursor:pointer; font-family:inherit; font-size:0.82rem;` +
+        `flex:1; padding:6px 2px; border:none; border-radius:6px; cursor:pointer; font-family:inherit; font-size:0.76rem; line-height:1.3;` +
         `background:${activeTab===t?'var(--primary)':'#eee'};` +
         `color:${activeTab===t?'white':'#555'};` +
         `font-weight:${activeTab===t?'bold':'normal'};`;
@@ -2492,11 +2491,11 @@ async function openMarket(tab) {
     // 탭 구성
     let tabHtml = `<button onclick="openMarket('buy')" style="${tabStyle('buy')}">🛒 구매</button>`;
     if (isTeacher || isWonwon) {
-        tabHtml += `<button onclick="openMarket('sell')"      style="${tabStyle('sell')}">🏷️ 판매처리</button>`;
-        tabHtml += `<button onclick="openMarket('log')"       style="${tabStyle('log')}">📜 거래내역</button>`;
+        tabHtml += `<button onclick="openMarket('sell')"      style="${tabStyle('sell')}">🏷️ 판매<br>처리</button>`;
+        tabHtml += `<button onclick="openMarket('log')"       style="${tabStyle('log')}">📜 거래<br>내역</button>`;
     }
     if (isTeacher) {
-        tabHtml += `<button onclick="openMarket('inventory')" style="${tabStyle('inventory')}">📦 재고관리</button>`;
+        tabHtml += `<button onclick="openMarket('inventory')" style="${tabStyle('inventory')}">📦 재고<br>관리</button>`;
     }
     tabsDiv.innerHTML = tabHtml;
 
@@ -5608,38 +5607,28 @@ async function buildParentReportDocx(name) {
 
     return await Packer.toBlob(doc);
 }
+
+
 /* =========================================================
    QR 코드 기능
-   - QR 라이브러리: qrcode.js (CDN)
-   - BASE_URL: grant.html 경로
    ========================================================= */
 
 const QR_BASE_URL = 'https://tjddlf0224-sudo.github.io/Top_Class/grant.html';
 
-/** QR 캔버스 생성 (학생 이름 → URL → canvas element 반환) */
-function makeQRCanvas(studentName, size) {
-    size = size || 200;
-    const url = QR_BASE_URL + '?student=' + encodeURIComponent(studentName);
-    const wrapper = document.createElement('div');
-    // qrcode.js 동적 로드 후 생성
-    const qr = new QRCode(wrapper, {
-        text:          url,
-        width:         size,
-        height:        size,
-        colorDark:     '#3E2723',
-        colorLight:    '#ffffff',
-        correctLevel:  QRCode.CorrectLevel.M
-    });
-    return { wrapper, url };
-}
-
-/** QR 라이브러리 동적 로드 */
+/** QRCode.js 라이브러리 동적 로드 */
 function loadQRLib() {
     return new Promise((resolve) => {
         if (window.QRCode) { resolve(); return; }
-        const s = document.createElement('script');
-        s.src = 'https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js';
-        s.onload = resolve;
+        const s   = document.createElement('script');
+        s.src     = 'https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js';
+        s.onload  = resolve;
+        s.onerror = () => {
+            // CDN 실패 시 대체 CDN 시도
+            const s2   = document.createElement('script');
+            s2.src     = 'https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js';
+            s2.onload  = resolve;
+            document.head.appendChild(s2);
+        };
         document.head.appendChild(s);
     });
 }
@@ -5653,11 +5642,21 @@ async function openMyQR() {
     document.getElementById('my-qr-name').textContent = `${name} 관원의 QR`;
 
     const url = QR_BASE_URL + '?student=' + encodeURIComponent(name);
-    document.getElementById('my-qr-url').textContent = url;
+    // URL을 2줄로 나눠 표시 (도메인 / 경로?파라미터)
+    const urlParts = url.split('/Top_Class/');
+    document.getElementById('my-qr-url').innerHTML =
+        urlParts.length === 2
+        ? urlParts[0] + '/Top_Class/<br>' + urlParts[1]
+        : url;
 
     const container = document.getElementById('my-qr-canvas');
     container.innerHTML = '';
-    new QRCode(container, {
+    // overflow 방지: wrapper div에 명시적 크기 지정
+    const wrapper = document.createElement('div');
+    wrapper.style.cssText = 'width:220px; height:220px; flex-shrink:0;';
+    container.appendChild(wrapper);
+
+    new QRCode(wrapper, {
         text:         url,
         width:        220,
         height:       220,
@@ -5665,28 +5664,45 @@ async function openMyQR() {
         colorLight:   '#ffffff',
         correctLevel: QRCode.CorrectLevel.M
     });
+
+    // QRCode.js가 img 태그를 비동기로 추가하므로 잠시 후 스타일 보정
+    setTimeout(() => {
+        const img = wrapper.querySelector('img');
+        if (img) {
+            // 이미지 강제 표시 및 가운데 정렬
+            img.style.cssText = 'width:220px; height:220px; display:block; margin:0 auto;';
+        }
+        const canvas = wrapper.querySelector('canvas');
+        if (canvas) {
+            // ★ 캔버스는 화면에서 숨김 처리
+            canvas.style.cssText = 'display:none;';
+        }
+    }, 300);
 }
 
 /** 학생: QR 이미지 다운로드 */
-function downloadMyQR() {
-    const container = document.getElementById('my-qr-canvas');
-    const img = container.querySelector('img') || container.querySelector('canvas');
-    if (!img) return showToast('QR 이미지를 찾지 못했소.');
+async function downloadMyQR() {
+    const wrapper = document.querySelector('#my-qr-canvas > div');
+    if (!wrapper) return showToast('QR이 아직 생성되지 않았소.');
 
-    let dataUrl;
-    if (img.tagName === 'CANVAS') {
-        dataUrl = img.toDataURL('image/png');
-    } else {
-        // img 태그인 경우 canvas로 변환
-        const canvas = document.createElement('canvas');
-        canvas.width  = img.naturalWidth  || 220;
-        canvas.height = img.naturalHeight || 220;
-        canvas.getContext('2d').drawImage(img, 0, 0);
+    const canvas = wrapper.querySelector('canvas');
+    const img    = wrapper.querySelector('img');
+    let   dataUrl;
+
+    if (canvas) {
         dataUrl = canvas.toDataURL('image/png');
+    } else if (img) {
+        const c   = document.createElement('canvas');
+        c.width   = 220; c.height = 220;
+        c.getContext('2d').drawImage(img, 0, 0, 220, 220);
+        dataUrl = c.toDataURL('image/png');
+    } else {
+        return showToast('QR 이미지를 찾지 못했소.');
     }
-    const a = document.createElement('a');
-    a.href     = dataUrl;
-    a.download = `QR_${currentUser.name}.png`;
+
+    const a      = document.createElement('a');
+    a.href       = dataUrl;
+    a.download   = `QR_${currentUser.name}.png`;
     a.click();
 }
 
@@ -5710,29 +5726,48 @@ async function openQRManager() {
     students.forEach(m => {
         const card = document.createElement('div');
         card.className = 'card';
-        card.style.cssText = 'text-align:center; padding:16px;';
+        card.style.cssText = 'text-align:center; padding:16px; overflow:visible;';
 
         const nameEl = document.createElement('div');
-        nameEl.style.cssText = 'font-weight:bold; margin-bottom:10px; font-size:0.95rem;';
-        nameEl.textContent = `${m.name} (${m.role || '관원'})`;
+        nameEl.style.cssText = 'font-weight:bold; margin-bottom:12px; font-size:0.95rem;';
+        nameEl.textContent   = `${m.name} (${m.role || '관원'})`;
         card.appendChild(nameEl);
 
-        const qrDiv = document.createElement('div');
-        qrDiv.style.cssText = 'display:flex; justify-content:center; margin-bottom:10px;';
+        const qrWrap = document.createElement('div');
+        qrWrap.style.cssText =
+            'display:flex; justify-content:center; margin-bottom:10px;';
+        const qrBox  = document.createElement('div');
+        qrBox.style.cssText = 'width:180px; height:180px; flex-shrink:0;';
+        qrWrap.appendChild(qrBox);
+        card.appendChild(qrWrap);
+
         const url = QR_BASE_URL + '?student=' + encodeURIComponent(m.name);
-        new QRCode(qrDiv, {
+        new QRCode(qrBox, {
             text:         url,
-            width:        160,
-            height:       160,
+            width:        180,
+            height:       180,
             colorDark:    '#3E2723',
             colorLight:   '#ffffff',
             correctLevel: QRCode.CorrectLevel.M
         });
-        card.appendChild(qrDiv);
+
+        // 이미지 크기 보정
+        setTimeout(() => {
+            const img = qrBox.querySelector('img');
+            // 이미지 강제 표시 및 가운데 정렬
+            if (img) img.style.cssText = 'width:180px;height:180px;display:block; margin:0 auto;';
+            
+            const cv  = qrBox.querySelector('canvas');
+            // ★ 캔버스는 화면에서 숨김 처리
+            if (cv)  cv.style.cssText  = 'display:none;';
+        }, 300);
 
         const urlEl = document.createElement('div');
-        urlEl.style.cssText = 'font-size:0.72rem; color:#aaa; word-break:break-all;';
-        urlEl.textContent = url;
+        urlEl.style.cssText = 'font-size:0.7rem; color:#bbb; line-height:1.5; margin-top:6px; text-align:center;';
+        const parts = url.split('/Top_Class/');
+        urlEl.innerHTML = parts.length === 2
+            ? parts[0] + '/Top_Class/<br>' + parts[1]
+            : url;
         card.appendChild(urlEl);
 
         listDiv.appendChild(card);
@@ -5741,41 +5776,39 @@ async function openQRManager() {
 
 /** 교사: 전체 QR 인쇄 */
 function printAllQR() {
-    const listDiv = document.getElementById('qr-manager-list');
-    const cards   = listDiv.querySelectorAll('.card');
-    if (!cards.length) return showToast('QR 카드가 없소.');
+    const cards = document.querySelectorAll('#qr-manager-list .card');
+    if (!cards.length) return showToast('QR 카드가 없소. 먼저 목록을 불러오시오.');
 
-    // 각 카드의 QR img/canvas를 dataURL로 변환하여 인쇄창 생성
     const win  = window.open('', '_blank');
-    let   html = `<html><head><title>학생 QR 코드</title>
+    let   html = `<html><head><title>장원급제반 학생 QR</title>
     <style>
-        body { font-family: 'Malgun Gothic', sans-serif; margin:0; padding:10px; }
-        .grid { display:grid; grid-template-columns: repeat(3, 1fr); gap:12px; }
-        .item { border:1px solid #ddd; border-radius:8px; padding:12px;
-                text-align:center; break-inside:avoid; }
-        .name { font-weight:bold; margin-bottom:8px; font-size:14px; }
-        img { width:140px; height:140px; }
-        @media print { @page { margin:10mm; } }
+        body { font-family:'Malgun Gothic',sans-serif; margin:0; padding:10px; background:#fff; }
+        .grid { display:grid; grid-template-columns:repeat(3,1fr); gap:14px; }
+        .item { border:1px solid #ddd; border-radius:8px; padding:14px;
+                text-align:center; break-inside:avoid; page-break-inside:avoid; }
+        .name { font-weight:bold; margin-bottom:8px; font-size:13px; }
+        img   { width:150px; height:150px; display:block; margin:0 auto; }
+        @media print { @page{margin:8mm;} }
     </style></head><body><div class="grid">`;
 
     cards.forEach(card => {
-        const name   = card.querySelector('div').textContent;
-        const imgEl  = card.querySelector('img') || card.querySelector('canvas');
-        let   src    = '';
+        const name  = card.querySelector('div')?.textContent?.trim() || '';
+        const imgEl = card.querySelector('img');
+        const cvEl  = card.querySelector('canvas');
+        let   src   = '';
         if (imgEl) {
-            if (imgEl.tagName === 'CANVAS') {
-                src = imgEl.toDataURL('image/png');
-            } else {
-                src = imgEl.src;
-            }
+            src = imgEl.src;
+        } else if (cvEl) {
+            src = cvEl.toDataURL('image/png');
         }
         html += `<div class="item">
             <div class="name">${name}</div>
-            ${src ? `<img src="${src}">` : ''}
+            ${src ? `<img src="${src}">` : '<p style="color:#aaa;font-size:11px;">QR 생성 대기</p>'}
         </div>`;
     });
 
-    html += `</div><script>window.onload=()=>window.print();<\/script></body></html>`;
+    html += `</div><script>window.onload=()=>{setTimeout(()=>window.print(),500);}<\/script>
+    </body></html>`;
     win.document.write(html);
     win.document.close();
 }
