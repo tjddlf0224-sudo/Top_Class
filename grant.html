@@ -5,329 +5,112 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>엽전 부여 — 장원급제반</title>
     <style>
-        :root {
-            --primary:   #5D4037;
-            --secondary: #EFEBE9;
-            --accent:    #8D6E63;
-            --green:     #2E7D32;
-            --red:       #C62828;
-        }
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body {
-            font-family: 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif;
-            background: var(--secondary);
-            min-height: 100vh;
-            display: flex;
-            align-items: flex-start;
-            justify-content: center;
-            padding: 24px 16px 40px;
-        }
-        .wrap {
-            width: 100%;
-            max-width: 420px;
-        }
-        .header {
-            text-align: center;
-            margin-bottom: 20px;
-        }
-        .header h1 {
-            font-size: 1.4rem;
-            color: var(--primary);
-            margin-bottom: 4px;
-        }
-        .header p {
-            font-size: 0.85rem;
-            color: #888;
-        }
-        .card {
-            background: white;
-            border-radius: 12px;
-            padding: 20px;
-            margin-bottom: 14px;
-            box-shadow: 0 1px 6px rgba(0,0,0,0.08);
-        }
-        .student-badge {
-            background: var(--primary);
-            color: white;
-            border-radius: 12px;
-            padding: 16px 20px;
-            text-align: center;
-            margin-bottom: 14px;
-        }
-        .student-badge .label {
-            font-size: 0.82rem;
-            opacity: 0.8;
-            margin-bottom: 4px;
-        }
-        .student-badge .name {
-            font-size: 1.5rem;
-            font-weight: bold;
-        }
-        .student-badge .coins {
-            font-size: 0.88rem;
-            margin-top: 6px;
-            opacity: 0.9;
-        }
-        label {
-            display: block;
-            font-size: 0.85rem;
-            color: #666;
-            margin-bottom: 6px;
-            font-weight: bold;
-        }
-        input, select, textarea {
-            width: 100%;
-            padding: 11px 12px;
-            border: 1px solid #ddd;
-            border-radius: 8px;
-            font-size: 0.95rem;
-            font-family: inherit;
-            margin-bottom: 14px;
-            background: white;
-            color: #333;
-        }
-        input:focus, select:focus, textarea:focus {
-            outline: none;
-            border-color: var(--primary);
-        }
-        .amount-grid {
-            display: grid;
-            grid-template-columns: repeat(5, 1fr);
-            gap: 8px;
-            margin-bottom: 14px;
-        }
-        .amount-btn {
-            padding: 12px 0;
-            border: 2px solid #ddd;
-            border-radius: 8px;
-            background: white;
-            cursor: pointer;
-            font-family: inherit;
-            font-size: 0.9rem;
-            font-weight: bold;
-            color: #555;
-            transition: all 0.15s;
-            text-align: center;
-        }
-        .amount-btn.selected-plus {
-            border-color: var(--green);
-            background: #E8F5E9;
-            color: var(--green);
-        }
-        .amount-btn.selected-minus {
-            border-color: var(--red);
-            background: #FFEBEE;
-            color: var(--red);
-        }
-        .type-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 8px;
-            margin-bottom: 14px;
-        }
-        .type-btn {
-            padding: 12px;
-            border: 2px solid #ddd;
-            border-radius: 8px;
-            background: white;
-            cursor: pointer;
-            font-family: inherit;
-            font-size: 0.9rem;
-            font-weight: bold;
-            color: #555;
-            text-align: center;
-            transition: all 0.15s;
-        }
-        .type-btn.selected-plus {
-            border-color: var(--green);
-            background: #E8F5E9;
-            color: var(--green);
-        }
-        .type-btn.selected-minus {
-            border-color: var(--red);
-            background: #FFEBEE;
-            color: var(--red);
-        }
-        .btn-submit {
-            width: 100%;
-            padding: 15px;
-            background: var(--primary);
-            color: white;
-            border: none;
-            border-radius: 10px;
-            font-size: 1.05rem;
-            font-weight: bold;
-            cursor: pointer;
-            font-family: inherit;
-            transition: background 0.2s;
-        }
-        .btn-submit:disabled {
-            background: #bbb;
-            cursor: not-allowed;
-        }
-        .btn-submit:not(:disabled):active {
-            background: #3E2723;
-        }
-        .msg {
-            text-align: center;
-            padding: 14px;
-            border-radius: 10px;
-            font-size: 0.92rem;
-            margin-bottom: 14px;
-            display: none;
-        }
-        .msg.error   { background: #FFEBEE; color: var(--red); display: block; }
-        .msg.success { background: #E8F5E9; color: var(--green); display: block; }
-        .section-title {
-            font-size: 0.82rem;
-            font-weight: bold;
-            color: #888;
-            letter-spacing: 0.05em;
-            margin-bottom: 10px;
-            text-transform: uppercase;
-        }
-        .step {
-            display: none;
-        }
-        .step.active {
-            display: block;
-        }
-        .success-screen {
-            text-align: center;
-            padding: 30px 0;
-        }
-        .success-screen .icon {
-            font-size: 4rem;
-            margin-bottom: 16px;
-        }
-        .success-screen h2 {
-            font-size: 1.3rem;
-            color: var(--primary);
-            margin-bottom: 10px;
-        }
-        .success-screen p {
-            color: #666;
-            font-size: 0.92rem;
-            line-height: 1.6;
-        }
-        .btn-again {
-            margin-top: 24px;
-            width: 100%;
-            padding: 13px;
-            background: var(--secondary);
-            color: var(--primary);
-            border: 2px solid var(--primary);
-            border-radius: 10px;
-            font-size: 0.95rem;
-            font-weight: bold;
-            cursor: pointer;
-            font-family: inherit;
-        }
+        :root { --primary:#5D4037; --secondary:#EFEBE9; --green:#2E7D32; --red:#C62828; }
+        * { box-sizing:border-box; margin:0; padding:0; }
+        body { font-family:'Apple SD Gothic Neo','Malgun Gothic',sans-serif; background:var(--secondary); min-height:100vh; display:flex; align-items:flex-start; justify-content:center; padding:24px 16px 40px; }
+        .wrap { width:100%; max-width:420px; }
+        .header { text-align:center; margin-bottom:20px; }
+        .header h1 { font-size:1.35rem; color:var(--primary); margin-bottom:4px; }
+        .header p  { font-size:0.84rem; color:#888; }
+        .card { background:white; border-radius:12px; padding:20px; margin-bottom:14px; box-shadow:0 1px 6px rgba(0,0,0,0.08); }
+        .student-badge { background:var(--primary); color:white; border-radius:12px; padding:16px 20px; text-align:center; margin-bottom:14px; }
+        .student-badge .label { font-size:0.82rem; opacity:0.8; margin-bottom:4px; }
+        .student-badge .name  { font-size:1.5rem; font-weight:bold; }
+        .student-badge .coins { font-size:0.88rem; margin-top:6px; opacity:0.9; }
+        label { display:block; font-size:0.85rem; color:#555; margin-bottom:6px; font-weight:bold; }
+        input { width:100%; padding:12px; border:1px solid #ddd; border-radius:8px; font-size:0.95rem; font-family:inherit; margin-bottom:14px; background:white; color:#333; }
+        input:focus { outline:none; border-color:var(--primary); }
+        .type-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:16px; }
+        .type-btn { padding:14px; border:2px solid #ddd; border-radius:8px; background:white; cursor:pointer; font-family:inherit; font-size:0.95rem; font-weight:bold; color:#666; text-align:center; }
+        .type-btn.on-plus  { border-color:var(--green); background:#E8F5E9; color:var(--green); }
+        .type-btn.on-minus { border-color:var(--red);   background:#FFEBEE; color:var(--red); }
+        .amount-grid { display:grid; grid-template-columns:repeat(5,1fr); gap:8px; margin-bottom:16px; }
+        .amt-btn { padding:13px 0; border:2px solid #ddd; border-radius:8px; background:white; cursor:pointer; font-family:inherit; font-size:0.95rem; font-weight:bold; color:#555; text-align:center; }
+        .amt-btn.on-plus  { border-color:var(--green); background:#E8F5E9; color:var(--green); }
+        .amt-btn.on-minus { border-color:var(--red);   background:#FFEBEE; color:var(--red); }
+        .btn-main { width:100%; padding:15px; background:var(--primary); color:white; border:none; border-radius:10px; font-size:1rem; font-weight:bold; cursor:pointer; font-family:inherit; }
+        .btn-main:disabled { background:#bbb; cursor:not-allowed; }
+        .msg { text-align:center; padding:12px; border-radius:8px; font-size:0.9rem; margin-bottom:12px; display:none; }
+        .msg.err { background:#FFEBEE; color:var(--red);   display:block; }
+        .msg.ok  { background:#E8F5E9; color:var(--green); display:block; }
+        .step { display:none; } .step.active { display:block; }
+        .done-screen { text-align:center; padding:28px 0; }
+        .done-screen .icon { font-size:3.5rem; margin-bottom:14px; }
+        .done-screen h2 { font-size:1.25rem; color:var(--primary); margin-bottom:10px; }
+        .done-screen p  { color:#555; font-size:0.9rem; line-height:1.7; }
+        .btn-again { margin-top:22px; width:100%; padding:13px; background:var(--secondary); color:var(--primary); border:2px solid var(--primary); border-radius:10px; font-size:0.95rem; font-weight:bold; cursor:pointer; font-family:inherit; }
+        .section-label { font-size:0.78rem; font-weight:bold; color:#aaa; letter-spacing:0.06em; margin-bottom:8px; }
+        .re-auth { text-align:center; margin-top:8px; font-size:0.8rem; color:#aaa; cursor:pointer; }
     </style>
 </head>
 <body>
 <div class="wrap">
-
     <div class="header">
         <h1>🪙 장원급제반</h1>
         <p>교과 선생님 전용 엽전 부여</p>
     </div>
 
-    <!-- STEP 1: 선생님 인증 -->
     <div id="step-auth" class="step active">
         <div class="card">
-            <div class="section-title">선생님 확인</div>
+            <div class="section-label">선생님 확인</div>
             <label>성함</label>
-            <input id="teacher-name" type="text" placeholder="홍길동"
-                   autocomplete="off" inputmode="text">
+            <input id="t-name" type="text" placeholder="홍길동" autocomplete="off">
             <label>전화번호 뒷 4자리</label>
-            <input id="teacher-phone" type="text" placeholder="1234"
-                   maxlength="4" inputmode="numeric" pattern="\d{4}">
+            <input id="t-phone" type="text" placeholder="1234" maxlength="4" inputmode="numeric">
             <div id="auth-msg" class="msg"></div>
-            <button class="btn-submit" onclick="doAuth()">✅ 확인</button>
+            <button class="btn-main" id="btn-auth" onclick="doAuth()">✅ 확인</button>
         </div>
     </div>
 
-    <!-- STEP 2: 엽전 부여 -->
     <div id="step-grant" class="step">
-
         <div class="student-badge">
             <div class="label">대상 학생</div>
-            <div class="name" id="display-student"></div>
-            <div class="coins" id="display-coins"></div>
+            <div class="name"  id="disp-student"></div>
+            <div class="coins" id="disp-coins"></div>
         </div>
-
         <div class="card">
-            <div class="section-title">부여 방향</div>
+            <div class="section-label">부여 방향</div>
             <div class="type-grid">
-                <button class="type-btn selected-plus" id="type-plus"
-                        onclick="selectType('+')">🟢 상점 (+)</button>
-                <button class="type-btn" id="type-minus"
-                        onclick="selectType('-')">🔴 벌점 (−)</button>
+                <button class="type-btn on-plus" id="btn-plus"  onclick="setType('+')">🟢 상점 (+)</button>
+                <button class="type-btn"         id="btn-minus" onclick="setType('-')">🔴 벌점 (−)</button>
             </div>
-
-            <div class="section-title">엽전 수량</div>
-            <div class="amount-grid" id="amount-grid">
-                <button class="amount-btn selected-plus" data-val="1" onclick="selectAmount(1)">1냥</button>
-                <button class="amount-btn" data-val="2" onclick="selectAmount(2)">2냥</button>
-                <button class="amount-btn" data-val="3" onclick="selectAmount(3)">3냥</button>
-                <button class="amount-btn" data-val="4" onclick="selectAmount(4)">4냥</button>
-                <button class="amount-btn" data-val="5" onclick="selectAmount(5)">5냥</button>
+            <div class="section-label">엽전 수량</div>
+            <div class="amount-grid">
+                <button class="amt-btn on-plus" data-v="1" onclick="setAmt(1)">1냥</button>
+                <button class="amt-btn"         data-v="2" onclick="setAmt(2)">2냥</button>
+                <button class="amt-btn"         data-v="3" onclick="setAmt(3)">3냥</button>
+                <button class="amt-btn"         data-v="4" onclick="setAmt(4)">4냥</button>
+                <button class="amt-btn"         data-v="5" onclick="setAmt(5)">5냥</button>
             </div>
-
-            <div class="section-title">사유</div>
-            <input id="grant-reason" type="text"
-                   placeholder="예: 수업 중 훌륭한 발표"
-                   autocomplete="off">
-
+            <div class="section-label">사유</div>
+            <input id="grant-reason" type="text" placeholder="예: 수업 중 훌륭한 발표" autocomplete="off">
             <div id="grant-msg" class="msg"></div>
-            <button class="btn-submit" id="btn-grant" onclick="doGrant()">
-                🪙 엽전 부여하기
-            </button>
+            <button class="btn-main" id="btn-grant" onclick="doGrant()">🪙 엽전 부여하기</button>
         </div>
-
-        <div style="text-align:center; margin-top:6px;">
-            <span style="font-size:0.8rem; color:#aaa; cursor:pointer;"
-                  onclick="resetAuth()">← 선생님 재인증</span>
-        </div>
+        <div class="re-auth" onclick="resetAuth()">← 선생님 재인증</div>
     </div>
 
-    <!-- STEP 3: 완료 -->
     <div id="step-done" class="step">
         <div class="card">
-            <div class="success-screen">
+            <div class="done-screen">
                 <div class="icon">🎉</div>
-                <h2 id="done-title">부여 완료!</h2>
-                <p id="done-desc"></p>
-                <button class="btn-again" onclick="grantAgain()">
-                    🔄 같은 학생에게 다시 부여
-                </button>
+                <h2 id="done-title"></h2>
+                <p  id="done-desc"></p>
+                <button class="btn-again" onclick="grantAgain()">🔄 같은 학생에게 다시 부여</button>
             </div>
         </div>
     </div>
-
 </div>
 
 <script>
-/* =========================================================
-   장원급제반 grant.html
-   교과 선생님이 QR 스캔 후 엽전 부여하는 페이지
-   ========================================================= */
-
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbz6TCN0h-DOxlInneO75kk_NWHVX3RNyvzwbQz8BS0MZb5KpgCYtXc8yXRVGbUpICjW/exec';
 
-let studentName  = '';
-let teacherName  = '';
-let selectedType = '+';    // '+' or '-'
-let selectedAmt  = 1;
+let studentName = '', teacherName = '', curType = '+', curAmt = 1;
 
-/* ── URL에서 학생 이름 파싱 ── */
-function getStudentFromURL() {
-    const params = new URLSearchParams(window.location.search);
-    return decodeURIComponent(params.get('student') || '').trim();
+function getParam(key) {
+    return decodeURIComponent(new URLSearchParams(location.search).get(key) || '').trim();
 }
 
-/* ── GAS 호출 ── */
 async function callGAS(action, params) {
     const body = JSON.stringify({ action, ...params });
     const res  = await fetch(GAS_URL, {
@@ -335,167 +118,129 @@ async function callGAS(action, params) {
         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
         body
     });
-    const json = await res.json();
-    if (json.status !== 'success') throw new Error(json.message || '오류');
+    const text = await res.text();
+    let json;
+    try { json = JSON.parse(text); } catch(e) { throw new Error('응답 파싱 오류: ' + text.slice(0,60)); }
+    if (json.status !== 'success') throw new Error(json.message || '알 수 없는 오류');
     return json.data;
 }
 
-/* ── 초기화 ── */
 window.addEventListener('DOMContentLoaded', () => {
-    studentName = getStudentFromURL();
+    studentName = getParam('student');
     if (!studentName) {
-        showMsg('auth-msg', '⚠️ 잘못된 QR 코드입니다. 학생 이름이 없소.', 'error');
-        document.querySelector('.btn-submit').disabled = true;
-        return;
+        showMsg('auth-msg','⚠️ 잘못된 QR입니다. 학생 이름이 없소.','err');
+        document.getElementById('btn-auth').disabled = true;
+    } else {
+        document.getElementById('t-name').focus();
     }
-    document.getElementById('teacher-name').focus();
 });
 
-/* ── STEP 1: 선생님 인증 ── */
+document.addEventListener('keydown', e => {
+    if (e.key !== 'Enter') return;
+    const id = document.querySelector('.step.active')?.id;
+    if (id === 'step-auth')  doAuth();
+    if (id === 'step-grant') doGrant();
+});
+
 async function doAuth() {
-    const name  = document.getElementById('teacher-name').value.trim();
-    const phone = document.getElementById('teacher-phone').value.trim();
-    const msgEl = document.getElementById('auth-msg');
-    msgEl.className = 'msg';
-    msgEl.style.display = 'none';
+    const name  = document.getElementById('t-name').value.trim();
+    const phone = document.getElementById('t-phone').value.trim();
+    clearMsg('auth-msg');
+    if (!name)                   return showMsg('auth-msg','성함을 입력하시오.','err');
+    if (!/^\d{4}$/.test(phone)) return showMsg('auth-msg','전화번호 뒷 4자리(숫자만)를 입력하시오.','err');
 
-    if (!name)              return showMsg('auth-msg', '성함을 입력하시오.', 'error');
-    if (!/^\d{4}$/.test(phone)) return showMsg('auth-msg', '전화번호 뒷 4자리를 입력하시오.', 'error');
-
-    const btn = document.querySelector('#step-auth .btn-submit');
-    btn.disabled    = true;
-    btn.textContent = '⏳ 확인 중...';
+    const btn = document.getElementById('btn-auth');
+    btn.disabled = true; btn.textContent = '⏳ 확인 중...';
 
     try {
         const data = await callGAS('verifyTeacher', { name, phone });
         teacherName = data.name;
 
-        // 학생 현재 엽전 조회
         let coins = '?';
         try {
             const members = await callGAS('getAllMemberPoints', {});
-            const me = (members || []).find(m => m.name === studentName);
+            const me = (members||[]).find(m => m.name === studentName);
             if (me) coins = me.coins ?? 0;
-        } catch(e) {}
+        } catch(_) {}
 
-        document.getElementById('display-student').textContent = studentName + ' 관원';
-        document.getElementById('display-coins').textContent   = `현재 잔액: 🪙 ${coins}냥`;
-
-        showStep('step-grant');
+        document.getElementById('disp-student').textContent = studentName + ' 관원';
+        document.getElementById('disp-coins').textContent   = '현재 잔액: 🪙 ' + coins + '냥';
+        goStep('step-grant');
     } catch(e) {
-        showMsg('auth-msg', '❌ ' + (e.message || '인증 실패'), 'error');
-        btn.disabled    = false;
-        btn.textContent = '✅ 확인';
+        showMsg('auth-msg','❌ ' + (e.message || '인증 실패'),'err');
+        btn.disabled = false; btn.textContent = '✅ 확인';
     }
 }
 
-/* ── STEP 2: 부여 방향 선택 ── */
-function selectType(type) {
-    selectedType = type;
-    document.getElementById('type-plus').className  = 'type-btn' + (type === '+' ? ' selected-plus'  : '');
-    document.getElementById('type-minus').className = 'type-btn' + (type === '-' ? ' selected-minus' : '');
-    refreshAmountButtons();
+function setType(t) {
+    curType = t;
+    document.getElementById('btn-plus').className  = 'type-btn' + (t==='+' ? ' on-plus'  : '');
+    document.getElementById('btn-minus').className = 'type-btn' + (t==='-' ? ' on-minus' : '');
+    refreshAmtBtns();
 }
 
-function selectAmount(val) {
-    selectedAmt = val;
-    refreshAmountButtons();
-}
+function setAmt(v) { curAmt = v; refreshAmtBtns(); }
 
-function refreshAmountButtons() {
-    document.querySelectorAll('.amount-btn').forEach(btn => {
-        const v = parseInt(btn.dataset.val);
-        if (v === selectedAmt) {
-            btn.className = 'amount-btn ' + (selectedType === '+' ? 'selected-plus' : 'selected-minus');
-        } else {
-            btn.className = 'amount-btn';
-        }
+function refreshAmtBtns() {
+    document.querySelectorAll('.amt-btn').forEach(b => {
+        b.className = 'amt-btn' + (parseInt(b.dataset.v)===curAmt ? (curType==='+'?' on-plus':' on-minus') : '');
     });
 }
 
-/* ── STEP 2: 엽전 부여 ── */
 async function doGrant() {
     const reason = document.getElementById('grant-reason').value.trim();
-    if (!reason) return showMsg('grant-msg', '사유를 입력하시오.', 'error');
+    clearMsg('grant-msg');
+    if (!reason) return showMsg('grant-msg','사유를 입력하시오.','err');
 
-    const btn    = document.getElementById('btn-grant');
-    btn.disabled    = true;
-    btn.textContent = '⏳ 처리 중...';
-    document.getElementById('grant-msg').className = 'msg';
+    const btn = document.getElementById('btn-grant');
+    btn.disabled = true; btn.textContent = '⏳ 처리 중...';
 
-    const amount = selectedType === '+' ? selectedAmt : -selectedAmt;
-    const label  = `${selectedType === '+' ? '+' : ''}${amount}냥 — ${reason} (${teacherName} 선생님)`;
+    const amount      = curType === '+' ? curAmt : -curAmt;
+    const fullReason  = reason + ' (' + teacherName + ' 선생님)';
 
     try {
-        await callGAS('adminAction', {
-            type:       'grantPoint',
-            targetName: studentName,
-            amount:     amount,
-            reason:     reason + ` (${teacherName} 선생님)`,
-        });
+        await callGAS('adminAction', { type:'grantPoint', targetName:studentName, amount, reason:fullReason });
 
         document.getElementById('done-title').textContent =
-            selectedType === '+' ? '🎉 상점 부여 완료!' : '📋 벌점 부과 완료';
+            curType==='+' ? '🎉 상점 부여 완료!' : '📋 벌점 부과 완료';
         document.getElementById('done-desc').innerHTML =
-            `<b>${studentName}</b> 관원에게<br>` +
-            `<span style="font-size:1.2rem; font-weight:bold; color:${selectedType==='+'?'#2E7D32':'#C62828'};">` +
-            `${selectedType==='+'?'+':''}${amount}냥</span> 이 처리되었소.<br><br>` +
-            `사유: ${reason}<br>` +
-            `처리: ${teacherName} 선생님`;
+            '<b>' + studentName + '</b> 관원에게<br>' +
+            '<span style="font-size:1.3rem;font-weight:bold;color:' + (curType==='+'?'#2E7D32':'#C62828') + ';">' +
+            (curType==='+'?'+':'') + amount + '냥</span>이 처리되었소.<br><br>' +
+            '사유: ' + reason + '<br>처리: ' + teacherName + ' 선생님';
 
-        showStep('step-done');
+        goStep('step-done');
     } catch(e) {
-        showMsg('grant-msg', '❌ ' + (e.message || '처리 실패'), 'error');
-        btn.disabled    = false;
-        btn.textContent = '🪙 엽전 부여하기';
+        showMsg('grant-msg','❌ ' + (e.message||'처리 실패'),'err');
+        btn.disabled = false; btn.textContent = '🪙 엽전 부여하기';
     }
 }
 
-/* ── STEP 3: 다시 부여 ── */
 function grantAgain() {
-    selectedType = '+';
-    selectedAmt  = 1;
+    curType = '+'; curAmt = 1;
     document.getElementById('grant-reason').value = '';
-    document.getElementById('grant-msg').className = 'msg';
-    document.getElementById('btn-grant').disabled    = false;
-    document.getElementById('btn-grant').textContent = '🪙 엽전 부여하기';
-    selectType('+');
-    showStep('step-grant');
+    clearMsg('grant-msg');
+    const btn = document.getElementById('btn-grant');
+    btn.disabled = false; btn.textContent = '🪙 엽전 부여하기';
+    setType('+');
+    goStep('step-grant');
 }
 
-/* ── 재인증 ── */
 function resetAuth() {
-    document.getElementById('teacher-name').value  = '';
-    document.getElementById('teacher-phone').value = '';
-    document.getElementById('auth-msg').className  = 'msg';
-    document.getElementById('auth-msg').style.display = 'none';
-    const btn = document.querySelector('#step-auth .btn-submit');
-    btn.disabled    = false;
-    btn.textContent = '✅ 확인';
-    showStep('step-auth');
+    document.getElementById('t-name').value  = '';
+    document.getElementById('t-phone').value = '';
+    clearMsg('auth-msg');
+    document.getElementById('btn-auth').disabled    = false;
+    document.getElementById('btn-auth').textContent = '✅ 확인';
+    goStep('step-auth');
 }
 
-/* ── 유틸 ── */
-function showStep(id) {
-    ['step-auth', 'step-grant', 'step-done'].forEach(s => {
-        document.getElementById(s).className = 'step' + (s === id ? ' active' : '');
-    });
+function goStep(id) {
+    ['step-auth','step-grant','step-done'].forEach(s =>
+        document.getElementById(s).className = 'step' + (s===id?' active':''));
 }
-
-function showMsg(elId, text, type) {
-    const el = document.getElementById(elId);
-    el.textContent = text;
-    el.className   = 'msg ' + type;
-}
-
-/* ── Enter 키 지원 ── */
-document.addEventListener('keydown', e => {
-    if (e.key !== 'Enter') return;
-    const active = document.querySelector('.step.active');
-    if (!active) return;
-    if (active.id === 'step-auth')  doAuth();
-    if (active.id === 'step-grant') doGrant();
-});
+function showMsg(id, txt, cls) { const el=document.getElementById(id); el.textContent=txt; el.className='msg '+cls; }
+function clearMsg(id) { const el=document.getElementById(id); el.textContent=''; el.className='msg'; }
 </script>
 </body>
 </html>
