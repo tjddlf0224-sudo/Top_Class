@@ -367,6 +367,32 @@
             color: #795548; border-radius: 12px;
             padding: 2px 10px; font-size: 0.78rem;
         }
+
+        /* ── 상담 통계 ── */
+        .stat-summary { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-bottom:12px; }
+        .stat-num-card { background:white; border:1px solid #ddd; border-radius:10px; padding:14px 10px; text-align:center; box-shadow:0 1px 4px rgba(0,0,0,0.06); }
+        .stat-num-card .num { font-size:1.7rem; font-weight:700; color:var(--primary); line-height:1; }
+        .stat-num-card .num-label { font-size:0.68rem; color:#999; margin-top:5px; }
+        .stat-card { background:white; border:1px solid #ddd; border-radius:10px; padding:16px; margin-bottom:12px; box-shadow:0 1px 4px rgba(0,0,0,0.06); }
+        .stat-card-title { font-size:0.75rem; font-weight:700; color:#aaa; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:14px; }
+        .bar-chart-wrap { overflow-x:hidden; }
+        .donut-wrap { display:flex; align-items:center; gap:16px; }
+        .donut-legend { flex:1; display:flex; flex-direction:column; gap:8px; }
+        .legend-row { display:flex; align-items:center; gap:8px; font-size:0.8rem; }
+        .legend-dot { width:10px; height:10px; border-radius:3px; flex-shrink:0; }
+        .legend-label { color:#555; flex:1; }
+        .legend-val { font-weight:700; color:#333; }
+        .legend-pct { color:#aaa; font-size:0.72rem; min-width:30px; text-align:right; }
+        .top-row { display:flex; align-items:center; gap:10px; padding:9px 0; border-bottom:1px solid #f0f0f0; }
+        .top-row:last-child { border-bottom:none; }
+        .top-rank { font-size:0.75rem; font-weight:700; color:#aaa; width:20px; text-align:center; flex-shrink:0; }
+        .top-rank.gold { color:#f59e0b; } .top-rank.silver { color:#94a3b8; } .top-rank.bronze { color:#cd7c4e; }
+        .top-bar-wrap { flex:1; }
+        .top-bar-name { font-size:0.82rem; font-weight:600; color:#333; margin-bottom:4px; }
+        .top-bar-bg { background:#f0f0f0; border-radius:4px; height:6px; overflow:hidden; }
+        .top-bar-fill { height:100%; border-radius:4px; background:var(--primary); transition:width 0.7s cubic-bezier(.4,0,.2,1); }
+        .top-bar-count { font-size:0.82rem; font-weight:700; color:var(--primary); flex-shrink:0; }
+
     </style>
 </head>
 <body>
@@ -939,7 +965,9 @@
                 <button class="history-tab-btn" id="ctab-daily"
                         onclick="switchCounselingTab('daily')">📅 일별 조회</button>
                 <button class="history-tab-btn" id="ctab-student"
-                        onclick="switchCounselingTab('student')">👤 학생별 달력</button>
+                        onclick="switchCounselingTab('student')">👤 학생 달력</button>
+                <button class="history-tab-btn" id="ctab-stats"
+                        onclick="switchCounselingTab('stats')">📊 통계</button>
             </div>
 
             <!-- 일별 조회 -->
@@ -975,6 +1003,23 @@
                 <!-- 날짜 클릭시 메모 표시 -->
                 <div id="counsel-cal-memo" style="display:none; margin-top:12px; padding:12px;
                      background:var(--secondary); border-radius:8px; font-size:0.9rem;"></div>
+            </div>
+
+            <!-- 통계 탭 -->
+            <div id="ctab-stats-content" style="display:none;">
+                <div style="display:flex; align-items:center; gap:8px; margin-bottom:14px;">
+                    <select id="counsel-stat-year"
+                            style="flex:1; margin:0; padding:9px; border:1px solid #ddd; border-radius:6px; font-family:inherit;"
+                            onchange="renderCounselStats()"></select>
+                    <button onclick="loadCounselStats()"
+                            style="background:var(--primary); color:white; border:none; padding:9px 16px;
+                                   border-radius:6px; cursor:pointer; font-family:inherit; font-size:0.82rem; font-weight:bold; flex-shrink:0;">
+                        ↺ 불러오기
+                    </button>
+                </div>
+                <div id="counsel-stats-area">
+                    <p style="text-align:center; color:#999; padding:40px 0;">↺ 불러오기를 눌러<br>통계를 확인하시오</p>
+                </div>
             </div>
 
             <!-- 학생 명단 탭 -->
@@ -4641,7 +4686,7 @@ async function openCounseling() {
 
 /** 탭 전환 */
 function switchCounselingTab(tab) {
-    ['daily','student','list'].forEach(t => {
+    ['daily','student','list','stats'].forEach(t => {
         const content = document.getElementById('ctab-' + t + '-content');
         const btn     = document.getElementById('ctab-' + t);
         if (content) content.style.display = t === tab ? 'block' : 'none';
@@ -4649,6 +4694,7 @@ function switchCounselingTab(tab) {
     });
     if (tab === 'student') loadCounselingCalendar();
     if (tab === 'list')    loadCounselingStudentList();
+    if (tab === 'stats')   { if (!counselStatsData.length) loadCounselStats(); else renderCounselStats(); }
 }
 
 /* ─── 일별 조회 ─── */
@@ -4999,6 +5045,193 @@ function onCalDayClick(name, date, isDone, memo, attStatus) {
         </button>`;
 }
 
+/* ─── 통계 탭 ─── */
+const COUNSEL_TYPE_COLORS = { '학업':'#0ea5e9','생활':'#22c55e','진로':'#f97316','심리':'#f43f5e','기타':'#9494b0' };
+const COUNSEL_TYPES = ['학업','생활','진로','심리','기타'];
+let counselStatsData = [];
+
+async function loadCounselStats() {
+    const area = document.getElementById('counsel-stats-area');
+    area.innerHTML = '<p style="text-align:center;color:#999;padding:32px 0;">불러오는 중...</p>';
+
+    try {
+        if (counselingStudentList.length === 0) {
+            const adminData = await callApi('getAdminData');
+            counselingStudentList = adminData.members.filter(m => m.name !== '교사' && m.role !== 'teacher');
+        }
+
+        // ★ 단일 API 호출로 전체 상담 기록 수집 (GAS getCounselingAll 사용)
+        const raw = await callApi('getCounselingAll', {});
+        const studentNames = new Set(counselingStudentList.map(s => s.name));
+
+        counselStatsData = (raw || [])
+            .filter(r => r.done && studentNames.has(r.name))
+            .map(r => ({
+                ...r,
+                type: extractCounselType(r.memo),
+            }));
+
+        // 연도 셀렉트 구성
+        const sel = document.getElementById('counsel-stat-year');
+        let availYears = [...new Set(counselStatsData.map(c => (c.date||'').slice(0,4)).filter(Boolean))];
+        const thisYear = String(new Date().getFullYear());
+        if (!availYears.includes(thisYear)) availYears.push(thisYear);
+        availYears = availYears.sort().reverse();
+        sel.innerHTML = availYears.map(y => `<option value="${y}">${y}년</option>`).join('');
+        sel.value = thisYear;
+
+        renderCounselStats();
+    } catch(e) {
+        area.innerHTML = `<p style="text-align:center;color:#C62828;padding:32px 0;">불러오기 실패: ${e.message}</p>`;
+    }
+}
+
+function extractCounselType(memo) {
+    if (!memo) return '기타';
+    const m = memo.match(/^\[(학업|생활|진로|심리|기타)\]/);
+    return m ? m[1] : '기타';
+}
+
+function renderCounselStats() {
+    const area = document.getElementById('counsel-stats-area');
+    
+    // 1. 데이터가 비어있을 때 안전하게 방어
+    if (!counselStatsData || counselStatsData.length === 0) {
+        area.innerHTML = '<p style="text-align:center;color:#999;padding:40px 0;">데이터가 없습니다</p>';
+        return;
+    }
+
+    const yearEl = document.getElementById('counsel-stat-year');
+    // 드롭다운 값이 없으면 강제로 올해(2026) 연도로 맞춤
+    const year   = parseInt(yearEl && yearEl.value ? yearEl.value : new Date().getFullYear());
+    const yData  = counselStatsData.filter(c => (c.date||'').startsWith(String(year)));
+
+    const total        = yData.length;
+    const studentSet   = new Set(yData.map(c => c.name).filter(Boolean));
+    const thisMonth    = new Date().toISOString().slice(0,7);
+    const thisMonthCnt = yData.filter(c => (c.date||'').startsWith(thisMonth)).length;
+
+    const monthly = Array.from({length:12}, (_,i) => {
+        const m = String(i+1).padStart(2,'0');
+        return yData.filter(c => (c.date||'').startsWith(`${year}-${m}`)).length;
+    });
+
+    // 2. COUNSEL_TYPES 오류 완벽 차단 (변수가 없으면 기본값 사용)
+    const safeTypes = (typeof COUNSEL_TYPES !== 'undefined') ? COUNSEL_TYPES : ['학습', '진로', '생활', '기타'];
+    const typeCounts = {};
+    safeTypes.forEach(t => { typeCounts[t] = 0; });
+    yData.forEach(c => { const t = c.type || '기타'; typeCounts[t] = (typeCounts[t] || 0) + 1; });
+
+    const stuMap = {};
+    yData.forEach(c => {
+        if (c.name) stuMap[c.name] = (stuMap[c.name]||0) + 1;
+    });
+    const top  = Object.entries(stuMap).sort((a,b) => b[1]-a[1]).slice(0,5).map(([name,count]) => ({name, count}));
+    const maxC = top[0]?.count || 1;
+
+    // 3. ✨핵심✨ 차트 무한 새로고침(깜빡임)을 막기 위해 캔버스 영역의 높이(height)를 강제 고정!
+    area.innerHTML = `
+        <div class="stat-summary">
+            <div class="stat-num-card"><div class="num">${total}</div><div class="num-label">총 상담 건수</div></div>
+            <div class="stat-num-card"><div class="num">${studentSet.size}</div><div class="num-label">상담 학생 수</div></div>
+            <div class="stat-num-card"><div class="num">${thisMonthCnt}</div><div class="num-label">이번 달</div></div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-card-title">월별 상담 건수</div>
+            <div class="bar-chart-wrap" style="position:relative; height:250px; width:100%;"><canvas id="counselBarCanvas"></canvas></div>
+        </div>
+        ${top.length ? `<div class="stat-card"><div class="stat-card-title">상담 횟수 상위 학생</div><div id="counselTopList"></div></div>` : ''}
+    `;
+
+    // 차트 렌더링
+    try {
+        if (typeof drawCounselBarChart === 'function') drawCounselBarChart(monthly, year);
+    } catch(e) {
+        console.log("차트 렌더링 중 오류:", e);
+    }
+
+    if (top.length) {
+        const ranks = ['gold','silver','bronze'];
+        document.getElementById('counselTopList').innerHTML = top.map((s,i) => `
+            <div class="top-row">
+                <span class="top-rank ${ranks[i]||''}">${i+1}</span>
+                <div class="top-bar-wrap">
+                    <div class="top-bar-name">${s.name}</div>
+                    <div class="top-bar-bg"><div class="top-bar-fill" style="width:${Math.round(s.count/maxC*100)}%"></div></div>
+                </div>
+                <span class="top-bar-count">${s.count}건</span>
+            </div>`).join('');
+    }
+}
+
+function drawCounselBarChart(counts, year) {
+    const canvas = document.getElementById('counselBarCanvas');
+    if (!canvas) return;
+    const W = canvas.parentElement.clientWidth || 360, H = 160;
+    canvas.width = W; canvas.height = H;
+    const ctx = canvas.getContext('2d');
+    const PL=28, PR=8, PT=14, PB=28;
+    const cW=W-PL-PR, cH=H-PT-PB;
+    const max = Math.max(...counts, 1);
+    const bw = cW/12, gap = bw*0.28;
+    const nowY = new Date().getFullYear(), nowM = new Date().getMonth();
+
+    ctx.strokeStyle='#eee'; ctx.lineWidth=1;
+    for (let i=0; i<=4; i++) {
+        const y = PT+cH-(cH*i/4);
+        ctx.beginPath(); ctx.moveTo(PL,y); ctx.lineTo(W-PR,y); ctx.stroke();
+        if (i>0) {
+            ctx.fillStyle='#aaa'; ctx.font='10px sans-serif';
+            ctx.textAlign='right'; ctx.fillText(Math.round(max*i/4), PL-3, y+3);
+        }
+    }
+    counts.forEach((v,i) => {
+        const x=PL+i*bw+gap/2, bww=bw-gap;
+        const bh=v===0?0:Math.max(3,cH*v/max), by=PT+cH-bh;
+        const isNow = (year===nowY && i===nowM);
+        ctx.fillStyle = isNow ? '#5D4037' : '#BCAAA4';
+        ctx.beginPath();
+        if (ctx.roundRect) ctx.roundRect(x,by,bww,bh,3); else ctx.rect(x,by,bww,bh);
+        ctx.fill();
+        if (v>0) {
+            ctx.fillStyle='#333'; ctx.font='bold 9px sans-serif';
+            ctx.textAlign='center'; ctx.fillText(v, x+bww/2, by-3);
+        }
+        ctx.fillStyle='#aaa'; ctx.font='9px sans-serif';
+        ctx.textAlign='center'; ctx.fillText(String(i+1), x+bww/2, H-PB+13);
+    });
+}
+
+function drawCounselDonut(typeCounts, total) {
+    const canvas = document.getElementById('counselDonutCanvas');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const cx=65, cy=65, R=56, r=34;
+    ctx.clearRect(0,0,130,130);
+    if (total===0) {
+        ctx.beginPath(); ctx.arc(cx,cy,R,0,Math.PI*2);
+        ctx.strokeStyle='#eee'; ctx.lineWidth=R-r; ctx.stroke(); return;
+    }
+    let start = -Math.PI/2, legendHTML = '';
+    COUNSEL_TYPES.forEach(type => {
+        const cnt = typeCounts[type]||0; if (!cnt) return;
+        const slice = (cnt/total)*Math.PI*2;
+        ctx.beginPath(); ctx.moveTo(cx,cy); ctx.arc(cx,cy,R,start,start+slice); ctx.closePath();
+        ctx.fillStyle = COUNSEL_TYPE_COLORS[type]; ctx.fill();
+        ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2); ctx.fillStyle='#fff'; ctx.fill();
+        start += slice;
+        legendHTML += `<div class="legend-row">
+            <span class="legend-dot" style="background:${COUNSEL_TYPE_COLORS[type]}"></span>
+            <span class="legend-label">${type}</span>
+            <span class="legend-val">${cnt}건</span>
+            <span class="legend-pct">${Math.round(cnt/total*100)}%</span>
+        </div>`;
+    });
+    document.getElementById('counselDonutLegend').innerHTML = legendHTML;
+    ctx.fillStyle='#333'; ctx.font='bold 17px sans-serif';
+    ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(total, cx, cy-6);
+    ctx.fillStyle='#aaa'; ctx.font='10px sans-serif'; ctx.fillText('건', cx, cy+10);
+}
 
 /* =========================================================
    Word(docx) 학부모 면담 보고서 생성
