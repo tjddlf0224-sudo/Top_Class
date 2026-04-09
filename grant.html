@@ -163,7 +163,7 @@ async function doAuth() {
             if (me) coins = me.coins ?? 0;
         } catch(_) {}
 
-        document.getElementById('disp-student').textContent = studentName + ' 관원';
+        document.getElementById('disp-student').textContent = studentName + ' 학생';
         document.getElementById('disp-coins').textContent   = '현재 잔액: 🪙 ' + coins + '냥';
         goStep('step-grant');
     } catch(e) {
