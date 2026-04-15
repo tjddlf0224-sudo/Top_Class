@@ -1826,7 +1826,7 @@ async function loadTeacherTodayDashboard(isManualRefresh = false) {
 
         // 출결 필터
         const lateStudents   = (attData || []).filter(d => d.status === '지각');
-        const absentStudents = (attData || []).filter(d => d.status === '미출석');
+        const absentStudents = (attData || []).filter(d => d.status === '미출석' || d.status === '결석');
 
         // 플래너 기록자 이름 Set (getAdminPlanner는 기록한 학생만 반환)
         const plannedNames = new Set((planData || []).map(d => d.name));
@@ -2922,11 +2922,11 @@ async function loadInspectorData() {
     }
 
     // 상태별 정렬: 미출석 → 지각 → 출석
-    const order = { '미출석': 0, '지각': 1, '출석': 2 };
+    const order = { '미출석': 0, '결석': 0, '지각': 1, '출석': 2 };
     const sorted = [...data].sort((a, b) => (order[a.status] ?? 3) - (order[b.status] ?? 3));
 
     // 요약 카운트
-    const absent = sorted.filter(d => d.status === '미출석').length;
+    const absent = sorted.filter(d => d.status === '미출석' || d.status === '결석').length;
     const late   = sorted.filter(d => d.status === '지각').length;
     const attend = sorted.filter(d => d.status === '출석').length;
     listDiv.innerHTML = `
@@ -2947,7 +2947,7 @@ async function loadInspectorData() {
 
     sorted.forEach(item => {
         const isLate   = item.status === '지각';
-        const isAbsent = item.status === '미출석';
+        const isAbsent = item.status === '미출석' || item.status === '결석';
         const div = document.createElement('div');
         div.className = 'card';
         div.style.cssText = 'display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;'
@@ -3217,14 +3217,14 @@ async function viewAdminAttendance() {
     }
 
     // 미출석 → 지각(소명X) → 지각(소명O) → 출석 순 정렬
-    const order = { '미출석': 0, '지각': 1, '출석': 3 };
+    const order = { '미출석': 0, '결석': 0, '지각': 1, '출석': 3 };
     const sorted = [...data].sort((a, b) => {
         const ao = a.status === '지각' && a.reason ? 2 : (order[a.status] ?? 9);
         const bo = b.status === '지각' && b.reason ? 2 : (order[b.status] ?? 9);
         return ao - bo;
     });
 
-    const absent = data.filter(d => d.status === '미출석').length;
+    const absent = data.filter(d => d.status === '미출석' || d.status === '결석').length;
     const late   = data.filter(d => d.status === '지각').length;
     const attend = data.filter(d => d.status === '출석').length;
     const reasonCount = data.filter(d => d.reason).length;
@@ -3247,11 +3247,11 @@ async function viewAdminAttendance() {
 
     sorted.forEach(item => {
         const isLate   = item.status === '지각';
-        const isAbsent = item.status === '미출석';
+        const isAbsent = item.status === '미출석' || item.status === '결석';
         const hasReason = !!item.reason;
         const borderColor = isAbsent ? '#C62828' : isLate && !hasReason ? '#F57C00' : isLate && hasReason ? '#1976D2' : '#2E7D32';
         const statusColor = isAbsent ? '#C62828' : isLate ? '#F57C00' : '#2E7D32';
-        const statusText  = isAbsent ? '❌ 미출석' : isLate ? '⏰ 지각' : '✅ 출석';
+        const statusText  = isAbsent ? '❌ 결석' : isLate ? '⏰ 지각' : '✅ 출석';
 
         const div = document.createElement('div');
         div.className = 'card';
@@ -4984,7 +4984,7 @@ function renderCounselingCalendar(studentName, ym) {
         const dayOfWeek = (firstDay + d - 1) % 7;
         const attStatus = counselCalAttMap[dateStr] || null;  // '지각' | '미출석' | '출석' | null
         const isLate    = attStatus === '지각';
-        const isAbsent  = attStatus === '미출석';
+        const isAbsent  = attStatus === '미출석' || attStatus === '결석';
 
         const textColor = !isDone && dayOfWeek === 0 ? 'color:#C62828;'
                         : !isDone && dayOfWeek === 6 ? 'color:#1976D2;' : '';
@@ -5027,7 +5027,7 @@ function onCalDayClick(name, date, isDone, memo, attStatus) {
 
     let attBadge = '';
     if (attStatus === '지각')   attBadge = '<span style="background:#FFF8E1; color:#F57C00; border:1px solid #F57C00; border-radius:10px; padding:2px 8px; font-size:0.78rem; font-weight:bold;">⏰ 지각</span>';
-    if (attStatus === '미출석') attBadge = '<span style="background:#FFEBEE; color:#C62828; border:1px solid #C62828; border-radius:10px; padding:2px 8px; font-size:0.78rem; font-weight:bold;">❌ 결석</span>';
+    if (attStatus === '미출석' || attStatus === '결석') attBadge = '<span style="background:#FFEBEE; color:#C62828; border:1px solid #C62828; border-radius:10px; padding:2px 8px; font-size:0.78rem; font-weight:bold;">❌ 결석</span>';
     if (attStatus === '출석')   attBadge = '<span style="background:#E8F5E9; color:#2E7D32; border:1px solid #2E7D32; border-radius:10px; padding:2px 8px; font-size:0.78rem; font-weight:bold;">✅ 출석</span>';
 
     memoDiv.innerHTML = `
