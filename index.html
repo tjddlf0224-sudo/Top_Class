@@ -5060,16 +5060,66 @@ async function loadCounselStats() {
             counselingStudentList = adminData.members.filter(m => m.name !== '교사' && m.role !== 'teacher');
         }
 
-        // ★ 단일 API 호출로 전체 상담 기록 수집 (GAS getCounselingAll 사용)
-        const raw = await callApi('getCounselingAll', {});
-        const studentNames = new Set(counselingStudentList.map(s => s.name));
+        // 상담 기록 + 전체 출결/엽전(=출결 대리) 데이터 병렬 수집
+        const [raw, memberPoints] = await Promise.all([
+            callApi('getCounselingAll', {}),
+            callApi('getAllMemberPoints', {})
+        ]);
 
+        const studentNames = new Set(counselingStudentList.map(s => s.name));
         counselStatsData = (raw || [])
             .filter(r => r.done && studentNames.has(r.name))
-            .map(r => ({
-                ...r,
-                type: extractCounselType(r.memo),
-            }));
+            .map(r => ({ ...r, type: extractCounselType(r.memo) }));
+
+        // ★ 출결/플래너 순위용: 최근 2주 날짜 배열 생성 후 병렬 조회
+        const today = new Date();
+        const recentDates = [];
+        for (let i = 0; i < 14; i++) {
+            const d = new Date(today);
+            d.setDate(today.getDate() - i);
+            const yy = d.getFullYear();
+            const mm = String(d.getMonth()+1).padStart(2,'0');
+            const dd = String(d.getDate()).padStart(2,'0');
+            recentDates.push(`${yy}-${mm}-${dd}`);
+        }
+
+        const [attRows, planRows] = await Promise.all([
+            Promise.all(recentDates.map(date =>
+                callApi('getAdminAttendance', { date }).catch(() => [])
+            )),
+            Promise.all(recentDates.map(date =>
+                callApi('getAdminPlanner', { date }).catch(() => [])
+            ))
+        ]);
+
+        // 학생별 출결 집계 (결석/지각 횟수, 출석 횟수)
+        const attMap  = {};  // { name: { absent:0, late:0, attend:0, total:0 } }
+        const planMap = {};  // { name: { done:0, total:0 } }
+        counselingStudentList.forEach(s => {
+            attMap[s.name]  = { absent:0, late:0, attend:0, total:0 };
+            planMap[s.name] = { done:0, total:0 };
+        });
+
+        attRows.forEach(rows => {
+            (rows || []).forEach(r => {
+                if (!attMap[r.name]) return;
+                attMap[r.name].total++;
+                if (r.status === '결석' || r.status === '미출석') attMap[r.name].absent++;
+                else if (r.status === '지각') attMap[r.name].late++;
+                else if (r.status === '출석') attMap[r.name].attend++;
+            });
+        });
+
+        planRows.forEach(rows => {
+            (rows || []).forEach(r => {
+                if (!planMap[r.name]) return;
+                planMap[r.name].total++;
+                if (Number(r.progress) === 100) planMap[r.name].done++;
+            });
+        });
+
+        window._attMap  = attMap;
+        window._planMap = planMap;
 
         // 연도 셀렉트 구성
         const sel = document.getElementById('counsel-stat-year');
@@ -5141,6 +5191,32 @@ function renderCounselStats() {
             <div class="bar-chart-wrap" style="position:relative; height:250px; width:100%;"><canvas id="counselBarCanvas"></canvas></div>
         </div>
         ${top.length ? `<div class="stat-card"><div class="stat-card-title">상담 횟수 상위 학생</div><div id="counselTopList"></div></div>` : ''}
+
+        <div class="stat-card" id="att-rank-card">
+            <div class="stat-card-title">📅 출결 현황 순위 <span style="font-size:0.7rem;color:#bbb;font-weight:normal;">(최근 14일)</span></div>
+            <div style="display:flex; gap:6px; margin-bottom:12px;">
+                <button id="att-rank-btn-bad"  onclick="switchRankTab('att','bad')"
+                    style="flex:1;padding:7px;border:none;border-radius:6px;cursor:pointer;font-family:inherit;font-size:0.82rem;background:var(--primary);color:white;font-weight:bold;">
+                    ❌ 결석 많은 순</button>
+                <button id="att-rank-btn-good" onclick="switchRankTab('att','good')"
+                    style="flex:1;padding:7px;border:none;border-radius:6px;cursor:pointer;font-family:inherit;font-size:0.82rem;background:#eee;color:#555;">
+                    ✅ 출석 좋은 순</button>
+            </div>
+            <div id="att-rank-list"><p style="text-align:center;color:#999;font-size:0.85rem;">데이터 로딩 중...</p></div>
+        </div>
+
+        <div class="stat-card" id="plan-rank-card">
+            <div class="stat-card-title">📝 플래너 현황 순위 <span style="font-size:0.7rem;color:#bbb;font-weight:normal;">(최근 14일)</span></div>
+            <div style="display:flex; gap:6px; margin-bottom:12px;">
+                <button id="plan-rank-btn-bad"  onclick="switchRankTab('plan','bad')"
+                    style="flex:1;padding:7px;border:none;border-radius:6px;cursor:pointer;font-family:inherit;font-size:0.82rem;background:var(--primary);color:white;font-weight:bold;">
+                    📉 달성률 낮은 순</button>
+                <button id="plan-rank-btn-good" onclick="switchRankTab('plan','good')"
+                    style="flex:1;padding:7px;border:none;border-radius:6px;cursor:pointer;font-family:inherit;font-size:0.82rem;background:#eee;color:#555;">
+                    📈 달성률 높은 순</button>
+            </div>
+            <div id="plan-rank-list"><p style="text-align:center;color:#999;font-size:0.85rem;">데이터 로딩 중...</p></div>
+        </div>
     `;
 
     // 차트 렌더링
@@ -5162,6 +5238,123 @@ function renderCounselStats() {
                 <span class="top-bar-count">${s.count}건</span>
             </div>`).join('');
     }
+
+    // ★ 출결/플래너 순위 렌더링
+    setTimeout(() => {
+        switchRankTab('att',  'bad');
+        switchRankTab('plan', 'bad');
+    }, 100);
+}
+
+/* ─── 출결/플래너 순위 탭 전환 ─── */
+function switchRankTab(type, mode) {
+    const attMap  = window._attMap  || {};
+    const planMap = window._planMap || {};
+
+    if (type === 'att') {
+        // 탭 버튼 스타일
+        document.getElementById('att-rank-btn-bad').style.cssText  =
+            'flex:1;padding:7px;border:none;border-radius:6px;cursor:pointer;font-family:inherit;font-size:0.82rem;' +
+            (mode==='bad'  ? 'background:var(--primary);color:white;font-weight:bold;' : 'background:#eee;color:#555;');
+        document.getElementById('att-rank-btn-good').style.cssText =
+            'flex:1;padding:7px;border:none;border-radius:6px;cursor:pointer;font-family:inherit;font-size:0.82rem;' +
+            (mode==='good' ? 'background:var(--primary);color:white;font-weight:bold;' : 'background:#eee;color:#555;');
+
+        const entries = Object.entries(attMap).filter(([,v]) => v.total > 0);
+        let sorted;
+        if (mode === 'bad') {
+            // 결석×3 + 지각×1 가중치 적용
+            sorted = entries
+                .sort((a,b) => (b[1].absent*3 + b[1].late) - (a[1].absent*3 + a[1].late))
+                .slice(0,5)
+                .map(([name, v]) => ({
+                    name,
+                    mainVal:  v.absent*3 + v.late,
+                    mainLabel: `결석 ${v.absent}회 · 지각 ${v.late}회`,
+                    subLabel:  `출석 ${v.attend}/${v.total}일`,
+                    color:    '#C62828',
+                    pct: v.total ? Math.round((v.absent*3 + v.late) / (v.total*3) * 100) : 0
+                }));
+        } else {
+            // 출석률 높은 순
+            sorted = entries
+                .sort((a,b) => (b[1].attend/Math.max(b[1].total,1)) - (a[1].attend/Math.max(a[1].total,1)))
+                .slice(0,5)
+                .map(([name, v]) => ({
+                    name,
+                    mainVal:  Math.round(v.attend / Math.max(v.total,1) * 100),
+                    mainLabel: `출석률 ${Math.round(v.attend/Math.max(v.total,1)*100)}%`,
+                    subLabel:  `출석 ${v.attend}/${v.total}일`,
+                    color:    '#2E7D32',
+                    pct: Math.round(v.attend / Math.max(v.total,1) * 100)
+                }));
+        }
+        renderRankList('att-rank-list', sorted, mode);
+
+    } else {
+        // 플래너 탭 버튼 스타일
+        document.getElementById('plan-rank-btn-bad').style.cssText  =
+            'flex:1;padding:7px;border:none;border-radius:6px;cursor:pointer;font-family:inherit;font-size:0.82rem;' +
+            (mode==='bad'  ? 'background:var(--primary);color:white;font-weight:bold;' : 'background:#eee;color:#555;');
+        document.getElementById('plan-rank-btn-good').style.cssText =
+            'flex:1;padding:7px;border:none;border-radius:6px;cursor:pointer;font-family:inherit;font-size:0.82rem;' +
+            (mode==='good' ? 'background:var(--primary);color:white;font-weight:bold;' : 'background:#eee;color:#555;');
+
+        const entries = Object.entries(planMap).filter(([,v]) => v.total > 0);
+        let sorted;
+        if (mode === 'bad') {
+            // 달성률 낮은 순
+            sorted = entries
+                .sort((a,b) => (a[1].done/Math.max(a[1].total,1)) - (b[1].done/Math.max(b[1].total,1)))
+                .slice(0,5)
+                .map(([name, v]) => ({
+                    name,
+                    mainVal:  Math.round(v.done / Math.max(v.total,1) * 100),
+                    mainLabel: `달성률 ${Math.round(v.done/Math.max(v.total,1)*100)}%`,
+                    subLabel:  `100% ${v.done}/${v.total}일`,
+                    color:    '#C62828',
+                    pct: Math.round(v.done / Math.max(v.total,1) * 100)
+                }));
+        } else {
+            // 달성률 높은 순
+            sorted = entries
+                .sort((a,b) => (b[1].done/Math.max(b[1].total,1)) - (a[1].done/Math.max(a[1].total,1)))
+                .slice(0,5)
+                .map(([name, v]) => ({
+                    name,
+                    mainVal:  Math.round(v.done / Math.max(v.total,1) * 100),
+                    mainLabel: `달성률 ${Math.round(v.done/Math.max(v.total,1)*100)}%`,
+                    subLabel:  `100% ${v.done}/${v.total}일`,
+                    color:    '#2E7D32',
+                    pct: Math.round(v.done / Math.max(v.total,1) * 100)
+                }));
+        }
+        renderRankList('plan-rank-list', sorted, mode);
+    }
+}
+
+function renderRankList(elId, items, mode) {
+    const el = document.getElementById(elId);
+    if (!el) return;
+    if (!items || items.length === 0) {
+        el.innerHTML = '<p style="text-align:center;color:#999;font-size:0.85rem;padding:12px 0;">데이터가 없소.</p>';
+        return;
+    }
+    const ranks = ['gold','silver','bronze'];
+    el.innerHTML = items.map((s, i) => `
+        <div class="top-row" style="margin-bottom:10px;">
+            <span class="top-rank ${ranks[i]||''}">${i+1}</span>
+            <div class="top-bar-wrap" style="flex:1;">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+                    <span class="top-bar-name">${s.name}</span>
+                    <span style="font-size:0.78rem;color:#888;">${s.subLabel}</span>
+                </div>
+                <div style="background:#f0f0f0;border-radius:4px;height:8px;overflow:hidden;">
+                    <div style="width:${s.pct}%;height:100%;background:${s.color};border-radius:4px;transition:width 0.4s;"></div>
+                </div>
+            </div>
+            <span style="font-size:0.85rem;font-weight:bold;color:${s.color};margin-left:8px;white-space:nowrap;">${s.mainLabel.split(' ')[0]}&nbsp;${s.mainLabel.split(' ')[1]||''}</span>
+        </div>`).join('');
 }
 
 function drawCounselBarChart(counts, year) {
