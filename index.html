@@ -4743,7 +4743,7 @@ async function loadCounselingByDate() {
                     ✏️ ${item.done ? '수정' : '상담입력'}
                 </button>
             </div>
-            ${item.memo ? `<div style="font-size:0.82rem; color:#555; background:#f9f9f9; border-radius:5px; padding:6px 8px; margin-top:2px;">📝 ${item.memo}</div>` : ''}
+            ${item.memo ? `<div style="font-size:0.82rem; color:#555; background:#f9f9f9; border-radius:5px; padding:6px 8px; margin-top:2px; white-space:pre-wrap; line-height:1.6;">📝 ${item.memo}</div>` : ''}
         `;
         listDiv.appendChild(card);
     });
@@ -5038,7 +5038,7 @@ function onCalDayClick(name, date, isDone, memo, attStatus) {
                 ${isDone ? '<span class="counsel-done-badge">✅ 상담완료</span>' : '<span class="counsel-pending-badge">미완료</span>'}
             </div>
         </div>
-        ${memo ? `<div style="color:#555; margin-bottom:8px;">📝 ${memo}</div>` : '<div style="color:#bbb; margin-bottom:8px;">메모 없음</div>'}
+        ${memo ? `<div style="color:#555; margin-bottom:8px; white-space:pre-wrap; line-height:1.6;">📝 ${memo}</div>` : '<div style="color:#bbb; margin-bottom:8px;">메모 없음</div>'}
         <button onclick="openCounselEdit('${name}', '${date}', ${isDone}, \`${memo.replace(/`/g,"'")}\`)"
                 style="background:var(--primary); color:white; border:none; border-radius:6px; padding:6px 14px; cursor:pointer; font-size:0.85rem;">
             ✏️ ${isDone ? '수정' : '상담 입력'}
