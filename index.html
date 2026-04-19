@@ -5092,6 +5092,12 @@ async function loadCounselStats() {
             recentDates.push(`${yy}-${mm}-${dd}`);
         }
 
+        // ★ 주말 제외한 날짜만 집계 대상
+        const weekdayDates = new Set(recentDates.filter(d => {
+            const day = new Date(d + 'T00:00:00').getDay();
+            return day !== 0 && day !== 6;
+        }));
+
         const [attRows, planRows] = await Promise.all([
             Promise.all(recentDates.map(date =>
                 callApi('getAdminAttendance', { date }).catch(() => [])
@@ -5109,7 +5115,8 @@ async function loadCounselStats() {
             planMap[s.name] = { done:0, total:0 };
         });
 
-        attRows.forEach(rows => {
+        attRows.forEach((rows, idx) => {
+            if (!weekdayDates.has(recentDates[idx])) return;  // 주말 제외
             (rows || []).forEach(r => {
                 if (!attMap[r.name]) return;
                 attMap[r.name].total++;
@@ -5119,7 +5126,8 @@ async function loadCounselStats() {
             });
         });
 
-        planRows.forEach(rows => {
+        planRows.forEach((rows, idx) => {
+            if (!weekdayDates.has(recentDates[idx])) return;  // 주말 제외
             (rows || []).forEach(r => {
                 if (!planMap[r.name]) return;
                 planMap[r.name].total++;
