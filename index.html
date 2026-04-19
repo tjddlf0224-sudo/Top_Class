@@ -1599,13 +1599,15 @@ function loadHome() {
     }
 
     // ★ ② 오늘 출석 여부에 따라 등교 인증 버튼 즉시 설정 (API 호출 없음)
+    // '결석'은 트리거가 자동 기록한 것으로, 학생이 직접 인증한 게 아니므로 버튼 활성 유지
     const btnCheckIn = document.getElementById('btn-checkin');
-    if (currentUser.checkedIn) {
-        btnCheckIn.disabled   = true;
+    const isCheckedIn = currentUser.checkedIn && currentUser.checkedIn !== '결석';
+    if (isCheckedIn) {
+        btnCheckIn.disabled    = true;
         btnCheckIn.textContent = `✅ 등교 완료 (${currentUser.checkedIn})`;
         btnCheckIn.style.background = '#888';
     } else {
-        btnCheckIn.disabled   = false;
+        btnCheckIn.disabled    = false;
         btnCheckIn.textContent = '🏫 등교 인증';
         btnCheckIn.style.background = '';
     }
@@ -1684,8 +1686,15 @@ async function loadStudentQuickView() {
             return parts[1].replace(/^0/,'')+'/'+parts[2].replace(/^0/,'');
         });
 
+        // 주말 여부 (0=일, 6=토)
+        const isWeekend = dates.map(d => {
+            const day = new Date(d).getDay();
+            return day === 0 || day === 6;
+        });
+
         // 출결 신호
-        function attIcon(row) {
+        function attIcon(row, weekend) {
+            if (weekend) return '<span style="color:#aaa;font-size:0.7rem;">주말</span>';
             if (!row) return '<span style="color:#bbb;">—</span>';
             if (row.status==='출석') return '<span style="color:#2E7D32;font-weight:bold;">✓</span>';
             if (row.status==='지각') return '<span style="color:#F57C00;font-weight:bold;">△</span>';
@@ -1730,7 +1739,7 @@ async function loadStudentQuickView() {
             <tbody>
                 <tr style="border-bottom:1px solid #eee;">
                     <td style="padding:6px 4px;font-size:0.78rem;color:#555;white-space:nowrap;">📅출결</td>
-                    ${attRows.map(r=>`<td style="text-align:center;padding:4px 2px;">${attIcon(r.row)}</td>`).join('')}
+                    ${attRows.map((r,i)=>`<td style="text-align:center;padding:4px 2px;">${attIcon(r.row, isWeekend[i])}</td>`).join('')}
                 </tr>
                 <tr style="border-bottom:1px solid #eee;">
                     <td style="padding:6px 4px;font-size:0.78rem;color:#555;white-space:nowrap;">📝플래너</td>
