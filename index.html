@@ -620,6 +620,16 @@
 
             <hr>
 
+            <h3>⏸️ 트리거 일시정지</h3>
+            <p style="font-size:0.85rem; color:#777; margin:0 0 10px 0;">
+                시험기간·방학 등 특정 기간 동안 결석·플래너 자동 차감을 중단합니다.
+            </p>
+            <div id="trigger-pause-status" style="margin-bottom:10px;"></div>
+            <button class="btn" style="width:100%; background:#5D6D7E; margin-bottom:6px;"
+                    onclick="openTriggerPause()">⏸️ 일시정지 기간 설정</button>
+
+            <hr>
+
             <h3>🪙 엽전 관리</h3>
             <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:10px;">
                 <button class="btn" style="font-size:0.88rem; padding:10px;"
@@ -1126,6 +1136,41 @@
             </div>
             <button class="btn btn-outline" style="margin-top:10px;"
                     onclick="showSection('sec-home')">뒤로 가기</button>
+        </div>
+    </section>
+
+    <!-- 트리거 일시정지 설정 -->
+    <section id="sec-trigger-pause" class="hidden">
+        <div class="header"><h2 class="title">⏸️ 트리거 일시정지</h2></div>
+        <div class="container">
+            <div class="card" style="margin-bottom:12px; background:#FFF8E1; border-left:3px solid #F9A825;">
+                <div style="font-size:0.85rem; color:#5D4037; line-height:1.6;">
+                    설정한 기간 동안 <b>결석 차감</b>과 <b>플래너 미작성 차감</b>이 자동으로 중단됩니다.<br>
+                    시험기간·방학에 활용하세요.
+                </div>
+            </div>
+
+            <div class="card">
+                <div style="font-weight:bold; margin-bottom:12px;">📅 일시정지 기간 설정</div>
+                <label style="font-size:0.85rem; color:#666; display:block; margin-bottom:4px;">시작일</label>
+                <input type="date" id="pause-start-date"
+                       style="width:100%; margin-bottom:10px; padding:9px; border:1px solid #ddd; border-radius:6px; font-family:inherit; box-sizing:border-box;">
+                <label style="font-size:0.85rem; color:#666; display:block; margin-bottom:4px;">종료일</label>
+                <input type="date" id="pause-end-date"
+                       style="width:100%; margin-bottom:12px; padding:9px; border:1px solid #ddd; border-radius:6px; font-family:inherit; box-sizing:border-box;">
+                <button onclick="saveTriggerPause()"
+                        style="width:100%; background:var(--primary); color:white; border:none; padding:11px; border-radius:6px; cursor:pointer; font-family:inherit; font-size:0.95rem; font-weight:bold;">
+                    저장
+                </button>
+            </div>
+
+            <div class="card" style="margin-top:12px;">
+                <div style="font-weight:bold; margin-bottom:10px;">📋 설정된 일시정지 목록</div>
+                <div id="pause-list"><p style="text-align:center;color:#999;font-size:0.85rem;">불러오는 중...</p></div>
+            </div>
+
+            <button class="btn btn-outline" style="margin-top:10px;"
+                    onclick="showSection('sec-admin')">뒤로 가기</button>
         </div>
     </section>
 
@@ -3085,6 +3130,9 @@ async function openAdmin() {
     } else {
         badge.style.display = 'none';
     }
+
+    // 트리거 일시정지 배지
+    updateTriggerPauseBadge();
 
     // 학생 드롭다운
     const sel = document.getElementById('admin-student-select');
@@ -5207,7 +5255,19 @@ function renderCounselStats() {
             <div class="stat-card-title">월별 상담 건수</div>
             <div class="bar-chart-wrap" style="position:relative; height:250px; width:100%;"><canvas id="counselBarCanvas"></canvas></div>
         </div>
-        ${top.length ? `<div class="stat-card"><div class="stat-card-title">상담 횟수 상위 학생</div><div id="counselTopList"></div></div>` : ''}
+        ${top.length ? `
+        <div class="stat-card">
+            <div class="stat-card-title">💬 상담 횟수 순위</div>
+            <div style="display:flex; gap:6px; margin-bottom:12px;">
+                <button id="counsel-rank-btn-many" onclick="switchCounselRankTab('many')"
+                    style="flex:1;padding:7px;border:none;border-radius:6px;cursor:pointer;font-family:inherit;font-size:0.82rem;background:var(--primary);color:white;font-weight:bold;">
+                    📈 많은 순</button>
+                <button id="counsel-rank-btn-few" onclick="switchCounselRankTab('few')"
+                    style="flex:1;padding:7px;border:none;border-radius:6px;cursor:pointer;font-family:inherit;font-size:0.82rem;background:#eee;color:#555;">
+                    📉 적은 순</button>
+            </div>
+            <div id="counselTopList"></div>
+        </div>` : ''}
 
         <div class="stat-card" id="att-rank-card">
             <div class="stat-card-title">📅 출결 현황 순위 <span style="font-size:0.7rem;color:#bbb;font-weight:normal;">(최근 14일)</span></div>
@@ -5243,24 +5303,57 @@ function renderCounselStats() {
         console.log("차트 렌더링 중 오류:", e);
     }
 
-    if (top.length) {
-        const ranks = ['gold','silver','bronze'];
-        document.getElementById('counselTopList').innerHTML = top.map((s,i) => `
-            <div class="top-row">
-                <span class="top-rank ${ranks[i]||''}">${i+1}</span>
-                <div class="top-bar-wrap">
-                    <div class="top-bar-name">${s.name}</div>
-                    <div class="top-bar-bg"><div class="top-bar-fill" style="width:${Math.round(s.count/maxC*100)}%"></div></div>
-                </div>
-                <span class="top-bar-count">${s.count}건</span>
-            </div>`).join('');
-    }
+    // ★ 상담 순위 + 출결/플래너 순위 렌더링
+    // 전체 학생 상담 횟수 맵 저장 (적은 순 계산용)
+    window._counselCountMap = {};
+    counselingStudentList.forEach(s => { window._counselCountMap[s.name] = 0; });
+    (counselStatsData || []).forEach(r => {
+        if (window._counselCountMap[r.name] !== undefined)
+            window._counselCountMap[r.name]++;
+    });
 
-    // ★ 출결/플래너 순위 렌더링
     setTimeout(() => {
+        if (top.length) switchCounselRankTab('many');
         switchRankTab('att',  'bad');
         switchRankTab('plan', 'bad');
     }, 100);
+}
+
+/* ─── 상담 횟수 순위 탭 전환 ─── */
+function switchCounselRankTab(mode) {
+    const btnMany = document.getElementById('counsel-rank-btn-many');
+    const btnFew  = document.getElementById('counsel-rank-btn-few');
+    const listDiv = document.getElementById('counselTopList');
+    if (!btnMany || !btnFew || !listDiv) return;
+
+    const activeStyle   = 'flex:1;padding:7px;border:none;border-radius:6px;cursor:pointer;font-family:inherit;font-size:0.82rem;background:var(--primary);color:white;font-weight:bold;';
+    const inactiveStyle = 'flex:1;padding:7px;border:none;border-radius:6px;cursor:pointer;font-family:inherit;font-size:0.82rem;background:#eee;color:#555;';
+    btnMany.style.cssText = mode === 'many' ? activeStyle : inactiveStyle;
+    btnFew.style.cssText  = mode === 'few'  ? activeStyle : inactiveStyle;
+
+    const countMap = window._counselCountMap || {};
+    const entries  = Object.entries(countMap);
+    const maxC     = Math.max(...entries.map(([,v]) => v), 1);
+    const ranks    = ['gold','silver','bronze'];
+
+    let sorted;
+    if (mode === 'many') {
+        sorted = entries.sort((a,b) => b[1] - a[1]).slice(0,5);
+    } else {
+        sorted = entries.sort((a,b) => a[1] - b[1]).slice(0,5);
+    }
+
+    listDiv.innerHTML = sorted.map(([name, count], i) => `
+        <div class="top-row">
+            <span class="top-rank ${ranks[i]||''}">${i+1}</span>
+            <div class="top-bar-wrap">
+                <div class="top-bar-name">${name}</div>
+                <div class="top-bar-bg">
+                    <div class="top-bar-fill" style="width:${Math.round(count/maxC*100)}%"></div>
+                </div>
+            </div>
+            <span class="top-bar-count">${count}건</span>
+        </div>`).join('');
 }
 
 /* ─── 출결/플래너 순위 탭 전환 ─── */
@@ -6254,6 +6347,89 @@ function printAllQR() {
     </body></html>`;
     win.document.write(html);
     win.document.close();
+}
+/* =========================================================
+   트리거 일시정지 기능
+   ========================================================= */
+
+async function openTriggerPause() {
+    showSection('sec-trigger-pause');
+
+    // 오늘 날짜 기본값
+    const today = new Date();
+    const fmt   = d => d.toISOString().slice(0,10);
+    document.getElementById('pause-start-date').value = fmt(today);
+    const nextWeek = new Date(today); nextWeek.setDate(today.getDate() + 6);
+    document.getElementById('pause-end-date').value   = fmt(nextWeek);
+
+    loadPauseList();
+
+    // 이조판서 화면 배지도 갱신
+    updateTriggerPauseBadge();
+}
+
+async function loadPauseList() {
+    const listDiv = document.getElementById('pause-list');
+    listDiv.innerHTML = '<p style="text-align:center;color:#999;font-size:0.85rem;">불러오는 중...</p>';
+    try {
+        const data = await callApi('getTriggerPauses', {});
+        if (!data || data.length === 0) {
+            listDiv.innerHTML = '<p style="text-align:center;color:#999;font-size:0.85rem;">설정된 기간이 없소.</p>';
+            return;
+        }
+        listDiv.innerHTML = data.map((p, i) => `
+            <div style="display:flex; justify-content:space-between; align-items:center;
+                        padding:10px 0; border-bottom:1px solid #eee;">
+                <div>
+                    <div style="font-weight:bold; font-size:0.9rem;">
+                        ${p.start} ~ ${p.end}
+                    </div>
+                    <div style="font-size:0.78rem; color:#999; margin-top:2px;">${p.label || ''}</div>
+                </div>
+                <button onclick="deleteTriggerPause(${i})"
+                        style="background:#C62828; color:white; border:none; border-radius:4px;
+                               padding:5px 10px; cursor:pointer; font-size:0.82rem;">삭제</button>
+            </div>`).join('');
+    } catch(e) {
+        listDiv.innerHTML = `<p style="text-align:center;color:#C62828;font-size:0.85rem;">불러오기 실패: ${e.message}</p>`;
+    }
+}
+
+async function saveTriggerPause() {
+    const start = document.getElementById('pause-start-date').value;
+    const end   = document.getElementById('pause-end-date').value;
+    if (!start || !end) return showToast('시작일과 종료일을 입력하시오.');
+    if (start > end)    return showToast('종료일이 시작일보다 앞설 수 없소.');
+    await callApi('saveTriggerPause', { start, end });
+    showToast(`✅ ${start} ~ ${end} 일시정지 등록 완료.`);
+    loadPauseList();
+    updateTriggerPauseBadge();
+}
+
+async function deleteTriggerPause(idx) {
+    if (!confirm('해당 일시정지 기간을 삭제하시겠소?')) return;
+    await callApi('deleteTriggerPause', { idx });
+    showToast('삭제 완료.');
+    loadPauseList();
+    updateTriggerPauseBadge();
+}
+
+async function updateTriggerPauseBadge() {
+    const statusDiv = document.getElementById('trigger-pause-status');
+    if (!statusDiv) return;
+    try {
+        const data  = await callApi('getTriggerPauses', {});
+        const today = new Date().toISOString().slice(0,10);
+        const active = (data || []).find(p => p.start <= today && today <= p.end);
+        if (active) {
+            statusDiv.innerHTML = `<div style="background:#FFF3E0; border:1px solid #F9A825; border-radius:6px;
+                padding:8px 12px; font-size:0.85rem; color:#E65100;">
+                ⏸️ 현재 일시정지 중 (~${active.end})
+            </div>`;
+        } else {
+            statusDiv.innerHTML = `<div style="font-size:0.82rem; color:#888;">▶️ 현재 트리거 정상 작동 중</div>`;
+        }
+    } catch(e) { /* 무시 */ }
 }
 
 
