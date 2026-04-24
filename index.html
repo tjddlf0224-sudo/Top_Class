@@ -320,23 +320,29 @@
         .counsel-cal-grid {
             display: grid;
             grid-template-columns: repeat(7, 1fr);
+            grid-auto-rows: 42px;
             gap: 3px;
             margin-top: 6px;
+        }
+        /* 전체 모드일 때 더 높은 행 */
+        .counsel-cal-grid.all-mode {
+            grid-auto-rows: 54px;
         }
         .counsel-cal-header {
             text-align: center; font-size: 0.75rem;
             font-weight: bold; color: #888; padding: 4px 0;
         }
         .counsel-cal-day {
-            aspect-ratio: 1;
+            height: 100%;
             display: flex; flex-direction: column;
             align-items: center; justify-content: center;
             border-radius: 8px; font-size: 0.85rem;
             cursor: pointer; position: relative;
             border: 1px solid transparent;
             transition: background 0.15s;
+            overflow: hidden;
         }
-        .counsel-cal-day.empty { cursor: default; }
+        .counsel-cal-day.empty { cursor: default; visibility: hidden; }
         .counsel-cal-day.done {
             background: #C8E6C9; color: #1B5E20; font-weight: bold;
         }
@@ -356,6 +362,18 @@
         }
         .counsel-cal-day:not(.empty):not(.done):hover {
             background: var(--secondary);
+        }
+        /* 전체 모드 - 이름 표시 */
+        .cal-all-names {
+            font-size: 0.48rem; line-height: 1.3;
+            text-align: center; width: 100%;
+            padding: 0 2px; overflow: hidden;
+        }
+        /* 전체 모드 - 건수 뱃지 */
+        .cal-all-badge {
+            position: absolute; top: 2px; right: 3px;
+            font-size: 0.5rem; font-weight: 700;
+            color: #1B5E20; line-height: 1;
         }
         .counsel-done-badge {
             display: inline-block; background: #C8E6C9;
@@ -4725,6 +4743,10 @@ async function openCounseling() {
         const adminData = await callApi('getAdminData');
         counselingStudentList = adminData.members.filter(m => m.name !== '교사' && m.role !== 'teacher');
         const sel = document.getElementById('counsel-student-select');
+        // ★ 전체 옵션 추가
+        const allOpt = document.createElement('option');
+        allOpt.value = '__all__'; allOpt.textContent = '👥 학생 전체';
+        sel.appendChild(allOpt);
         counselingStudentList.forEach(s => {
             const opt = document.createElement('option');
             opt.value = s.name; opt.textContent = s.name;
@@ -4953,6 +4975,12 @@ async function loadCounselingCalendar() {
         return;
     }
 
+    // ★ 전체 보기
+    if (name === '__all__') {
+        await loadCounselingCalendarAll();
+        return;
+    }
+
     const ym = `${counselCalYear}-${String(counselCalMonth + 1).padStart(2, '0')}`;
     document.getElementById('counsel-cal-title').textContent =
         `${counselCalYear}년 ${counselCalMonth + 1}월`;
@@ -5000,7 +5028,7 @@ function moveCounselingMonth(delta) {
     counselCalMonth += delta;
     if (counselCalMonth > 11) { counselCalMonth = 0; counselCalYear++; }
     if (counselCalMonth < 0)  { counselCalMonth = 11; counselCalYear--; }
-    counselCalData   = [];  // 캐시 초기화 → 새 달 로드
+    counselCalData   = [];
     counselCalAttMap = {};
     loadCounselingCalendar();
 }
@@ -5075,6 +5103,135 @@ function renderCounselingCalendar(studentName, ym) {
     </div>`;
 
     cal.innerHTML = html;
+}
+
+/** ─── 전체 학생 달력 ─── */
+async function loadCounselingCalendarAll() {
+    const ym = `${counselCalYear}-${String(counselCalMonth + 1).padStart(2, '0')}`;
+    document.getElementById('counsel-cal-title').textContent =
+        `${counselCalYear}년 ${counselCalMonth + 1}월`;
+    document.getElementById('counsel-cal-memo').style.display = 'none';
+
+    const cal = document.getElementById('counsel-calendar');
+    cal.innerHTML = '<p style="text-align:center;color:#999;padding:20px 0;">불러오는 중...</p>';
+
+    // 이달 전체 상담 데이터 수집 (날짜별)
+    const lastDate = new Date(counselCalYear, counselCalMonth + 1, 0).getDate();
+    const today    = toDateStr();
+    const allCounselData = await callApi('getCounselingByDate', { date: ym }).catch(() => []);
+
+    // 날짜별 날짜 포맷으로 조회 (getCounselingByDate는 하루치라 전체 월 병렬 조회)
+    const datesToCheck = [];
+    for (let d = 1; d <= lastDate; d++) {
+        const ds = `${ym}-${String(d).padStart(2,'0')}`;
+        if (ds <= today) datesToCheck.push(ds);
+    }
+    const allResults = await Promise.all(
+        datesToCheck.map(date =>
+            callApi('getCounselingByDate', { date }).catch(() => [])
+        )
+    );
+
+    // 날짜 → 상담 완료 학생 목록 맵
+    const allDayMap = {}; // { 'yyyy-mm-dd': [{ name, done, memo }, ...] }
+    datesToCheck.forEach((date, i) => {
+        const done = (allResults[i] || []).filter(r => r.done);
+        if (done.length > 0) allDayMap[date] = done;
+    });
+
+    renderCounselingCalendarAll(ym, allDayMap, today);
+}
+
+function renderCounselingCalendarAll(ym, allDayMap, today) {
+    const cal      = document.getElementById('counsel-calendar');
+    const firstDay = new Date(counselCalYear, counselCalMonth, 1).getDay();
+    const lastDate = new Date(counselCalYear, counselCalMonth + 1, 0).getDate();
+    const dayNames = ['일','월','화','수','목','금','토'];
+
+    // 전체 모드: all-mode 클래스로 행 높이를 54px로 확장
+    let html = '<div class="counsel-cal-grid all-mode">';
+    dayNames.forEach((d, i) => {
+        const color = i===0 ? 'color:#C62828;' : i===6 ? 'color:#1976D2;' : '';
+        html += `<div class="counsel-cal-header" style="${color}">${d}</div>`;
+    });
+
+    for (let i = 0; i < firstDay; i++) html += '<div class="counsel-cal-day empty"></div>';
+
+    for (let d = 1; d <= lastDate; d++) {
+        const dateStr   = `${ym}-${String(d).padStart(2,'0')}`;
+        const dayOfWeek = (firstDay + d - 1) % 7;
+        const isToday   = dateStr === today;
+        const doneList  = allDayMap[dateStr] || [];
+        const cnt       = doneList.length;
+        const hasDone   = cnt > 0;
+        const textColor = dayOfWeek===0 ? 'color:#C62828;' : dayOfWeek===6 ? 'color:#1976D2;' : '';
+
+        // 이름 미리보기: 1명이면 이름, 2명 이상이면 첫 이름 + +N
+        let nameArea = '';
+        if (hasDone) {
+            if (cnt === 1) {
+                nameArea = `<div class="cal-all-names">${doneList[0].name}</div>`;
+            } else {
+                nameArea = `<div class="cal-all-names">${doneList[0].name}</div>` +
+                           `<span class="cal-all-badge">+${cnt-1}</span>`;
+            }
+        }
+
+        html += `<div class="counsel-cal-day${hasDone ? ' done' : ''}${isToday ? ' today' : ''}"
+                     style="${textColor} padding:2px;"
+                     onclick="onCalDayClickAll('${dateStr}')">
+                    <span style="font-size:0.82rem;font-weight:${hasDone?'bold':'normal'};">${d}</span>
+                    ${nameArea}
+                 </div>`;
+    }
+    html += '</div>';
+
+    // 범례
+    html += `<div style="display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; font-size:0.78rem; color:#888;">
+        <span><span style="display:inline-block;width:12px;height:12px;background:#C8E6C9;border-radius:3px;vertical-align:middle;margin-right:3px;"></span>상담완료</span>
+        <span><span style="display:inline-block;width:12px;height:12px;border:2px solid var(--primary);border-radius:3px;vertical-align:middle;margin-right:3px;"></span>오늘</span>
+    </div>`;
+
+    cal.innerHTML = html;
+}
+
+// 전체 달력 날짜 클릭 시 해당 날짜 상담 목록 표시
+async function onCalDayClickAll(date) {
+    const memoDiv = document.getElementById('counsel-cal-memo');
+    memoDiv.style.display = 'block';
+    memoDiv.innerHTML = '<p style="text-align:center;color:#999;padding:10px 0;">불러오는 중...</p>';
+
+    const data = await callApi('getCounselingByDate', { date }).catch(() => []);
+    const done = (data || []).filter(r => r.done);
+
+    if (done.length === 0) {
+        memoDiv.innerHTML = `<div style="font-weight:bold;margin-bottom:8px;">${date}</div>
+            <p style="color:#bbb;text-align:center;padding:8px 0;">이 날 상담 기록이 없소.</p>`;
+        return;
+    }
+
+    const cards = done.map(r => `
+        <div style="background:#f9f9f9; border-radius:8px; padding:10px 12px; margin-bottom:8px;
+                    border-left:3px solid var(--primary);">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                <span style="font-weight:bold;">${r.name}</span>
+                <span class="counsel-done-badge">✅ 상담완료</span>
+            </div>
+            ${r.memo
+                ? `<div style="color:#555; font-size:0.88rem; white-space:pre-wrap; line-height:1.6;">📝 ${r.memo}</div>`
+                : `<div style="color:#bbb; font-size:0.85rem;">메모 없음</div>`}
+            <button onclick="openCounselEdit('${r.name}','${date}',true,\`${(r.memo||'').replace(/`/g,"'")}\`)"
+                    style="margin-top:8px; background:var(--primary); color:white; border:none;
+                           border-radius:5px; padding:5px 12px; cursor:pointer; font-size:0.82rem;">
+                ✏️ 수정
+            </button>
+        </div>`).join('');
+
+    memoDiv.innerHTML = `
+        <div style="font-weight:bold; margin-bottom:10px;">
+            ${date} — 상담 ${done.length}건
+        </div>
+        ${cards}`;
 }
 
 /** 달력 날짜 클릭 */
