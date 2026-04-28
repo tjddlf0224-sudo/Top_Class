@@ -13,7 +13,7 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="장원급제반">
     <meta name="mobile-web-app-capable" content="yes">
-    <meta name="theme-color" content="#F0EAE0">
+    <meta name="theme-color" content="#F8F5F0">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
     <script src="./docx.bundle.js"></script>
     <style>
@@ -47,8 +47,9 @@
 * { box-sizing: border-box; }
 
 body {
+    background-color: var(--hanji, #F8F5F0);
     font-family: 'Noto Sans KR', 'Nanum Myeongjo', sans-serif;
-    background: #F0EAE0;
+    background: #E9E6E1;
     color: var(--ink);
     margin: 0; padding: 0;
     display: flex;
@@ -66,12 +67,9 @@ body {
     position: relative;
     display: flex;
     flex-direction: column;
-    padding-top: 0;
-    padding-bottom: 0;
     box-shadow: 0 0 60px rgba(0,0,0,0.12);
+    overflow: hidden;
 }
-
-/* iOS 상태바 배경 색상 맞추기 */
 
 /* ── 로딩 / 토스트 ── */
 #loading {
@@ -113,7 +111,7 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 16px 20px;
+    padding: calc(16px + env(safe-area-inset-top)) 20px 16px;
     background: rgba(255,252,248,0.55);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
@@ -238,7 +236,7 @@ input::placeholder, textarea::placeholder { color: #C4BDB6; }
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
     border-top: 1px solid var(--stone);
-    padding: 10px 0 calc(16px + env(safe-area-inset-bottom));
+    padding: 8px 0 calc(8px + env(safe-area-inset-bottom));
     flex-shrink: 0;
     position: sticky;
     bottom: 0;
@@ -308,7 +306,7 @@ input::placeholder, textarea::placeholder { color: #C4BDB6; }
     flex: 1;
     padding: 0 28px;
     justify-content: center;
-    padding-top: 15vh;
+    padding-top: 3vh;
     background: none;
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
@@ -583,11 +581,11 @@ input::placeholder, textarea::placeholder { color: #C4BDB6; }
                     background-image:var(--bg-home);
                     background-size:cover;
                     background-position:center bottom;
-                    opacity:0.6; pointer-events:none;"></div>
+                    opacity:0.55; pointer-events:none;"></div>
 
         <!-- 상단 프로필 바 -->
         <div style="position:relative; z-index:1; display:flex; align-items:center;
-                    justify-content:space-between; padding:calc(env(safe-area-inset-top) + 16px) 20px 10px;">
+                    justify-content:space-between; padding:16px 20px 10px;">
             <div>
                 <div id="home-user-name"
                      style="font-family:'Nanum Myeongjo',serif; font-size:1.55rem;
@@ -877,7 +875,7 @@ input::placeholder, textarea::placeholder { color: #C4BDB6; }
 
         <!-- 스크롤 영역 -->
         <div style="position:relative; z-index:1; flex:1; overflow-y:auto;
-                    padding:0 20px 32px 16px; display:flex; flex-direction:column; gap:8px;">
+                    padding:0 16px 32px; display:flex; flex-direction:column; gap:8px;">
 
             <!-- 컬럼 헤더 -->
             <div style="display:grid; grid-template-columns:1fr 52px;
@@ -2077,7 +2075,7 @@ function loadHome() {
         document.querySelectorAll('.student-only').forEach(el => el.style.display = 'none');
         document.querySelectorAll('.teacher-only').forEach(el => el.style.display = '');
         // 전체 관원 현황 버튼 텍스트 변경
-        const rBtn = document.getElementById('btn-role-page'); if(rBtn && rBtn.querySelector('span')) rBtn.querySelector('span').textContent = '출결/플래너';
+        document.getElementById('btn-role-page').querySelector('span').textContent = '출결/플래너';
         document.getElementById('admin-btn-area').innerHTML =
             `<div class="sub-btn" onclick="openAdmin()" style="background:var(--ink);color:white;border-color:var(--ink);margin-top:4px;">
                 <span>이조판서 집무실</span>
@@ -2151,9 +2149,7 @@ function loadHome() {
                 document.getElementById('task-planner').style.borderColor = 'var(--gold)';
             }
         }
-        const planContent = currentUser.todayPlanner && currentUser.todayPlanner.content;
-    const hasContent = planContent && JSON.parse(planContent || '[]').length > 0;
-    if (planDesc) planDesc.textContent = planDone ? '100% 달성!' : hasPlan ? `${currentUser.todayPlanner.progress}% 진행 중` : hasContent ? '등록됨' : '오늘 계획 미등록';
+        if (planDesc) planDesc.textContent = planDone ? '100% 달성!' : hasPlan ? `${currentUser.todayPlanner.progress}% 진행 중` : '오늘 계획 미등록';
     }
 
     // ★ ② 오늘 출석 여부에 따라 등교 인증 버튼 즉시 설정 (API 호출 없음)
@@ -2657,14 +2653,13 @@ function renderPlans() {
         row.innerHTML = `
             <div style="font-size:0.92rem; color:var(--ink); word-break:break-all;">${plan.text}</div>
             <div style="display:flex; align-items:center; justify-content:center; gap:4px;">
-                <div style="width:26px; height:26px; border-radius:50%;
+                <div style="width:22px; height:22px; border-radius:50%;
                              background:${statusColors[plan.status]||statusColors[0]};
-                             cursor:pointer; border:1px solid rgba(255,255,255,0.5); flex-shrink:0;"
+                             cursor:pointer; border:1px solid rgba(255,255,255,0.5);"
                      onclick="toggleLight(${idx})"></div>
                 <button onclick="deletePlan(${idx})"
                         style="background:none; border:none; color:var(--muted);
-                               cursor:pointer; font-size:1.1rem; padding:0 4px; line-height:1;
-                               margin-left:4px;">✕</button>
+                               cursor:pointer; font-size:0.75rem; padding:0;">✕</button>
             </div>
         `;
         list.appendChild(row);
@@ -2706,8 +2701,7 @@ function savePlannerData() {
     localStorage.removeItem('history_' + currentUser.name);
     myHistoryData = [];
 
-    showToast('플래너가 저장되었습니다.');
-    loadHome();
+    loadHome(); // showSection 대신 loadHome으로 홈 상태 갱신
 
     // ★ STEP 2: 백그라운드 저장 (await 없이 호출)
     // 플래너 저장 → 관련 캐시 즉시 무효화 + 백그라운드 재페치
