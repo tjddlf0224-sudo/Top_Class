@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>장원급제반</title>
     
     <link rel="manifest" href="./manifest.json">
@@ -55,11 +55,12 @@ body {
     justify-content: center;
     min-height: 100vh;
     min-height: 100dvh;
+    overflow-x: hidden;
 }
 
 #app {
     width: 100%;
-    max-width: 420px;
+    max-width: 100%;
     background: var(--hanji);
     min-height: 100vh;
     min-height: 100dvh;
@@ -68,7 +69,7 @@ body {
     flex-direction: column;
     padding-top: 0;
     padding-bottom: 0;
-    box-shadow: 0 0 60px rgba(0,0,0,0.12);
+    overflow-x: hidden;
 }
 
 /* iOS 상태바 배경 색상 맞추기 */
@@ -146,9 +147,13 @@ body {
 /* ── 컨테이너 ── */
 .container {
     padding: 16px;
+    padding-left: max(16px, env(safe-area-inset-left));
+    padding-right: max(16px, env(safe-area-inset-right));
     flex: 1;
     overflow-y: auto;
+    overflow-x: hidden;
     -webkit-overflow-scrolling: touch;
+    word-break: break-word;
 }
 
 /* ── 히어로 배경 영역 ── */
@@ -182,6 +187,8 @@ body {
     margin-bottom: 10px;
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
+    word-break: break-word;
+    overflow-x: hidden;
 }
 
 /* ── 버튼 ── */
@@ -238,7 +245,7 @@ input::placeholder, textarea::placeholder { color: #C4BDB6; }
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
     border-top: 1px solid var(--stone);
-    padding: 10px 0 calc(16px + env(safe-area-inset-bottom));
+    padding: 10px max(12px, env(safe-area-inset-right)) calc(6px + env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
     flex-shrink: 0;
     position: sticky;
     bottom: 0;
@@ -615,11 +622,11 @@ input::placeholder, textarea::placeholder { color: #C4BDB6; }
 
         <!-- 스크롤 영역 -->
         <div style="position:relative; z-index:1; flex:1; overflow-y:auto;
-                    padding:4px 16px 16px; display:flex; flex-direction:column; gap:10px;">
+                    padding:4px 16px 16px; display:flex; flex-direction:column; gap:10px; overflow-x:hidden;">
 
             <!-- 학생: 현황 카드 2개 -->
             <div class="student-only" id="card-my-status">
-                <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; min-width:0;">
                     <!-- 엽전 카드 -->
                     <div style="background:rgba(248,245,240,0.18); border:1px solid rgba(233,230,225,0.35);
                                 border-radius:14px; padding:16px; backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px);
@@ -651,7 +658,7 @@ input::placeholder, textarea::placeholder { color: #C4BDB6; }
             <!-- 교사: 학생 빠른 조회 -->
             <div id="card-student-quick" class="teacher-only"
                  style="display:none; background:rgba(248,245,240,0.18); border:1px solid rgba(233,230,225,0.35);
-                        border-radius:14px; padding:16px; backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px);">
+                        border-radius:14px; padding:16px; backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px); overflow:hidden;">
                 <div style="font-size:0.78rem; font-weight:700; color:var(--muted);
                      letter-spacing:1px; margin-bottom:10px;">학생 현황</div>
                 <select id="quick-student-select" style="margin:0 0 10px;"
@@ -667,7 +674,7 @@ input::placeholder, textarea::placeholder { color: #C4BDB6; }
                         border-radius:14px; padding:18px; backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px);">
                 <div style="font-size:1rem; font-weight:800; color:var(--ink);
                             margin-bottom:14px; letter-spacing:0.5px;">오늘 할 일</div>
-                <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; min-width:0;">
                     <!-- 플래너 작성 -->
                     <div id="task-planner"
                          style="background:rgba(255,255,255,0.5); border:1.5px solid rgba(233,230,225,0.8);
@@ -720,10 +727,8 @@ input::placeholder, textarea::placeholder { color: #C4BDB6; }
 
             <!-- 교사 대시보드 -->
             <div id="teacher-today-dashboard-wrap"
-                 style="display:none; background:rgba(248,245,240,0.18);
-                        border:1px solid rgba(233,230,225,0.35); border-radius:14px; padding:16px;
-                        backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px);">
-                <div style="font-size:0.72rem; color:var(--muted); margin-bottom:6px;"
+                 style="display:none; border-radius:14px; padding:0;">
+                <div style="font-size:0.7rem; color:var(--muted); margin-bottom:8px; letter-spacing:0.5px;"
                      id="dashboard-last-updated"></div>
                 <div id="teacher-today-dashboard"></div>
             </div>
@@ -807,7 +812,7 @@ input::placeholder, textarea::placeholder { color: #C4BDB6; }
                     background-size:cover; background-position:center bottom;
                     opacity:0.5; pointer-events:none;"></div>
         <div style="position:relative; z-index:1; display:flex; align-items:center;
-                    justify-content:center; padding:calc(env(safe-area-inset-top) + 8px) 20px 8px; flex-shrink:0;">
+                    justify-content:center; padding:calc(env(safe-area-inset-top) + 14px) 20px 8px; flex-shrink:0;">
             <button onclick="showSection('sec-home')"
                     style="position:absolute; left:16px; background:none; border:none;
                            cursor:pointer; padding:4px; display:flex; align-items:center; color:var(--ink);">
@@ -842,7 +847,7 @@ input::placeholder, textarea::placeholder { color: #C4BDB6; }
 
         <!-- 헤더 바 (뒤로가기 + 타이틀) -->
         <div style="position:relative; z-index:1; display:flex; align-items:center;
-                    justify-content:center; padding:16px 20px 10px; flex-shrink:0;">
+                    justify-content:center; padding:calc(env(safe-area-inset-top) + 16px) 20px 10px; flex-shrink:0;">
             <button onclick="showSection('sec-home')"
                     style="position:absolute; left:16px; background:none; border:none;
                            cursor:pointer; padding:4px; display:flex; align-items:center; color:var(--ink);">
@@ -927,7 +932,7 @@ input::placeholder, textarea::placeholder { color: #C4BDB6; }
     ====================================================== -->
     <section id="sec-role" class="hidden" style="position:relative; background:var(--hanji); min-height:100vh; min-height:100dvh; display:flex; flex-direction:column;">
         <div style="position:relative; z-index:1; display:flex; align-items:center;
-                    justify-content:center; padding:calc(env(safe-area-inset-top) + 8px) 20px 8px; flex-shrink:0;">
+                    justify-content:center; padding:calc(env(safe-area-inset-top) + 14px) 20px 8px; flex-shrink:0;">
             <button onclick="showSection('sec-home')"
                     style="position:absolute; left:16px; background:none; border:none;
                            cursor:pointer; padding:4px; display:flex; align-items:center; color:var(--ink);">
@@ -948,7 +953,7 @@ input::placeholder, textarea::placeholder { color: #C4BDB6; }
     ====================================================== -->
     <section id="sec-admin" class="hidden" style="position:relative; background:var(--hanji); min-height:100vh; min-height:100dvh; display:flex; flex-direction:column;">
         <div style="position:relative; z-index:1; display:flex; align-items:center;
-                    justify-content:center; padding:calc(env(safe-area-inset-top) + 8px) 20px 8px; flex-shrink:0;">
+                    justify-content:center; padding:calc(env(safe-area-inset-top) + 14px) 20px 8px; flex-shrink:0;">
             <button onclick="showSection('sec-home')"
                     style="position:absolute; left:16px; background:none; border:none;
                            cursor:pointer; padding:4px; display:flex; align-items:center; color:var(--ink);">
@@ -1034,7 +1039,7 @@ input::placeholder, textarea::placeholder { color: #C4BDB6; }
             <div id="admin-stats-chart" style="margin-top:15px;"></div>
 
             <button class="btn btn-outline" style="margin-top:20px;"
-                    onclick="showSection('sec-home')">나가기</button>
+                    onclick="showSection('sec-home')">뒤로 가기</button>
         </div>
     </section>
 
@@ -1055,7 +1060,7 @@ input::placeholder, textarea::placeholder { color: #C4BDB6; }
 
         <!-- 상단 바 -->
         <div style="position:relative; z-index:1; display:flex; align-items:center;
-                    justify-content:space-between; padding:16px 20px 8px;">
+                    justify-content:space-between; padding:calc(env(safe-area-inset-top) + 16px) 20px 8px;">
             <button onclick="showSection('sec-home')"
                     style="background:none; border:none; cursor:pointer; padding:4px;
                            display:flex; align-items:center; color:var(--ink);">
@@ -1177,7 +1182,7 @@ input::placeholder, textarea::placeholder { color: #C4BDB6; }
             </div>
 
             <button class="btn btn-outline" style="margin-top:20px;"
-                    onclick="showSection('sec-home')">나가기</button>
+                    onclick="showSection('sec-home')">뒤로 가기</button>
         </div>
     </section>
 
@@ -1186,7 +1191,7 @@ input::placeholder, textarea::placeholder { color: #C4BDB6; }
     ====================================================== -->
     <section id="sec-exam-admin" class="hidden">
         <div style="position:relative; z-index:1; display:flex; align-items:center;
-                    justify-content:center; padding:calc(env(safe-area-inset-top) + 8px) 20px 8px; flex-shrink:0;">
+                    justify-content:center; padding:calc(env(safe-area-inset-top) + 14px) 20px 8px; flex-shrink:0;">
             <button onclick="showSection('sec-home')"
                     style="position:absolute; left:16px; background:none; border:none;
                            cursor:pointer; padding:4px; display:flex; align-items:center; color:var(--ink);">
@@ -1351,7 +1356,7 @@ input::placeholder, textarea::placeholder { color: #C4BDB6; }
     ====================================================== -->
     <section id="sec-counseling" class="hidden" style="position:relative; background:var(--hanji); min-height:100vh; min-height:100dvh; display:flex; flex-direction:column;">
         <div style="position:relative; z-index:1; display:flex; align-items:center;
-                    justify-content:center; padding:calc(env(safe-area-inset-top) + 8px) 20px 8px; flex-shrink:0;">
+                    justify-content:center; padding:calc(env(safe-area-inset-top) + 14px) 20px 8px; flex-shrink:0;">
             <button onclick="showSection('sec-home')"
                     style="position:absolute; left:16px; background:none; border:none;
                            cursor:pointer; padding:4px; display:flex; align-items:center; color:var(--ink);">
@@ -1445,7 +1450,7 @@ input::placeholder, textarea::placeholder { color: #C4BDB6; }
     <section id="sec-market" class="hidden" style="position:relative; background:var(--hanji); min-height:100vh; min-height:100dvh; display:flex; flex-direction:column;">
         <div style="position:absolute; inset:0; z-index:0; background-image:var(--bg-market); background-size:cover; background-position:center bottom; opacity:0.5; pointer-events:none;"></div>
         <div style="position:relative; z-index:1; display:flex; align-items:center;
-                    justify-content:center; padding:calc(env(safe-area-inset-top) + 8px) 20px 8px; flex-shrink:0;">
+                    justify-content:center; padding:calc(env(safe-area-inset-top) + 14px) 20px 8px; flex-shrink:0;">
             <button onclick="showSection('sec-home')"
                     style="position:absolute; left:16px; background:none; border:none;
                            cursor:pointer; padding:4px; display:flex; align-items:center; color:var(--ink);">
@@ -1468,7 +1473,7 @@ input::placeholder, textarea::placeholder { color: #C4BDB6; }
     ====================================================== -->
     <section id="sec-absence" class="hidden" style="position:relative; background:var(--hanji); min-height:100vh; min-height:100dvh; display:flex; flex-direction:column;">
         <div style="position:relative; z-index:1; display:flex; align-items:center;
-                    justify-content:center; padding:calc(env(safe-area-inset-top) + 8px) 20px 8px; flex-shrink:0;">
+                    justify-content:center; padding:calc(env(safe-area-inset-top) + 14px) 20px 8px; flex-shrink:0;">
             <button onclick="showSection('sec-home')"
                     style="position:absolute; left:16px; background:none; border:none;
                            cursor:pointer; padding:4px; display:flex; align-items:center; color:var(--ink);">
@@ -1513,7 +1518,7 @@ input::placeholder, textarea::placeholder { color: #C4BDB6; }
                     background-size:cover; background-position:center bottom;
                     opacity:0.5; pointer-events:none;"></div>
         <div style="position:relative; z-index:1; display:flex; align-items:center;
-                    justify-content:center; padding:calc(env(safe-area-inset-top) + 8px) 20px 8px; flex-shrink:0;">
+                    justify-content:center; padding:calc(env(safe-area-inset-top) + 14px) 20px 8px; flex-shrink:0;">
             <button onclick="showSection('sec-home')"
                     style="position:absolute; left:16px; background:none; border:none;
                            cursor:pointer; padding:4px; display:flex; align-items:center; color:var(--ink);">
@@ -1549,7 +1554,7 @@ input::placeholder, textarea::placeholder { color: #C4BDB6; }
     <!-- 교사: QR 관리 -->
     <section id="sec-qr-manager" class="hidden" style="position:relative; background:var(--hanji); min-height:100vh; min-height:100dvh; display:flex; flex-direction:column;">
         <div style="position:relative; z-index:1; display:flex; align-items:center;
-                    justify-content:center; padding:calc(env(safe-area-inset-top) + 8px) 20px 8px; flex-shrink:0;">
+                    justify-content:center; padding:calc(env(safe-area-inset-top) + 14px) 20px 8px; flex-shrink:0;">
             <button onclick="showSection('sec-home')"
                     style="position:absolute; left:16px; background:none; border:none;
                            cursor:pointer; padding:4px; display:flex; align-items:center; color:var(--ink);">
@@ -1583,7 +1588,7 @@ input::placeholder, textarea::placeholder { color: #C4BDB6; }
     <!-- 트리거 일시정지 설정 -->
     <section id="sec-trigger-pause" class="hidden" style="position:relative; background:var(--hanji); min-height:100vh; min-height:100dvh; display:flex; flex-direction:column;">
         <div style="position:relative; z-index:1; display:flex; align-items:center;
-                    justify-content:center; padding:calc(env(safe-area-inset-top) + 8px) 20px 8px; flex-shrink:0;">
+                    justify-content:center; padding:calc(env(safe-area-inset-top) + 14px) 20px 8px; flex-shrink:0;">
             <button onclick="showSection('sec-home')"
                     style="position:absolute; left:16px; background:none; border:none;
                            cursor:pointer; padding:4px; display:flex; align-items:center; color:var(--ink);">
@@ -2354,10 +2359,10 @@ async function loadStudentQuickView() {
 
         // 테이블 헤더
         let html = `
-        <div style="overflow-x:auto; margin-bottom:10px;">
+        <div style="overflow-x:auto; -webkit-overflow-scrolling:touch; margin-bottom:10px; max-width:100%;">
         <table style="width:100%; border-collapse:collapse; font-size:0.8rem; table-layout:fixed;">
             <colgroup>
-                <col style="width:52px;">
+                <col style="width:44px; white-space:nowrap;">
                 ${dates.map(()=>'<col>').join('')}
             </colgroup>
             <thead>
@@ -2475,49 +2480,76 @@ async function loadTeacherTodayDashboard(isManualRefresh = false) {
 
         let html = '';
 
-        // ── 지각/미출석 카드 ──
-        if (lateStudents.length > 0 || absentStudents.length > 0) {
-            html += `<div style="background:#FFF8E1; border-radius:10px; padding:12px; margin-bottom:10px; border-left:4px solid #F57C00;">
-                <div style="font-weight:bold; margin-bottom:8px; font-size:0.95rem;">⏰ 오늘 지각자 <span style="color:#F57C00;">${lateStudents.length}명</span>`;
-            if (absentStudents.length > 0) {
-                html += ` &nbsp;|&nbsp; ❌ 미출석 <span style="color:#C62828;">${absentStudents.length}명</span>`;
-            }
-            html += `</div>`;
-            if (lateStudents.length > 0) {
-                html += `<div style="display:flex; flex-wrap:wrap; gap:6px; margin-bottom:${absentStudents.length > 0 ? '8px' : '0'};">`;
-                lateStudents.forEach(s => {
-                    html += `<span style="background:#FFE082; color:#5D4037; border-radius:12px; padding:3px 10px; font-size:0.82rem; font-weight:bold;">⏰ ${s.name}</span>`;
-                });
-                html += `</div>`;
-            }
-            if (absentStudents.length > 0) {
-                html += `<div style="display:flex; flex-wrap:wrap; gap:6px;">`;
-                absentStudents.forEach(s => {
-                    html += `<span style="background:#FFCDD2; color:#C62828; border-radius:12px; padding:3px 10px; font-size:0.82rem; font-weight:bold;">❌ ${s.name}</span>`;
-                });
-                html += `</div>`;
-            }
-            html += `</div>`;
-        } else {
-            html += `<div style="background:#E8F5E9; border-radius:10px; padding:10px 12px; margin-bottom:10px; border-left:4px solid #2E7D32; font-size:0.9rem;">
-                ✅ 오늘 지각자 없음
+        // ── 출결 현황 카드 ──
+        const hasAttIssue = lateStudents.length > 0 || absentStudents.length > 0;
+        html += `<div style="background:rgba(255,252,248,0.55); border-radius:12px; padding:14px 16px;
+                              margin-bottom:10px; border:1px solid rgba(233,230,225,0.6);
+                              backdrop-filter:blur(8px);">
+            <div style="display:flex; align-items:baseline; gap:8px; margin-bottom:10px;">
+                <span style="font-family:'Nanum Myeongjo',serif; font-size:0.88rem;
+                             font-weight:800; color:var(--ink); letter-spacing:0.5px;">출결 현황</span>
+                <span style="font-size:0.75rem; color:var(--muted);">${hasAttIssue ?
+                    `지각 <b style="color:#E65100;">${lateStudents.length}</b>명 &nbsp;·&nbsp; 결석 <b style="color:#C62828;">${absentStudents.length}</b>명` :
+                    '<span style="color:#2E7D32;">전원 출석</span>'
+                }</span>
             </div>`;
-        }
 
-        // ── 플래너 미기록자 카드 ──
-        if (noPlanner.length > 0) {
-            html += `<div style="background:#FFEBEE; border-radius:10px; padding:12px; border-left:4px solid #C62828;">
-                <div style="font-weight:bold; margin-bottom:8px; font-size:0.95rem;">📝 플래너 미기록자 <span style="color:#C62828;">${noPlanner.length}명</span></div>
-                <div style="display:flex; flex-wrap:wrap; gap:6px;">`;
-            noPlanner.forEach(s => {
-                html += `<span style="background:#FFCDD2; color:#C62828; border-radius:12px; padding:3px 10px; font-size:0.82rem; font-weight:bold;">📝 ${s.name}</span>`;
+        if (lateStudents.length > 0) {
+            html += `<div style="margin-bottom:8px;">
+                <div style="font-size:0.68rem; color:var(--muted); letter-spacing:0.5px; margin-bottom:5px;">지각</div>
+                <div style="display:flex; flex-wrap:wrap; gap:5px;">`;
+            lateStudents.forEach(s => {
+                html += `<span style="background:rgba(230,81,0,0.1); color:#E65100;
+                                      border:1px solid rgba(230,81,0,0.2); border-radius:20px;
+                                      padding:3px 11px; font-size:0.8rem; font-weight:600;">${s.name}</span>`;
             });
             html += `</div></div>`;
-        } else {
-            html += `<div style="background:#E8F5E9; border-radius:10px; padding:10px 12px; border-left:4px solid #2E7D32; font-size:0.9rem;">
-                ✅ 오늘 플래너 미기록자 없음
-            </div>`;
         }
+
+        if (absentStudents.length > 0) {
+            html += `<div>
+                <div style="font-size:0.68rem; color:var(--muted); letter-spacing:0.5px; margin-bottom:5px;">결석</div>
+                <div style="display:flex; flex-wrap:wrap; gap:5px;">`;
+            absentStudents.forEach(s => {
+                html += `<span style="background:rgba(198,40,40,0.08); color:#C62828;
+                                      border:1px solid rgba(198,40,40,0.2); border-radius:20px;
+                                      padding:3px 11px; font-size:0.8rem; font-weight:600;">${s.name}</span>`;
+            });
+            html += `</div></div>`;
+        }
+
+        if (!hasAttIssue) {
+            html += `<div style="font-size:0.82rem; color:#2E7D32;">전원 출석 확인되었습니다.</div>`;
+        }
+
+        html += `</div>`;
+
+        // ── 플래너 현황 카드 ──
+        html += `<div style="background:rgba(255,252,248,0.55); border-radius:12px; padding:14px 16px;
+                              border:1px solid rgba(233,230,225,0.6);
+                              backdrop-filter:blur(8px);">
+            <div style="display:flex; align-items:baseline; gap:8px; margin-bottom:${noPlanner.length > 0 ? '10px' : '0'};">
+                <span style="font-family:'Nanum Myeongjo',serif; font-size:0.88rem;
+                             font-weight:800; color:var(--ink); letter-spacing:0.5px;">플래너 현황</span>
+                <span style="font-size:0.75rem; color:var(--muted);">${noPlanner.length > 0 ?
+                    `미작성 <b style="color:#C62828;">${noPlanner.length}</b>명` :
+                    '<span style="color:#2E7D32;">전원 작성</span>'
+                }</span>
+            </div>`;
+
+        if (noPlanner.length > 0) {
+            html += `<div style="display:flex; flex-wrap:wrap; gap:5px;">`;
+            noPlanner.forEach(s => {
+                html += `<span style="background:rgba(198,40,40,0.08); color:#C62828;
+                                      border:1px solid rgba(198,40,40,0.2); border-radius:20px;
+                                      padding:3px 11px; font-size:0.8rem; font-weight:600;">${s.name}</span>`;
+            });
+            html += `</div>`;
+        } else {
+            html += `<div style="font-size:0.82rem; color:#2E7D32;">전원 플래너 작성 완료.</div>`;
+        }
+
+        html += `</div>`;
 
         dashArea.innerHTML = html;
 
