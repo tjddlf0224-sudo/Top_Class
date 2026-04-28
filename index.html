@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <style>html,body{height:100%;overflow:hidden;margin:0;padding:0;}</style>
+    <style>html,body{height:100%;max-height:100%;overflow:hidden;}</style>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>장원급제반</title>
     
@@ -247,7 +247,7 @@ input::placeholder, textarea::placeholder { color: #C4BDB6; }
 /* ── 하단 탭바 ── */
 .tab-bar {
     display: flex;
-    background: rgba(248,245,240,0.96);
+    background: rgba(248,245,240,0.97);
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
     border-top: 1px solid var(--stone);
@@ -590,7 +590,7 @@ input::placeholder, textarea::placeholder { color: #C4BDB6; }
     <!-- =====================================================
          [화면 2] 홈 (#sec-home)
     ====================================================== -->
-    <section id="sec-home" class="hidden" style="display:flex; flex-direction:column; flex:1; height:0; min-height:0; overflow:hidden; position:relative; background:var(--hanji);">
+    <section id="sec-home" class="hidden" style="display:flex; flex-direction:column; flex:1; min-height:0; overflow:hidden; position:relative; background:var(--hanji);">
 
         <!-- 배경 이미지 (하단 소나무 보이도록 아래쪽 정렬) -->
         <div style="position:absolute; inset:0; z-index:0;
