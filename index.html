@@ -2,6 +2,7 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
+    <style>html{height:100%;overflow:hidden;}</style>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>장원급제반</title>
     
@@ -53,15 +54,19 @@ body {
     margin: 0; padding: 0;
     display: flex;
     justify-content: center;
+    width: 100%;
+    height: 100%;
     min-height: 100vh;
     min-height: 100dvh;
-    overflow-x: hidden;
+    overflow: hidden;
 }
 
 #app {
     width: 100%;
     max-width: 100%;
     background: var(--hanji);
+    height: 100vh;
+    height: 100dvh;
     min-height: 100vh;
     min-height: 100dvh;
     position: relative;
@@ -69,7 +74,13 @@ body {
     flex-direction: column;
     padding-top: 0;
     padding-bottom: 0;
-    overflow-x: hidden;
+    overflow: hidden;
+}
+
+/* 섹션은 내부 스크롤 */
+section {
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
 }
 
 /* iOS 상태바 배경 색상 맞추기 */
@@ -622,7 +633,7 @@ input::placeholder, textarea::placeholder { color: #C4BDB6; }
 
         <!-- 스크롤 영역 -->
         <div style="position:relative; z-index:1; flex:1; overflow-y:auto;
-                    padding:4px 16px 16px; display:flex; flex-direction:column; gap:10px; overflow-x:hidden;">
+                    padding:4px 16px 16px; display:flex; flex-direction:column; gap:10px; overflow-x:hidden; overflow-y:auto; -webkit-overflow-scrolling:touch;">
 
             <!-- 학생: 현황 카드 2개 -->
             <div class="student-only" id="card-my-status">
