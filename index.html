@@ -251,7 +251,7 @@ input::placeholder, textarea::placeholder { color: #C4BDB6; }
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
     border-top: 1px solid var(--stone);
-    padding: 8px max(12px, env(safe-area-inset-right)) calc(8px + env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+    padding: 8px max(12px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
     flex-shrink: 0;
     position: fixed;
     bottom: 0;
@@ -590,7 +590,7 @@ input::placeholder, textarea::placeholder { color: #C4BDB6; }
     <!-- =====================================================
          [화면 2] 홈 (#sec-home)
     ====================================================== -->
-    <section id="sec-home" class="hidden" style="display:flex; flex-direction:column; flex:1; min-height:0; overflow:hidden; position:relative; background:var(--hanji);">
+    <section id="sec-home" class="hidden" style="display:flex; flex-direction:column; flex:1; min-height:0; position:relative; background:var(--hanji);">
 
         <!-- 배경 이미지 (하단 소나무 보이도록 아래쪽 정렬) -->
         <div style="position:absolute; inset:0; z-index:0;
