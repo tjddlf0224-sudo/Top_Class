@@ -962,7 +962,7 @@ input::placeholder, textarea::placeholder { color: #C4BDB6; }
          [화면 5] 관원 전용 (#sec-role)
          역할에 따라 role-content 안의 UI가 달라짐
     ====================================================== -->
-    <section id="sec-role" class="hidden" style="position:relative; background:var(--hanji); height:calc(var(--vh, 1vh) * 100); display:flex; flex-direction:column;">
+    <section id="sec-role" class="hidden" style="position:relative; background:var(--hanji); height:calc(var(--vh, 1vh) * 100); max-height:calc(var(--vh, 1vh) * 100); display:flex; flex-direction:column;">
         <div style="position:relative; z-index:1; display:flex; align-items:center;
                     justify-content:center; padding:calc(env(safe-area-inset-top) + 14px) 20px 8px; flex-shrink:0;">
             <button onclick="showSection('sec-home')"
@@ -983,7 +983,7 @@ input::placeholder, textarea::placeholder { color: #C4BDB6; }
     <!-- =====================================================
          [화면 6] 이조판서 집무실 (#sec-admin)
     ====================================================== -->
-    <section id="sec-admin" class="hidden" style="position:relative; background:var(--hanji); height:calc(var(--vh, 1vh) * 100); display:flex; flex-direction:column;">
+    <section id="sec-admin" class="hidden" style="position:relative; background:var(--hanji); height:calc(var(--vh, 1vh) * 100); max-height:calc(var(--vh, 1vh) * 100); display:flex; flex-direction:column;">
         <div style="position:relative; z-index:1; display:flex; align-items:center;
                     justify-content:center; padding:calc(env(safe-area-inset-top) + 14px) 20px 8px; flex-shrink:0;">
             <button onclick="showSection('sec-home')"
@@ -1221,7 +1221,7 @@ input::placeholder, textarea::placeholder { color: #C4BDB6; }
     <!-- =====================================================
          [화면 8] 이조판서: 모의고사 성적 입력 (#sec-exam-admin)
     ====================================================== -->
-    <section id="sec-exam-admin" class="hidden" style="position:relative; background:var(--hanji);">
+    <section id="sec-exam-admin" class="hidden" style="position:relative; background:var(--hanji); height:calc(var(--vh, 1vh) * 100); max-height:calc(var(--vh, 1vh) * 100); display:flex; flex-direction:column;">
         <div style="position:absolute; inset:0; z-index:0; background-image:var(--bg-exam); background-size:cover; background-position:center bottom; opacity:0.5; pointer-events:none;"></div>
         <div style="position:relative; z-index:1; display:flex; align-items:center;
                     justify-content:center; padding:calc(env(safe-area-inset-top) + 14px) 20px 8px; flex-shrink:0;">
@@ -1234,7 +1234,7 @@ input::placeholder, textarea::placeholder { color: #C4BDB6; }
             <div style="font-family:'Nanum Myeongjo',serif; font-size:1.1rem;
                         font-weight:800; letter-spacing:3px; color:var(--ink);">모의고사 성적</div>
         </div>
-        <div class="container" style="position:relative; z-index:1;">
+        <div class="container" style="position:relative; z-index:1; flex:1; overflow-y:auto;">
 
             <!-- 탭 버튼 -->
             <div style="display:flex; background:var(--secondary); border-radius:8px; overflow:hidden; margin-bottom:16px;">
@@ -1387,7 +1387,7 @@ input::placeholder, textarea::placeholder { color: #C4BDB6; }
     <!-- =====================================================
          [화면 9] 상담 관리 (#sec-counseling) - 교사 전용
     ====================================================== -->
-    <section id="sec-counseling" class="hidden" style="position:relative; background:var(--hanji); height:calc(var(--vh, 1vh) * 100); display:flex; flex-direction:column;">
+    <section id="sec-counseling" class="hidden" style="position:relative; background:var(--hanji); height:calc(var(--vh, 1vh) * 100); max-height:calc(var(--vh, 1vh) * 100); display:flex; flex-direction:column;">
         <div style="position:relative; z-index:1; display:flex; align-items:center;
                     justify-content:center; padding:calc(env(safe-area-inset-top) + 14px) 20px 8px; flex-shrink:0;">
             <button onclick="showSection('sec-home')"
@@ -1504,7 +1504,7 @@ input::placeholder, textarea::placeholder { color: #C4BDB6; }
     <!-- =====================================================
          [화면] 결석사유 관리 (#sec-absence)  ← 교사 전용
     ====================================================== -->
-    <section id="sec-absence" class="hidden" style="position:relative; background:var(--hanji); height:calc(var(--vh, 1vh) * 100); display:flex; flex-direction:column;">
+    <section id="sec-absence" class="hidden" style="position:relative; background:var(--hanji); height:calc(var(--vh, 1vh) * 100); max-height:calc(var(--vh, 1vh) * 100); display:flex; flex-direction:column;">
         <div style="position:relative; z-index:1; display:flex; align-items:center;
                     justify-content:center; padding:calc(env(safe-area-inset-top) + 14px) 20px 8px; flex-shrink:0;">
             <button onclick="showSection('sec-home')"
@@ -1585,7 +1585,7 @@ input::placeholder, textarea::placeholder { color: #C4BDB6; }
     </section>
 
     <!-- 교사: QR 관리 -->
-    <section id="sec-qr-manager" class="hidden" style="position:relative; background:var(--hanji); height:calc(var(--vh, 1vh) * 100); display:flex; flex-direction:column;">
+    <section id="sec-qr-manager" class="hidden" style="position:relative; background:var(--hanji); height:calc(var(--vh, 1vh) * 100); max-height:calc(var(--vh, 1vh) * 100); display:flex; flex-direction:column;">
         <div style="position:relative; z-index:1; display:flex; align-items:center;
                     justify-content:center; padding:calc(env(safe-area-inset-top) + 14px) 20px 8px; flex-shrink:0;">
             <button onclick="showSection('sec-home')"
@@ -1619,7 +1619,7 @@ input::placeholder, textarea::placeholder { color: #C4BDB6; }
     </section>
 
     <!-- 트리거 일시정지 설정 -->
-    <section id="sec-trigger-pause" class="hidden" style="position:relative; background:var(--hanji); height:calc(var(--vh, 1vh) * 100); display:flex; flex-direction:column;">
+    <section id="sec-trigger-pause" class="hidden" style="position:relative; background:var(--hanji); height:calc(var(--vh, 1vh) * 100); max-height:calc(var(--vh, 1vh) * 100); display:flex; flex-direction:column;">
         <div style="position:relative; z-index:1; display:flex; align-items:center;
                     justify-content:center; padding:calc(env(safe-area-inset-top) + 14px) 20px 8px; flex-shrink:0;">
             <button onclick="showSection('sec-home')"
@@ -1957,6 +1957,8 @@ function scrollToTop() {
 async function loadWeeklyStatus() {
     const el = document.getElementById('weekly-status-content');
     if (!el) return;
+    // 교사는 weekly status 불필요
+    if (!currentUser || currentUser.role === 'teacher') return;
 
     // 주말 제외 평일 최근 5일
     const dates = [];
@@ -2264,6 +2266,13 @@ function loadHome() {
         // 교사 홈: 오늘 현황 대시보드 로드
         loadTeacherTodayDashboard();
         loadQuickStudentList();   // 학생 빠른 조회 드롭다운
+        // 교사는 최근 5일 카드 숨기기
+        const wCard = document.getElementById('card-weekly-status');
+        if (wCard) wCard.style.display = 'none';
+        const todayCard = document.getElementById('card-today-tasks');
+        if (todayCard) todayCard.style.display = 'none';
+        const statusCard = document.getElementById('card-my-status');
+        if (statusCard) statusCard.style.display = 'none';
     } else {
         // 학생: 이름 + 직위 표시
         const nameEl = document.getElementById('home-user-name');
@@ -2305,8 +2314,11 @@ function loadHome() {
         const roleBtn = document.getElementById('btn-role-page');
         if (roleBtn && roleBtn.querySelector('span')) roleBtn.querySelector('span').textContent = '관원 전용';        document.getElementById('admin-btn-area').innerHTML = '';
         document.getElementById('btn-global-refresh').classList.add('hidden');
+        // 최근 5일 카드 숨기기 (교사는 불필요)
+        const weeklyCard = document.getElementById('card-weekly-status');
+        if (weeklyCard) weeklyCard.style.display = 'none';
 
-        // 최근 7일 출결/플래너 현황 로드
+        // 최근 5일 출결/플래너 현황 로드
         loadWeeklyStatus();
 
         // 플래너 체크 표시
@@ -5523,7 +5535,7 @@ async function submitExamScores() {
 /** 등록된 모의고사 목록 표시 */
 async function loadExamAdminList() {
     const listDiv = document.getElementById('exam-admin-list');
-    listDiv.innerHTML = '<p style="text-align:center;color:#999;">불러오는 중...</p>';
+    if (!listDiv) return;
 
     const examList = await callApi('getExamList');
     listDiv.innerHTML = '';
