@@ -79,12 +79,22 @@ body {
     background: var(--hanji);
     height: calc(var(--vh, 1vh) * 100);
     min-height: calc(var(--vh, 1vh) * 100);
+    max-height: calc(var(--vh, 1vh) * 100);
     position: relative;
     display: flex;
     flex-direction: column;
     padding-top: 0;
     padding-bottom: 0;
     overflow: hidden;
+}
+
+/* 모든 섹션이 #app 높이를 넘지 않도록 */
+section {
+    max-height: calc(var(--vh, 1vh) * 100);
+    overflow: hidden;
+}
+section.hidden {
+    display: none !important;
 }
 
 /* 섹션은 내부 스크롤 */
@@ -310,8 +320,9 @@ input::placeholder, textarea::placeholder { color: #C4BDB6; }
     flex: 1;
     display: flex;
     flex-direction: column;
-    min-height: calc(var(--vh, 1vh) * 100);
+    height: 100%;
     position: relative;
+    overflow: hidden;
 }
 .login-bg {
     position: absolute;
@@ -826,7 +837,7 @@ input::placeholder, textarea::placeholder { color: #C4BDB6; }
     <!-- =====================================================
          [화면 3] 상벌점 내역 (#sec-point-log)
     ====================================================== -->
-    <section id="sec-point-log" class="hidden" style="position:relative; background:var(--hanji); min-height:calc(var(--vh, 1vh) * 100); display:flex; flex-direction:column;">
+    <section id="sec-point-log" class="hidden" style="position:relative; background:var(--hanji); height:calc(var(--vh, 1vh) * 100); display:flex; flex-direction:column;">
         <div style="position:absolute; inset:0; z-index:0;
                     background-image:var(--bg-market);
                     background-size:cover; background-position:center bottom;
@@ -855,7 +866,7 @@ input::placeholder, textarea::placeholder { color: #C4BDB6; }
          [화면 4] 스터디 플래너 (#sec-planner)
     ====================================================== -->
     <section id="sec-planner" class="hidden"
-             style="display:flex; flex-direction:column; min-height:calc(var(--vh, 1vh) * 100);
+             style="display:flex; flex-direction:column; height:calc(var(--vh, 1vh) * 100);
                     position:relative; background:var(--hanji);">
 
         <!-- 배경 이미지 하단 소나무 -->
@@ -950,7 +961,7 @@ input::placeholder, textarea::placeholder { color: #C4BDB6; }
          [화면 5] 관원 전용 (#sec-role)
          역할에 따라 role-content 안의 UI가 달라짐
     ====================================================== -->
-    <section id="sec-role" class="hidden" style="position:relative; background:var(--hanji); min-height:calc(var(--vh, 1vh) * 100); display:flex; flex-direction:column;">
+    <section id="sec-role" class="hidden" style="position:relative; background:var(--hanji); height:calc(var(--vh, 1vh) * 100); display:flex; flex-direction:column;">
         <div style="position:relative; z-index:1; display:flex; align-items:center;
                     justify-content:center; padding:calc(env(safe-area-inset-top) + 14px) 20px 8px; flex-shrink:0;">
             <button onclick="showSection('sec-home')"
@@ -971,7 +982,7 @@ input::placeholder, textarea::placeholder { color: #C4BDB6; }
     <!-- =====================================================
          [화면 6] 이조판서 집무실 (#sec-admin)
     ====================================================== -->
-    <section id="sec-admin" class="hidden" style="position:relative; background:var(--hanji); min-height:calc(var(--vh, 1vh) * 100); display:flex; flex-direction:column;">
+    <section id="sec-admin" class="hidden" style="position:relative; background:var(--hanji); height:calc(var(--vh, 1vh) * 100); display:flex; flex-direction:column;">
         <div style="position:relative; z-index:1; display:flex; align-items:center;
                     justify-content:center; padding:calc(env(safe-area-inset-top) + 14px) 20px 8px; flex-shrink:0;">
             <button onclick="showSection('sec-home')"
@@ -1068,7 +1079,7 @@ input::placeholder, textarea::placeholder { color: #C4BDB6; }
          학생: 내 성적 조회 + 성장 차트
     ====================================================== -->
     <section id="sec-exam" class="hidden"
-             style="display:flex; flex-direction:column; min-height:calc(var(--vh, 1vh) * 100);
+             style="display:flex; flex-direction:column; height:calc(var(--vh, 1vh) * 100);
                     position:relative; background:var(--hanji);">
 
         <!-- 배경 이미지 하단 소나무 -->
@@ -1375,7 +1386,7 @@ input::placeholder, textarea::placeholder { color: #C4BDB6; }
     <!-- =====================================================
          [화면 9] 상담 관리 (#sec-counseling) - 교사 전용
     ====================================================== -->
-    <section id="sec-counseling" class="hidden" style="position:relative; background:var(--hanji); min-height:calc(var(--vh, 1vh) * 100); display:flex; flex-direction:column;">
+    <section id="sec-counseling" class="hidden" style="position:relative; background:var(--hanji); height:calc(var(--vh, 1vh) * 100); display:flex; flex-direction:column;">
         <div style="position:relative; z-index:1; display:flex; align-items:center;
                     justify-content:center; padding:calc(env(safe-area-inset-top) + 14px) 20px 8px; flex-shrink:0;">
             <button onclick="showSection('sec-home')"
@@ -1468,7 +1479,7 @@ input::placeholder, textarea::placeholder { color: #C4BDB6; }
     <!-- =====================================================
          [화면] 저잣거리 (#sec-market)
     ====================================================== -->
-    <section id="sec-market" class="hidden" style="position:relative; background:var(--hanji); min-height:calc(var(--vh, 1vh) * 100); display:flex; flex-direction:column;">
+    <section id="sec-market" class="hidden" style="position:relative; background:var(--hanji); height:calc(var(--vh, 1vh) * 100); display:flex; flex-direction:column;">
         <div style="position:absolute; inset:0; z-index:0; background-image:var(--bg-market); background-size:cover; background-position:center bottom; opacity:0.5; pointer-events:none;"></div>
         <div style="position:relative; z-index:1; display:flex; align-items:center;
                     justify-content:center; padding:calc(env(safe-area-inset-top) + 14px) 20px 8px; flex-shrink:0;">
@@ -1492,7 +1503,7 @@ input::placeholder, textarea::placeholder { color: #C4BDB6; }
     <!-- =====================================================
          [화면] 결석사유 관리 (#sec-absence)  ← 교사 전용
     ====================================================== -->
-    <section id="sec-absence" class="hidden" style="position:relative; background:var(--hanji); min-height:calc(var(--vh, 1vh) * 100); display:flex; flex-direction:column;">
+    <section id="sec-absence" class="hidden" style="position:relative; background:var(--hanji); height:calc(var(--vh, 1vh) * 100); display:flex; flex-direction:column;">
         <div style="position:relative; z-index:1; display:flex; align-items:center;
                     justify-content:center; padding:calc(env(safe-area-inset-top) + 14px) 20px 8px; flex-shrink:0;">
             <button onclick="showSection('sec-home')"
@@ -1533,7 +1544,7 @@ input::placeholder, textarea::placeholder { color: #C4BDB6; }
 
     <!-- 학생: 내 QR 코드 -->
     <section id="sec-my-qr" class="hidden"
-             style="position:relative; background:var(--hanji); min-height:calc(var(--vh, 1vh) * 100);">
+             style="position:relative; background:var(--hanji); height:calc(var(--vh, 1vh) * 100);">
         <div style="position:absolute; inset:0; z-index:0;
                     background-image:var(--bg-exam);
                     background-size:cover; background-position:center bottom;
@@ -1573,7 +1584,7 @@ input::placeholder, textarea::placeholder { color: #C4BDB6; }
     </section>
 
     <!-- 교사: QR 관리 -->
-    <section id="sec-qr-manager" class="hidden" style="position:relative; background:var(--hanji); min-height:calc(var(--vh, 1vh) * 100); display:flex; flex-direction:column;">
+    <section id="sec-qr-manager" class="hidden" style="position:relative; background:var(--hanji); height:calc(var(--vh, 1vh) * 100); display:flex; flex-direction:column;">
         <div style="position:relative; z-index:1; display:flex; align-items:center;
                     justify-content:center; padding:calc(env(safe-area-inset-top) + 14px) 20px 8px; flex-shrink:0;">
             <button onclick="showSection('sec-home')"
@@ -1607,7 +1618,7 @@ input::placeholder, textarea::placeholder { color: #C4BDB6; }
     </section>
 
     <!-- 트리거 일시정지 설정 -->
-    <section id="sec-trigger-pause" class="hidden" style="position:relative; background:var(--hanji); min-height:calc(var(--vh, 1vh) * 100); display:flex; flex-direction:column;">
+    <section id="sec-trigger-pause" class="hidden" style="position:relative; background:var(--hanji); height:calc(var(--vh, 1vh) * 100); display:flex; flex-direction:column;">
         <div style="position:relative; z-index:1; display:flex; align-items:center;
                     justify-content:center; padding:calc(env(safe-area-inset-top) + 14px) 20px 8px; flex-shrink:0;">
             <button onclick="showSection('sec-home')"
@@ -2115,14 +2126,64 @@ async function handleLogin() {
     const name = document.getElementById('login-name').value.trim();
     if (!id || !name) return showToast("학번과 이름을 입력해주세요.");
 
-    const user  = await callApi('login', { id, name });
+    // 관리자 교사(학번:청양고/이름:교사)는 GAS 직접 → Firestore 불필요
+    const isTeacher = (String(id).trim() === '청양고' && String(name).trim() === '교사');
+
+    let user = null;
+
+    // ① Firestore에서 먼저 확인 (학생 계정만)
+    if (!isTeacher && typeof window.fsGetMember === 'function') {
+        try {
+            const fsData = await window.fsGetMember(id, name);
+            if (fsData) {
+                // Firestore 데이터로 user 구성 (GAS login 응답 형태와 동일하게)
+                user = {
+                    id:      String(id),
+                    name:    fsData.name,
+                    role:    fsData.role || '관원',
+                    coins:   Number(fsData.coins)   || 0,
+                    amnesty: Number(fsData.amnesty) || 0,
+                    dorm:    fsData.dorm === true || String(fsData.dorm).toUpperCase() === 'Y',
+                    track:   fsData.track || '공무원',
+                    alert:   fsData.alert || ''
+                };
+                // 오늘 플래너·출결은 GAS에서 추가로 가져옴
+                try {
+                    const today = toDateStr();
+                    const [checkedIn, todayPlanner] = await Promise.all([
+                        callApi('getAdminAttendance', { date: today })
+                            .then(rows => {
+                                const r = (rows||[]).find(x => x.name === name);
+                                return r ? r.status : false;
+                            }).catch(() => false),
+                        callApi('getPlanner', { name }).catch(() => ({ content: '', progress: '' }))
+                    ]);
+                    user.checkedIn    = checkedIn;
+                    user.todayPlanner = todayPlanner;
+                } catch(e) {
+                    user.checkedIn    = false;
+                    user.todayPlanner = { content: '', progress: '' };
+                }
+                console.log('[Login] Firestore 로그인 완료');
+            }
+        } catch(e) {
+            console.warn('[Login] Firestore 실패, GAS fallback:', e.message);
+        }
+    }
+
+    // ② Firestore 실패 or 교사 → GAS
+    if (!user) {
+        user = await callApi('login', { id, name });
+        console.log('[Login] GAS 로그인 완료');
+    }
+
     currentUser = user;
     localStorage.setItem(STORAGE_KEY, JSON.stringify(user));
 
     loadHome();
     if (user.alert) checkAlert(user.alert);
 
-    // ★ 로그인 직후 백그라운드 프리페치 (로딩 없이 조용히)
+    // 로그인 직후 백그라운드 프리페치
     prefetchAll();
 }
 
@@ -4107,6 +4168,23 @@ let examViewingName  = null;  // 교사가 현재 조회 중인 학생 이름
 let examViewingTrack = null;  // 교사가 현재 조회 중인 학생 track ('공무원'/'공기업')
 
 /** 홈에서 모의고사 성적 버튼 클릭 */
+/* ─── Firestore 우선 조회 헬퍼 ─── */
+async function getMyExamScoresFast(name) {
+    if (typeof window.fsGetMyExamScores === 'function') {
+        const result = await window.fsGetMyExamScores(name);
+        if (result) return result;
+    }
+    return await getMyExamScoresFast(name);
+}
+
+async function getLegacyStatsFast(track) {
+    if (typeof window.fsGetLegacyStats === 'function') {
+        const result = await window.fsGetLegacyStats(track);
+        if (result) return result;
+    }
+    return await getLegacyStatsFast(track);
+}
+
 async function openExam() {
     if (currentUser.role === 'teacher') {
         // 교사: 성적 입력/관리 화면으로 바로 이동
@@ -4126,7 +4204,7 @@ async function openExam() {
         if (!myExamData) {
             document.getElementById('exam-scores-list').innerHTML =
                 '<p style="text-align:center;color:#999;">성적을 불러오는 중...</p>';
-            myExamData = await callApi('getMyExamScores', { name: currentUser.name });
+            myExamData = await getMyExamScoresFast(currentUser.name);
         }
         renderExamScoresList();
     }
@@ -4187,7 +4265,7 @@ async function onTeacherStudentChange() {
     document.getElementById('exam-scores-list').innerHTML =
         '<p style="text-align:center;color:#999;">성적을 불러오는 중...</p>';
 
-    myExamData = await callApi('getMyExamScores', { name });
+    myExamData = await getMyExamScoresFast(name);
     switchExamTab('scores');
     renderExamScoresList();
 }
@@ -4460,12 +4538,12 @@ async function initLegacyTab() {
     // myExamData가 없으면 먼저 로드 (교사가 학생 전환 후 선배비교 탭 진입 시)
     const viewName = examViewingName || currentUser?.name;
     if (!myExamData && viewName) {
-        myExamData = await callApi('getMyExamScores', { name: viewName });
+        myExamData = await getMyExamScoresFast(viewName);
     }
 
     // track에 따라 다른 시트 조회 ('공무원' 또는 '공기업')
     const track = isGongiupTrack() ? '공기업' : '공무원';
-    legacyData = await callApi('getLegacyStats', { track });
+    legacyData = await getLegacyStatsFast(track);
 
     const examNames = legacyData ? legacyData.examNames : [];
     ['legacy-exam-select','legacy-cohort-exam-select'].forEach(selId => {
@@ -4955,7 +5033,7 @@ async function onExamAdminStudentChange() {
     if (member) examViewingTrack = member.track || '공무원';
 
     switchAnalysisTab('scores');
-    adminExamData = await callApi('getMyExamScores', { name });
+    adminExamData = await getMyExamScoresFast(name);
     renderAdminExamScoresList();
 }
 
@@ -5109,7 +5187,7 @@ async function initAdminLegacyTab() {
         '<p style="text-align:center;color:#999;">데이터 불러오는 중...</p>';
     // ★ examViewingTrack 직접 사용 (isGongiupTrack 캐시 의존 제거)
     const adminTrack = examViewingTrack === '공기업' ? '공기업' : '공무원';
-    adminLegacyData = await callApi('getLegacyStats', { track: adminTrack });
+    adminLegacyData = await getLegacyStatsFast(adminTrack);
     const examNames = adminLegacyData ? adminLegacyData.examNames : [];
     ['admin-legacy-exam-select','admin-legacy-cohort-exam-select'].forEach(selId=>{
         const sel=document.getElementById(selId);
@@ -7308,5 +7386,209 @@ async function updateTriggerPauseBadge() {
 
 
 </script>
+
+<!-- =====================================================
+     Firebase Firestore SDK
+     - Firestore 초기화 + 전역 헬퍼 함수
+     - GAS code_gs.txt 시트 구조와 완전 일치
+====================================================== -->
+<script type="module">
+  import { initializeApp }            from "https://www.gstatic.com/firebasejs/12.12.1/firebase-app.js";
+  import { getFirestore, doc, getDoc,
+           collection, getDocs,
+           query, where }             from "https://www.gstatic.com/firebasejs/12.12.1/firebase-firestore.js";
+
+  const firebaseConfig = {
+    apiKey:            "AIzaSyDRViuzADHxHnvv78jfnvPbAJ5hH3wzpCw",
+    authDomain:        "topclass-be740.firebaseapp.com",
+    projectId:         "topclass-be740",
+    storageBucket:     "topclass-be740.firebasestorage.app",
+    messagingSenderId: "662651378616",
+    appId:             "1:662651378616:web:6eceb1505265c0700bcd4d"
+  };
+
+  const firebaseApp = initializeApp(firebaseConfig);
+  const db          = getFirestore(firebaseApp);
+
+  // ──────────────────────────────────────────────────────
+  // 1. 로그인: members/{학번} 조회
+  //    GAS Member 시트: A=학번 B=이름 C=역할 D=엽전 E=사면장 F=기숙사 G=반 H=alert
+  //    Firestore members/{id}: id,name,role,coins,amnesty,dorm,track,alert
+  // ──────────────────────────────────────────────────────
+  window.fsGetMember = async function(id, name) {
+    try {
+      const snap = await getDoc(doc(db, 'members', String(id).trim()));
+      if (!snap.exists()) return null;
+      const d = snap.data();
+      // 이름 불일치 → null (GAS fallback)
+      if (String(d.name).trim() !== String(name).trim()) return null;
+      return {
+        id:      String(id).trim(),
+        name:    String(d.name).trim(),
+        role:    d.role    || '관원',
+        coins:   Number(d.coins)   || 0,
+        amnesty: Number(d.amnesty) || 0,
+        dorm:    d.dorm === true || String(d.dorm).toUpperCase() === 'Y',
+        track:   d.track   || '공무원',
+        alert:   d.alert   || ''
+      };
+    } catch(e) {
+      console.warn('[FS] fsGetMember 실패 → GAS fallback:', e.message);
+      return null;
+    }
+  };
+
+  // ──────────────────────────────────────────────────────
+  // 2. 교사 QR 인증: teachers/{이름} 조회
+  //    GAS Teachers 시트: A=이름 B=전화뒷4자리 C=비고
+  //    Firestore teachers/{name}: name,phone,subject
+  // ──────────────────────────────────────────────────────
+  window.fsVerifyTeacher = async function(name, phone) {
+    try {
+      const snap = await getDoc(doc(db, 'teachers', String(name).trim()));
+      if (!snap.exists()) return null;
+      const d = snap.data();
+      if (String(d.phone).trim() !== String(phone).trim()) return null;
+      return { name: String(d.name).trim(), subject: d.subject || '' };
+    } catch(e) {
+      console.warn('[FS] fsVerifyTeacher 실패 → GAS fallback:', e.message);
+      return null;
+    }
+  };
+
+  // ──────────────────────────────────────────────────────
+  // 3. 내 모의고사 성적 조회
+  //    GAS ExamScores 시트: A=시험명 B=날짜 C=이름/__avg__ D=국어 E=영어 F=한국사 G=합계 H=등수
+  //    Firestore examScores/{docId}: examName,examDate,studentName,isAvg,korean,english,history,total,rank
+  //
+  //    ★ 핵심: 내 점수(studentName==name) + 평균(__avg__)을 각각 쿼리
+  //       → 단일 where로는 둘 다 못 가져옴
+  // ──────────────────────────────────────────────────────
+  window.fsGetMyExamScores = async function(name) {
+    try {
+      // 내 점수 쿼리
+      const mySnap  = await getDocs(query(collection(db, 'examScores'), where('studentName', '==', name)));
+      // 평균 쿼리
+      const avgSnap = await getDocs(query(collection(db, 'examScores'), where('isAvg', '==', true)));
+
+      const exams  = [];
+      const avgMap = {};
+
+      // 내 점수 처리
+      mySnap.forEach(d => {
+        const r = d.data();
+        if (!r.isAvg) {
+          exams.push({
+            name:    r.examName,
+            date:    r.examDate,
+            korean:  r.korean  || 0,
+            english: r.english || 0,
+            history: r.history || 0,
+            total:   r.total   || 0,
+            rank:    r.rank    || null
+          });
+        }
+      });
+
+      // 평균 처리
+      avgSnap.forEach(d => {
+        const r = d.data();
+        avgMap[r.examName] = {
+          name:       r.examName,
+          date:       r.examDate,
+          avgKorean:  r.korean  || 0,
+          avgEnglish: r.english || 0,
+          avgHistory: r.history || 0,
+          avgTotal:   r.total   || 0
+        };
+      });
+
+      exams.sort((a, b) => a.date.localeCompare(b.date));
+      const classAvg = Object.values(avgMap).sort((a, b) => a.date.localeCompare(b.date));
+      return { exams, classAvg };
+    } catch(e) {
+      console.warn('[FS] fsGetMyExamScores 실패 → GAS fallback:', e.message);
+      return null;
+    }
+  };
+
+  // ──────────────────────────────────────────────────────
+  // 4. 역대 선배 통계
+  //    GAS ExamHistory_공무원/공기업 시트:
+  //      A=기수 B=시험명 C=이름 D=국어 E=영어 F=한국사 G=합계 H=합격Y/N
+  //    Firestore examHistory_공무원/공기업/{docId}:
+  //      cohort,examName,name,korean,english,history,total,passed(boolean)
+  // ──────────────────────────────────────────────────────
+  window.fsGetLegacyStats = async function(track) {
+    try {
+      const collName = (track === '공기업') ? 'examHistory_공기업' : 'examHistory_공무원';
+      const snap     = await getDocs(collection(db, collName));
+
+      const rawMap = {};
+      snap.forEach(d => {
+        const r = d.data();
+        if (!r.examName || !r.cohort || !r.name) return;
+        if (!rawMap[r.examName])           rawMap[r.examName] = {};
+        if (!rawMap[r.examName][r.cohort]) rawMap[r.examName][r.cohort] = [];
+        rawMap[r.examName][r.cohort].push({
+          korean:  r.korean  || 0,
+          english: r.english || 0,
+          history: r.history || 0,
+          total:   r.total   || 0,
+          passed:  r.passed  === true  // boolean으로 저장됨
+        });
+      });
+
+      const examNames = Object.keys(rawMap).sort();
+      const dist = {}, cohorts = {};
+
+      examNames.forEach(examName => {
+        const cm   = rawMap[examName];
+        const all  = [], pass = [];
+        Object.values(cm).forEach(rows =>
+          rows.forEach(r => { all.push(r); if (r.passed) pass.push(r); })
+        );
+
+        function stat(arr, k) {
+          if (!arr.length) return null;
+          const vals = arr.map(r => r[k] || 0);
+          const sum  = vals.reduce((a, b) => a + b, 0);
+          return {
+            min: Math.min(...vals), max: Math.max(...vals),
+            avg: Math.round(sum / vals.length * 10) / 10,
+            count: vals.length, allScores: vals,
+            passAvg:   pass.length ? Math.round(pass.reduce((a,r) => a + (r[k]||0), 0) / pass.length * 10) / 10 : null,
+            passCount: pass.length
+          };
+        }
+
+        dist[examName] = {};
+        ['korean','english','history','total'].forEach(k => { dist[examName][k] = stat(all, k); });
+
+        cohorts[examName] = Object.keys(cm).sort().map(cohort => {
+          const rows = cm[cohort];
+          const avg  = k => Math.round(rows.reduce((s, r) => s + (r[k]||0), 0) / rows.length * 10) / 10;
+          return {
+            cohort,
+            avgKorean:  avg('korean'),
+            avgEnglish: avg('english'),
+            avgHistory: avg('history'),
+            avgTotal:   avg('total'),
+            count:      rows.length,
+            passCount:  rows.filter(r => r.passed).length
+          };
+        });
+      });
+
+      return { examNames, dist, cohorts };
+    } catch(e) {
+      console.warn('[FS] fsGetLegacyStats 실패 → GAS fallback:', e.message);
+      return null;
+    }
+  };
+
+  console.log('[Firebase] Firestore 초기화 완료 — topclass-be740');
+</script>
+
 </body>
 </html>
