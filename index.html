@@ -320,7 +320,8 @@ input::placeholder, textarea::placeholder { color: #C4BDB6; }
     flex: 1;
     display: flex;
     flex-direction: column;
-    height: 100%;
+    height: calc(var(--vh, 1vh) * 100);
+    max-height: calc(var(--vh, 1vh) * 100);
     position: relative;
     overflow: hidden;
 }
@@ -1930,6 +1931,18 @@ function toDateStr(date) {
 function showSection(id) {
     document.querySelectorAll('section').forEach(el => el.classList.add('hidden'));
     document.getElementById(id).classList.remove('hidden');
+
+    // 로그인 화면 전환 시 #app 높이 재고정 (배경 늘어남 방지)
+    if (id === 'sec-login') {
+        const vh = window.innerHeight;
+        const app = document.getElementById('app');
+        if (app) {
+            app.style.height    = vh + 'px';
+            app.style.maxHeight = vh + 'px';
+        }
+        document.documentElement.style.setProperty('--vh', (vh * 0.01) + 'px');
+    }
+
     // 홈 화면일 때만 탭바 표시
     const tabBar = document.getElementById('home-tab-bar');
     if (tabBar) tabBar.style.display = id === 'sec-home' ? 'flex' : 'none';
@@ -2188,9 +2201,28 @@ async function handleLogin() {
 }
 
 function logout() {
+    // 상태 초기화
     AppCache.clear();
     localStorage.removeItem(STORAGE_KEY);
-    location.reload();
+    currentUser = null;
+
+    // 입력 필드 초기화
+    const idEl   = document.getElementById('login-id');
+    const nameEl = document.getElementById('login-name');
+    if (idEl)   idEl.value   = '';
+    if (nameEl) nameEl.value = '';
+
+    // #app 높이 명시적 재고정 후 화면 전환
+    const app = document.getElementById('app');
+    if (app) {
+        const vh = window.innerHeight;
+        app.style.height    = vh + 'px';
+        app.style.maxHeight = vh + 'px';
+        document.documentElement.style.setProperty('--vh', (vh * 0.01) + 'px');
+    }
+
+    // 로그인 화면으로 전환
+    showSection('sec-login');
 }
 
 
