@@ -853,6 +853,10 @@ input::placeholder, textarea::placeholder { color: #C4BDB6; }
             </button>
             <div style="font-family:'Nanum Myeongjo',serif; font-size:1.1rem;
                         font-weight:800; letter-spacing:3px; color:var(--ink);">엽전 내역</div>
+            <button onclick="refreshPointLog()"
+                    style="position:absolute; right:16px; top:50%; transform:translateY(-50%);
+                           background:none; border:none; cursor:pointer; font-size:1.1rem;
+                           color:var(--muted); padding:4px; line-height:1;">&#x21bb;</button>
         </div>
         <div class="container" style="position:relative;z-index:1;flex:1;overflow-y:auto;">
             <!-- 탭 버튼: 교사일 때 JS에서 추가 탭 표시 -->
@@ -1489,6 +1493,10 @@ input::placeholder, textarea::placeholder { color: #C4BDB6; }
             </button>
             <div style="font-family:'Nanum Myeongjo',serif; font-size:1.1rem;
                         font-weight:800; letter-spacing:3px; color:var(--ink);">저잣거리</div>
+            <button onclick="refreshMarket()"
+                    style="position:absolute; right:16px; top:50%; transform:translateY(-50%);
+                           background:none; border:none; cursor:pointer; font-size:1.1rem;
+                           color:var(--muted); padding:4px; line-height:1;">&#x21bb;</button>
         </div>
         <div class="container" style="position:relative;z-index:1;">
             <div id="market-tabs" style="display:flex; gap:6px; margin-bottom:14px; flex-wrap:wrap;"></div>
@@ -1865,6 +1873,24 @@ async function prefetchAll() {
  * 상단 🔄 버튼: 전체 캐시 무효화 후 재프리페치
  * 학생 현황, 오늘 대시보드 모두 즉시 반영
  */
+/* 엽전 내역 새로고침 */
+function refreshPointLog() {
+    AppCache.invalidate('getMyPointLog',    { name: currentUser.name });
+    AppCache.invalidate('getAdminPointLog', {});
+    AppCache.invalidate('getAdminData',     {});
+    AppCache.invalidate('getAllMemberPoints', {});
+    const activeTab = currentUser.role === 'teacher' ? 'log' : null;
+    openPointLog(activeTab);
+}
+
+/* 저잣거리 새로고침 */
+function refreshMarket() {
+    AppCache.invalidate('getMarketInventory', {});
+    AppCache.invalidate('getMarketLog',       {});
+    AppCache.invalidate('getAllMemberPoints', {});
+    openMarket();
+}
+
 async function globalRefresh() {
     const btn = document.getElementById('btn-global-refresh');
     if (btn) { btn.style.opacity = '0.4'; btn.style.pointerEvents = 'none'; }
