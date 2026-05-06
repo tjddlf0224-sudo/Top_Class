@@ -3142,40 +3142,59 @@ async function openPointLog(tab) {
         `font-weight:${active===t ? 'bold' : 'normal'};`;
 
     if (currentUser.role === 'teacher') {
-        const activeTab = tab || 'pending';
+        const activeTab = tab || 'log';
         tabsDiv.innerHTML = `
-            <button onclick="openPointLog('pending')" style="${tabStyle('pending', activeTab)}">🔔 승인<br>대기</button>
+            <button onclick="openPointLog('log')"     style="${tabStyle('log',     activeTab)}">📋 기록</button>
             <button onclick="openPointLog('grant')"   style="${tabStyle('grant',   activeTab)}">✏️ 엽전<br>부여</button>
             <button onclick="openPointLog('status')"  style="${tabStyle('status',  activeTab)}">🪙 현황</button>
             <button onclick="openAbsence()"           style="${tabStyle('absence', activeTab)}">📋 결석<br>사유</button>`;
         listDiv.innerHTML = '<p style="text-align:center;color:#999;">불러오는 중...</p>';
 
-        if (activeTab === 'pending') {
-            const data = await callApi('getAdminData');
+        if (activeTab === 'log') {
+            // PointLog 시트 전체 내역 (최신순)
+            const data = await callApi('getAdminPointLog', {});
             listDiv.innerHTML = '';
-            if (!data.pendingLogs || data.pendingLogs.length === 0) {
-                listDiv.innerHTML = '<p style="color:#999;text-align:center;">올라온 상소문이 없습니다.</p>';
+            if (!data || data.length === 0) {
+                listDiv.innerHTML = '<p style="color:#999;text-align:center;">기록이 없습니다.</p>';
                 return;
             }
-            data.pendingLogs.forEach(log => {
-                const delta = Number(log[2]) || -1;
+            // 최신순 정렬
+            const sorted = [...data].reverse();
+            sorted.forEach(log => {
+                const delta     = Number(log.delta) || 0;
+                const isPlus    = delta >= 0;
+                const isPending = log.status === '대기';
                 const div = document.createElement('div');
                 div.className = 'card';
+                div.style.marginBottom = '8px';
                 div.innerHTML = `
-                    <p style="margin:0 0 8px 0;">
-                        <b>${log[1]}</b> - ${log[3]}
-                        <span style="color:${delta>=0?'#2E7D32':'#C62828'};font-weight:bold;margin-left:6px;">
-                            ${delta>=0?'+':''}${delta}냥
-                        </span>
-                        <span style="color:#999;font-size:0.82rem;"> (${log[4]})</span>
-                    </p>
-                    <div style="display:flex;gap:8px;">
-                        <button onclick="approvePenalty('${log[1]}','${log[3]}')"
-                                style="flex:1;background:#C62828;color:white;border:none;padding:8px;border-radius:4px;cursor:pointer;font-family:inherit;font-size:0.9rem;">
-                            ✅ 승인 (엽전 차감)</button>
-                        <button onclick="rejectPenalty('${log[1]}','${log[3]}')"
-                                style="flex:1;background:#546E7A;color:white;border:none;padding:8px;border-radius:4px;cursor:pointer;font-family:inherit;font-size:0.9rem;">
-                            ❌ 미승인</button>
+                    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
+                        <div style="flex:1;min-width:0;">
+                            <div style="font-size:0.78rem;color:var(--muted);margin-bottom:2px;">
+                                ${log.date}
+                                <span style="margin-left:4px;">${log.actor||''}</span>
+                            </div>
+                            <div style="font-weight:700;font-size:0.95rem;">${log.name}</div>
+                            <div style="font-size:0.88rem;color:var(--muted);margin-top:2px;">${log.reason}</div>
+                        </div>
+                        <div style="text-align:right;flex-shrink:0;">
+                            <div style="font-weight:800;font-size:1.1rem;color:${isPlus?'#2E7D32':'#C62828'};">
+                                ${isPlus?'+':''}${delta}냥
+                            </div>
+                            <div style="font-size:0.72rem;color:${isPending?'#E65100':'var(--muted)'};">
+                                ${isPending?'대기':'완료'}
+                            </div>
+                        </div>
+                    </div>
+                    <div style="display:flex;gap:6px;margin-top:8px;">
+                        <button onclick="editPointLog(${log.row},'${log.name}',${delta},'${log.reason}')"
+                                style="flex:1;background:rgba(44,44,44,0.08);border:1px solid var(--stone);
+                                       color:var(--ink);border-radius:7px;padding:6px;cursor:pointer;
+                                       font-family:inherit;font-size:0.82rem;">수정</button>
+                        <button onclick="deletePointLog(${log.row},'${log.name}')"
+                                style="flex:1;background:rgba(198,40,40,0.08);border:1px solid rgba(198,40,40,0.3);
+                                       color:#C62828;border-radius:7px;padding:6px;cursor:pointer;
+                                       font-family:inherit;font-size:0.82rem;">삭제</button>
                     </div>`;
                 listDiv.appendChild(div);
             });
@@ -3294,6 +3313,33 @@ async function openPointLog(tab) {
             listDiv.appendChild(div);
         });
     }
+}
+
+/* PointLog 수정 */
+async function editPointLog(row, name, currentDelta, currentReason) {
+    const newReason = prompt(`사유 수정 (${name})`, currentReason);
+    if (newReason === null) return;
+    const newDeltaStr = prompt(`엽전 변동량 수정 (현재: ${currentDelta})`, currentDelta);
+    if (newDeltaStr === null) return;
+    const newDelta = Number(newDeltaStr);
+    if (isNaN(newDelta)) return showToast('올바른 숫자를 입력해주세요.');
+    await callApi('editPointLog', { row, delta: newDelta, reason: newReason, actor: currentUser.name });
+    AppCache.invalidate('getAdminPointLog', {});
+    AppCache.invalidate('getAllMemberPoints', {});
+    AppCache.invalidate('getMyPointLog', { name });
+    showToast('수정되었습니다.');
+    openPointLog('log');
+}
+
+/* PointLog 삭제 */
+async function deletePointLog(row, name) {
+    if (!confirm(`이 기록을 삭제하시겠습니까?\n삭제 시 엽전 변동량도 복원됩니다.`)) return;
+    await callApi('deletePointLog', { row, name });
+    AppCache.invalidate('getAdminPointLog', {});
+    AppCache.invalidate('getAllMemberPoints', {});
+    AppCache.invalidate('getMyPointLog', { name });
+    showToast('삭제되었습니다.');
+    openPointLog('log');
 }
 
 async function grantPoint() {
