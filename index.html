@@ -2771,9 +2771,13 @@ async function doCheckIn() {
     if (label) label.textContent = '인증 중...';
 
     try {
-        AppCache.invalidate('getAdminAttendance', { date: toDateStr() });
-        fetchToCache('getAdminAttendance', { date: toDateStr() });
+        // checkIn 먼저 실행
         const res = await callApi('checkIn', { name: currentUser.name });
+
+        // 성공 후 캐시 무효화 및 갱신
+        AppCache.invalidate('getAdminAttendance', { date: toDateStr() });
+        AppCache.invalidate('getAdminData', {});
+        fetchToCache('getAdminAttendance', { date: toDateStr() });
 
         currentUser.checkedIn = res.status;
         if (res.newCoins !== null && res.newCoins !== undefined) {
@@ -2782,15 +2786,16 @@ async function doCheckIn() {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(currentUser));
 
         if (res.status === '지각') {
-            showToast(`[${res.time}] 지각 확인. -${Math.abs(res.newCoins - currentUser.coins) || 1}냥 차감되었소.`);
+            showToast(`[${res.time}] 지각 확인. -1냥 차감되었습니다.`);
         } else {
-            showToast(`[${res.time}] 출석 확인되었소.`);
+            showToast(`[${res.time}] 출석 확인되었습니다.`);
         }
         loadHome();
 
     } catch(err) {
         if (wrap)  { wrap.style.opacity = '1'; wrap.onclick = doCheckIn; }
         if (label) label.textContent = '등교 인증';
+        showToast(err.message || '출석 처리 중 오류가 발생했습니다.');
     }
 }
 
