@@ -636,8 +636,13 @@ input::placeholder, textarea::placeholder { color: #C4BDB6; }
             </div>
             <div style="display:flex; align-items:center; gap:12px;">
                 <button id="btn-global-refresh" onclick="globalRefresh()" class="hidden"
-                        style="background:none;border:none;cursor:pointer;font-size:1rem;
-                               color:var(--muted);padding:4px;">&#x21bb;</button>
+                        style="background:none;border:none;cursor:pointer;padding:4px;
+                               color:var(--muted);display:flex;align-items:center;justify-content:center;">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                        <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
+                        <path d="M3.51 9a9 9 0 0114.36-3.36L23 10M1 14l5.13 4.36A9 9 0 0020.49 15"/>
+                    </svg>
+                </button>
                 <!-- 로그아웃 버튼 (종 모양 위치) -->
                 <button onclick="logout()"
                         style="background:none; border:none; cursor:pointer; padding:4px;
@@ -854,9 +859,15 @@ input::placeholder, textarea::placeholder { color: #C4BDB6; }
             <div style="font-family:'Nanum Myeongjo',serif; font-size:1.1rem;
                         font-weight:800; letter-spacing:3px; color:var(--ink);">엽전 내역</div>
             <button onclick="refreshPointLog()"
-                    style="position:absolute; right:16px; top:50%; transform:translateY(-50%);
-                           background:none; border:none; cursor:pointer; font-size:1.1rem;
-                           color:var(--muted); padding:4px; line-height:1;">&#x21bb;</button>
+                    style="position:absolute; right:16px;
+                           background:none; border:none; cursor:pointer;
+                           color:var(--muted); padding:4px; line-height:1;
+                           display:flex; align-items:center; justify-content:center;">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
+                    <path d="M3.51 9a9 9 0 0114.36-3.36L23 10M1 14l5.13 4.36A9 9 0 0020.49 15"/>
+                </svg>
+            </button>
         </div>
         <div class="container" style="position:relative;z-index:1;flex:1;overflow-y:auto;">
             <!-- 탭 버튼: 교사일 때 JS에서 추가 탭 표시 -->
@@ -1494,9 +1505,15 @@ input::placeholder, textarea::placeholder { color: #C4BDB6; }
             <div style="font-family:'Nanum Myeongjo',serif; font-size:1.1rem;
                         font-weight:800; letter-spacing:3px; color:var(--ink);">저잣거리</div>
             <button onclick="refreshMarket()"
-                    style="position:absolute; right:16px; top:50%; transform:translateY(-50%);
-                           background:none; border:none; cursor:pointer; font-size:1.1rem;
-                           color:var(--muted); padding:4px; line-height:1;">&#x21bb;</button>
+                    style="position:absolute; right:16px;
+                           background:none; border:none; cursor:pointer;
+                           color:var(--muted); padding:4px; line-height:1;
+                           display:flex; align-items:center; justify-content:center;">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
+                    <path d="M3.51 9a9 9 0 0114.36-3.36L23 10M1 14l5.13 4.36A9 9 0 0020.49 15"/>
+                </svg>
+            </button>
         </div>
         <div class="container" style="position:relative;z-index:1;">
             <div id="market-tabs" style="display:flex; gap:6px; margin-bottom:14px; flex-wrap:wrap;"></div>
@@ -1909,12 +1926,25 @@ async function globalRefresh() {
     // 재프리페치 (백그라운드, 완료 대기)
     await prefetchAll();
 
-    // 대시보드 갱신
-    await loadTeacherTodayDashboard(false);
-
-    // 학생 현황이 열려있으면 갱신
-    const name = document.getElementById('quick-student-select')?.value;
-    if (name) loadStudentQuickView();
+    if (currentUser && currentUser.role === 'teacher') {
+        // 교사: 대시보드 갱신
+        await loadTeacherTodayDashboard(false);
+        const name = document.getElementById('quick-student-select')?.value;
+        if (name) loadStudentQuickView();
+    } else {
+        // 학생: 서버에서 최신 엽전/사면장/출결 정보 받아서 갱신
+        try {
+            AppCache.invalidate('login', {});
+            const fresh = await callApi('login', { id: currentUser.id, name: currentUser.name });
+            currentUser.coins        = fresh.coins;
+            currentUser.amnesty      = fresh.amnesty;
+            currentUser.checkedIn    = fresh.checkedIn;
+            currentUser.todayPlanner = fresh.todayPlanner;
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(currentUser));
+        } catch(e) { /* 무시 */ }
+        loadHome();
+        loadWeeklyStatus();
+    }
 
     if (btn) { btn.style.opacity = '1'; btn.style.pointerEvents = ''; }
     showToast('새로고침 완료');
@@ -2336,7 +2366,7 @@ function loadHome() {
         document.querySelectorAll('.teacher-only').forEach(el => el.style.display = 'none');
         const roleBtn = document.getElementById('btn-role-page');
         if (roleBtn && roleBtn.querySelector('span')) roleBtn.querySelector('span').textContent = '관원 전용';        document.getElementById('admin-btn-area').innerHTML = '';
-        document.getElementById('btn-global-refresh').classList.add('hidden');
+        document.getElementById('btn-global-refresh').classList.remove('hidden');
         // 최근 5일 카드 숨기기 (교사는 불필요)
         const weeklyCard = document.getElementById('card-weekly-status');
         if (weeklyCard) weeklyCard.style.display = 'none';
