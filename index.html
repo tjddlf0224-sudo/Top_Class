@@ -2771,7 +2771,8 @@ async function doCheckIn() {
     if (label) label.textContent = '인증 중...';
 
     try {
-        // checkIn 먼저 실행
+        // ★ checkIn은 쓰기 작업 → 캐시 우회하고 서버 직접 호출
+        AppCache.invalidate('checkIn', { name: currentUser.name });
         const res = await callApi('checkIn', { name: currentUser.name });
 
         // 성공 후 캐시 무효화 및 갱신
