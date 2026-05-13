@@ -779,7 +779,6 @@ input::placeholder, textarea::placeholder { color: #C4BDB6; }
 
         </div>
 
-        <!-- 하단 탭바 -->
         <div class="tab-bar" id="home-tab-bar">
             <!-- 홈 -->
             <div class="tab-item active" onclick="scrollToTop()" id="tab-home">
@@ -822,8 +821,17 @@ input::placeholder, textarea::placeholder { color: #C4BDB6; }
                 </div>
                 <div class="tab-label">엽전</div>
             </div>
-            <!-- 관원 -->
-            <div class="tab-item" onclick="openRolePage()" id="tab-role">
+            <!-- 상담 (교사만 표시) -->
+            <div class="tab-item teacher-tab hidden" onclick="openCounseling()" id="tab-counsel">
+                <div class="tab-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8">
+                        <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
+                    </svg>
+                </div>
+                <div class="tab-label">상담</div>
+            </div>
+            <!-- 관원 (학생만 표시) -->
+            <div class="tab-item student-tab" onclick="openRolePage()" id="tab-role">
                 <div class="tab-icon">
                     <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8">
                         <circle cx="12" cy="8" r="4"/>
@@ -2302,6 +2310,10 @@ function loadHome() {
             </div>`;
         // 상단 새로고침 버튼 표시 (교사 전용)
         document.getElementById('btn-global-refresh').classList.remove('hidden');
+        // 교사는 상담탭 표시, 관원탭 숨김
+        document.querySelectorAll('.teacher-tab').forEach(el => el.classList.remove('hidden'));
+        document.querySelectorAll('.student-tab').forEach(el => el.classList.add('hidden'));
+
         // 교사 홈: 오늘 현황 대시보드 로드
         loadTeacherTodayDashboard();
         loadQuickStudentList();   // 학생 빠른 조회 드롭다운
@@ -2313,6 +2325,10 @@ function loadHome() {
         const statusCard = document.getElementById('card-my-status');
         if (statusCard) statusCard.style.display = 'none';
     } else {
+        // 학생은 관원탭 표시, 상담탭 숨김
+        document.querySelectorAll('.student-tab').forEach(el => el.classList.remove('hidden'));
+        document.querySelectorAll('.teacher-tab').forEach(el => el.classList.add('hidden'));
+
         // 학생: 이름 + 직위 표시
         const nameEl = document.getElementById('home-user-name');
         const roleEl = document.getElementById('home-user-role');
