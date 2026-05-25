@@ -3287,6 +3287,10 @@ async function openPointLog(tab) {
                     </div>`;
                 listDiv.appendChild(div);
             });
+
+        } else if (activeTab === 'grant') {
+            const [adminData, memberSheet] = await Promise.all([
+                callApi('getAdminData'),
                 callApi('getAllMemberPoints')
             ]);
             const members  = adminData.members.filter(m => m.name !== '교사' && m.role !== 'teacher');
