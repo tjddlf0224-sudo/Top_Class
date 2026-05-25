@@ -3215,57 +3215,78 @@ async function openPointLog(tab) {
         listDiv.innerHTML = '<p style="text-align:center;color:#999;">불러오는 중...</p>';
 
         if (activeTab === 'log') {
-            // PointLog 시트 전체 내역 (최신순)
             const data = await callApi('getAdminPointLog', {});
             listDiv.innerHTML = '';
             if (!data || data.length === 0) {
                 listDiv.innerHTML = '<p style="color:#999;text-align:center;">기록이 없습니다.</p>';
                 return;
             }
-            // 최신순 정렬
             const sorted = [...data].reverse();
+
+            // 상단 일괄 삭제 툴바
+            const toolbar = document.createElement('div');
+            toolbar.id = 'pointlog-toolbar';
+            toolbar.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:rgba(248,245,240,0.7);border-radius:12px;margin-bottom:10px;border:1px solid rgba(233,230,225,0.6);';
+            toolbar.innerHTML = `
+                <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:0.88rem;color:var(--ink);">
+                    <input type="checkbox" id="pointlog-check-all" onchange="toggleAllPointLogs(this.checked)"
+                           style="width:18px;height:18px;cursor:pointer;accent-color:var(--ink);">
+                    전체 선택
+                </label>
+                <button id="pointlog-bulk-delete-btn" onclick="bulkDeletePointLogs()"
+                        style="display:none;background:#C62828;color:white;border:none;
+                               border-radius:8px;padding:7px 16px;cursor:pointer;
+                               font-family:inherit;font-size:0.85rem;font-weight:700;">
+                    선택 삭제 (<span id="pointlog-selected-count">0</span>개)
+                </button>`;
+            listDiv.appendChild(toolbar);
+
             sorted.forEach(log => {
                 const delta     = Number(log.delta) || 0;
                 const isPlus    = delta >= 0;
                 const isPending = log.status === '대기';
                 const div = document.createElement('div');
-                div.className = 'card';
-                div.style.marginBottom = '8px';
+                div.className = 'card pointlog-item';
+                div.dataset.row  = log.row;
+                div.dataset.name = log.name;
+                div.style.cssText = 'margin-bottom:8px;transition:background 0.15s;';
                 div.innerHTML = `
-                    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
+                    <div style="display:flex;align-items:flex-start;gap:10px;">
+                        <input type="checkbox" class="pointlog-cb" data-row="${log.row}" data-name="${log.name}"
+                               onchange="updatePointLogSelection()"
+                               style="width:18px;height:18px;margin-top:2px;flex-shrink:0;cursor:pointer;accent-color:var(--ink);">
                         <div style="flex:1;min-width:0;">
-                            <div style="font-size:0.78rem;color:var(--muted);margin-bottom:2px;">
-                                ${log.date}
-                                <span style="margin-left:4px;">${log.actor||''}</span>
+                            <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
+                                <div style="flex:1;min-width:0;">
+                                    <div style="font-size:0.78rem;color:var(--muted);margin-bottom:2px;">
+                                        ${log.date} <span style="margin-left:4px;">${log.actor||''}</span>
+                                    </div>
+                                    <div style="font-weight:700;font-size:0.95rem;">${log.name}</div>
+                                    <div style="font-size:0.88rem;color:var(--muted);margin-top:2px;">${log.reason}</div>
+                                </div>
+                                <div style="text-align:right;flex-shrink:0;">
+                                    <div style="font-weight:800;font-size:1.1rem;color:${isPlus?'#2E7D32':'#C62828'};">
+                                        ${isPlus?'+':''}${delta}냥
+                                    </div>
+                                    <div style="font-size:0.72rem;color:${isPending?'#E65100':'var(--muted)'};">
+                                        ${isPending?'대기':'완료'}
+                                    </div>
+                                </div>
                             </div>
-                            <div style="font-weight:700;font-size:0.95rem;">${log.name}</div>
-                            <div style="font-size:0.88rem;color:var(--muted);margin-top:2px;">${log.reason}</div>
+                            <div style="display:flex;gap:6px;margin-top:8px;">
+                                <button onclick="editPointLog(${log.row},'${log.name}',${delta},'${log.reason}')"
+                                        style="flex:1;background:rgba(44,44,44,0.08);border:1px solid var(--stone);
+                                               color:var(--ink);border-radius:7px;padding:6px;cursor:pointer;
+                                               font-family:inherit;font-size:0.82rem;">수정</button>
+                                <button onclick="deletePointLog(${log.row},'${log.name}')"
+                                        style="flex:1;background:rgba(198,40,40,0.08);border:1px solid rgba(198,40,40,0.3);
+                                               color:#C62828;border-radius:7px;padding:6px;cursor:pointer;
+                                               font-family:inherit;font-size:0.82rem;">삭제</button>
+                            </div>
                         </div>
-                        <div style="text-align:right;flex-shrink:0;">
-                            <div style="font-weight:800;font-size:1.1rem;color:${isPlus?'#2E7D32':'#C62828'};">
-                                ${isPlus?'+':''}${delta}냥
-                            </div>
-                            <div style="font-size:0.72rem;color:${isPending?'#E65100':'var(--muted)'};">
-                                ${isPending?'대기':'완료'}
-                            </div>
-                        </div>
-                    </div>
-                    <div style="display:flex;gap:6px;margin-top:8px;">
-                        <button onclick="editPointLog(${log.row},'${log.name}',${delta},'${log.reason}')"
-                                style="flex:1;background:rgba(44,44,44,0.08);border:1px solid var(--stone);
-                                       color:var(--ink);border-radius:7px;padding:6px;cursor:pointer;
-                                       font-family:inherit;font-size:0.82rem;">수정</button>
-                        <button onclick="deletePointLog(${log.row},'${log.name}')"
-                                style="flex:1;background:rgba(198,40,40,0.08);border:1px solid rgba(198,40,40,0.3);
-                                       color:#C62828;border-radius:7px;padding:6px;cursor:pointer;
-                                       font-family:inherit;font-size:0.82rem;">삭제</button>
                     </div>`;
                 listDiv.appendChild(div);
             });
-
-        } else if (activeTab === 'grant') {
-            const [adminData, memberSheet] = await Promise.all([
-                callApi('getAdminData'),
                 callApi('getAllMemberPoints')
             ]);
             const members  = adminData.members.filter(m => m.name !== '교사' && m.role !== 'teacher');
@@ -3377,6 +3398,53 @@ async function openPointLog(tab) {
             listDiv.appendChild(div);
         });
     }
+}
+
+/* PointLog 체크박스 전체 선택 */
+function toggleAllPointLogs(checked) {
+    document.querySelectorAll('.pointlog-cb').forEach(cb => { cb.checked = checked; });
+    updatePointLogSelection();
+}
+
+/* 선택 개수 업데이트 + 삭제 버튼 표시 */
+function updatePointLogSelection() {
+    const cbs     = document.querySelectorAll('.pointlog-cb');
+    const allCb   = document.getElementById('pointlog-check-all');
+    const btn     = document.getElementById('pointlog-bulk-delete-btn');
+    const countEl = document.getElementById('pointlog-selected-count');
+    const checked = [...cbs].filter(cb => cb.checked);
+
+    if (allCb) allCb.checked = checked.length === cbs.length && cbs.length > 0;
+    if (countEl) countEl.textContent = checked.length;
+    if (btn) btn.style.display = checked.length > 0 ? 'block' : 'none';
+}
+
+/* 선택 항목 일괄 삭제 */
+async function bulkDeletePointLogs() {
+    const checked = [...document.querySelectorAll('.pointlog-cb:checked')];
+    if (checked.length === 0) return;
+    if (!confirm(`선택한 ${checked.length}개의 기록을 삭제하시겠습니까?\n엽전 변동량도 모두 복원됩니다.`)) return;
+
+    // 행 번호가 큰 것부터 삭제 (작은 행부터 삭제하면 행 번호가 밀림)
+    const items = checked
+        .map(cb => ({ row: Number(cb.dataset.row), name: cb.dataset.name }))
+        .sort((a, b) => b.row - a.row);
+
+    showToast(`${items.length}개 삭제 중...`);
+    let success = 0;
+    for (const item of items) {
+        try {
+            await callApi('deletePointLog', { row: item.row, name: item.name });
+            success++;
+        } catch(e) {
+            console.error('[bulkDelete] row:', item.row, e.message);
+        }
+    }
+
+    AppCache.invalidate('getAdminPointLog', {});
+    AppCache.invalidate('getAllMemberPoints', {});
+    showToast(`${success}개 삭제 완료.`);
+    openPointLog('log');
 }
 
 /* PointLog 수정 */
@@ -7502,8 +7570,10 @@ async function openTriggerPause() {
 
 async function loadPauseList() {
     const listDiv = document.getElementById('pause-list');
+    if (!listDiv) return;
     listDiv.innerHTML = '<p style="text-align:center;color:#999;font-size:0.85rem;">불러오는 중...</p>';
     try {
+        AppCache.invalidate('getTriggerPauses', {}); // 항상 최신 데이터 조회
         const data = await callApi('getTriggerPauses', {});
         if (!data || data.length === 0) {
             listDiv.innerHTML = '<p style="text-align:center;color:#999;font-size:0.85rem;">설정된 기간이 없습니다.</p>';
@@ -7533,16 +7603,18 @@ async function saveTriggerPause() {
     if (!start || !end) return showToast('시작일과 종료일을 입력해주세요.');
     if (start > end)    return showToast('종료일이 시작일보다 앞설 수 없습니다.');
     await callApi('saveTriggerPause', { start, end });
-    showToast(`✅ ${start} ~ ${end} 일시정지 등록 완료되었습니다.`);
-    loadPauseList();
+    AppCache.invalidate('getTriggerPauses', {});
+    showToast(`${start} ~ ${end} 일시정지 등록 완료.`);
+    await loadPauseList();
     updateTriggerPauseBadge();
 }
 
 async function deleteTriggerPause(idx) {
-    if (!confirm('해당 일시정지 기간을 삭제하시겠소?')) return;
+    if (!confirm('해당 일시정지 기간을 삭제하시겠습니까?')) return;
     await callApi('deleteTriggerPause', { idx });
-    showToast('삭제 완료되었습니다.');
-    loadPauseList();
+    AppCache.invalidate('getTriggerPauses', {});
+    showToast('삭제되었습니다.');
+    await loadPauseList();
     updateTriggerPauseBadge();
 }
 
