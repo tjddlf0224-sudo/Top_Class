@@ -102,6 +102,61 @@
     </div>
 </div>
 
+<!-- =====================================================
+     Firebase Firestore SDK
+     - 교사 QR 인증 속도 개선: verifyTeacher / 학생 잔액 조회를
+       GAS(콜드스타트) 대신 Firestore에서 직접 읽음
+     - config는 index.html과 완전 동일 (topclass-be740)
+====================================================== -->
+<script type="module">
+  import { initializeApp }    from "https://www.gstatic.com/firebasejs/12.12.1/firebase-app.js";
+  import { getFirestore, doc, getDoc,
+           collection, getDocs,
+           query, where }     from "https://www.gstatic.com/firebasejs/12.12.1/firebase-firestore.js";
+
+  const firebaseConfig = {
+    apiKey:            "AIzaSyDRViuzADHxHnvv78jfnvPbAJ5hH3wzpCw",
+    authDomain:        "topclass-be740.firebaseapp.com",
+    projectId:         "topclass-be740",
+    storageBucket:     "topclass-be740.firebasestorage.app",
+    messagingSenderId: "662651378616",
+    appId:             "1:662651378616:web:6eceb1505265c0700bcd4d"
+  };
+
+  const db = getFirestore(initializeApp(firebaseConfig));
+
+  // 교사 QR 인증: teachers/{이름} 조회 (Teachers 시트: A=이름 B=전화뒷4자리 C=비고)
+  // 반환 null → 호출부에서 GAS 권위 인증으로 폴백
+  window.fsVerifyTeacher = async function(name, phone) {
+    try {
+      const snap = await getDoc(doc(db, 'teachers', String(name).trim()));
+      if (!snap.exists()) return null;
+      const d = snap.data();
+      if (String(d.phone).trim() !== String(phone).trim()) return null;
+      return { name: String(d.name).trim(), subject: d.subject || '' };
+    } catch(e) {
+      console.warn('[FS] fsVerifyTeacher 실패 → GAS fallback:', e.message);
+      return null;
+    }
+  };
+
+  // 학생 잔액 조회: members 컬렉션을 name으로 쿼리 (QR엔 학번이 아닌 이름만 담김)
+  // members/{학번}: id,name,role,coins,amnesty,dorm,track,alert
+  window.fsGetMemberByName = async function(name) {
+    try {
+      const snap = await getDocs(query(collection(db, 'members'), where('name', '==', String(name).trim())));
+      if (snap.empty) return null;
+      const d = snap.docs[0].data();
+      return { name: String(d.name).trim(), coins: Number(d.coins) || 0 };
+    } catch(e) {
+      console.warn('[FS] fsGetMemberByName 실패 → GAS fallback:', e.message);
+      return null;
+    }
+  };
+
+  console.log('[Firebase] grant.html Firestore 초기화 완료 — topclass-be740');
+</script>
+
 <script>
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbzRaCwLXFf8GvXknjWnZ003q9PrJWcCtBa8DHWy64HvMyBuIQSvDz7oa82vTsppX5G-/exec';
 
@@ -153,15 +208,27 @@ async function doAuth() {
     btn.disabled = true; btn.textContent = '⏳ 확인 중...';
 
     try {
-        const data = await callGAS('verifyTeacher', { name, phone });
-        teacherName = data.name;
+        // 1) 교사 인증 — Firestore 우선, 미스/미로딩 시 GAS 권위 인증으로 폴백
+        let verified = window.fsVerifyTeacher ? await window.fsVerifyTeacher(name, phone) : null;
+        if (verified) {
+            teacherName = verified.name;
+        } else {
+            const data = await callGAS('verifyTeacher', { name, phone });
+            teacherName = data.name;
+        }
 
+        // 2) 학생 잔액 — Firestore 우선, 미스 시 GAS 폴백 (표시용이라 실패해도 '?'로 진행)
         let coins = '?';
-        try {
-            const members = await callGAS('getAllMemberPoints', {});
-            const me = (members||[]).find(m => m.name === studentName);
-            if (me) coins = me.coins ?? 0;
-        } catch(_) {}
+        let member = window.fsGetMemberByName ? await window.fsGetMemberByName(studentName) : null;
+        if (member) {
+            coins = member.coins ?? 0;
+        } else {
+            try {
+                const members = await callGAS('getAllMemberPoints', {});
+                const me = (members||[]).find(m => m.name === studentName);
+                if (me) coins = me.coins ?? 0;
+            } catch(_) {}
+        }
 
         document.getElementById('disp-student').textContent = studentName + ' 학생';
         document.getElementById('disp-coins').textContent   = '현재 잔액: 🪙 ' + coins + '냥';
