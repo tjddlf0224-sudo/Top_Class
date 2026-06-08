@@ -1978,6 +1978,17 @@ function toDateStr(date) {
     return `${y}-${m}-${d}`;
 }
 
+/** 플래너 content(JSON 문자열) 안전 파싱 — 손상 데이터 시 빈 배열 반환 (크래시 방지) */
+function safeParseArray(str) {
+    try {
+        const v = JSON.parse(str);
+        return Array.isArray(v) ? v : [];
+    } catch(e) {
+        console.warn('[safeParseArray] 파싱 실패, 빈 배열로 대체:', e.message);
+        return [];
+    }
+}
+
 /** 화면 전환: 모든 section 숨기고 지정한 section만 표시 */
 function showSection(id) {
     document.querySelectorAll('section').forEach(el => el.classList.add('hidden'));
@@ -2165,8 +2176,18 @@ function showToast(msg, duration = 2200) {
 
 window.onload = () => {
     const saved = localStorage.getItem(STORAGE_KEY);
+    let parsedUser = null;
     if (saved) {
-        currentUser = JSON.parse(saved);
+        try {
+            parsedUser = JSON.parse(saved);
+        } catch(e) {
+            // 손상된 저장값 → 제거하고 로그인 화면으로 (앱이 안 켜지는 문제 방지)
+            console.warn('[onload] 저장된 로그인 정보 손상 → 초기화:', e.message);
+            localStorage.removeItem(STORAGE_KEY);
+        }
+    }
+    if (parsedUser) {
+        currentUser = parsedUser;
 
         // ★ 날짜가 바뀌었으면 checkedIn/todayPlanner 초기화
         const today       = toDateStr();
@@ -2415,7 +2436,7 @@ function loadHome() {
             }
         }
         const planContent = currentUser.todayPlanner && currentUser.todayPlanner.content;
-    const hasContent = planContent && JSON.parse(planContent || '[]').length > 0;
+    const hasContent = planContent && safeParseArray(planContent).length > 0;
     if (planDesc) planDesc.textContent = planDone ? '100% 달성!' : hasPlan ? `${currentUser.todayPlanner.progress}% 진행 중` : hasContent ? '등록됨' : '오늘 계획 미등록';
     }
 
@@ -2876,7 +2897,7 @@ async function openPlanner() {
         plannerData = await callApi('getPlanner', { name: currentUser.name });
     }
 
-    currentPlans = plannerData.content ? JSON.parse(plannerData.content) : [];
+    currentPlans = plannerData.content ? safeParseArray(plannerData.content) : [];
     renderPlans();
 }
 
@@ -2956,7 +2977,7 @@ async function selectPlannerDate(d) {
     // 선택 날짜 플래너 로드
     const dateStr = toDateStr2(d);
     const data = await callApi('getPlanner', { name: currentUser.name, date: dateStr }).catch(() => ({ content: '', progress: 0 }));
-    currentPlans = data.content ? JSON.parse(data.content) : [];
+    currentPlans = data.content ? safeParseArray(data.content) : [];
     renderPlans();
 }
 
