@@ -581,6 +581,53 @@ input::placeholder, textarea::placeholder { color: #C4BDB6; }
 <!-- 토스트 메시지 -->
 <div id="toast"></div>
 
+<!-- 엽전 획득/차감 안내 모달 -->
+<div id="coin-guide-overlay" class="hidden"
+     style="position:fixed; inset:0; z-index:1000; background:rgba(0,0,0,0.45);
+            display:flex; align-items:center; justify-content:center; padding:20px;"
+     onclick="if(event.target===this) closeCoinGuide()">
+    <div style="background:var(--hanji); border-radius:16px; max-width:380px; width:100%;
+                max-height:82vh; overflow-y:auto; padding:22px 20px;
+                box-shadow:0 10px 40px rgba(0,0,0,0.3);">
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:6px;">
+            <div style="font-family:'Nanum Myeongjo',serif; font-size:1.2rem; font-weight:800; color:var(--ink);">🪙 엽전 안내</div>
+            <button onclick="closeCoinGuide()"
+                    style="background:none; border:none; font-size:1.4rem; cursor:pointer; color:var(--muted); line-height:1; padding:2px 6px;">×</button>
+        </div>
+        <div style="font-size:0.82rem; color:var(--muted); margin-bottom:14px;">엽전은 이렇게 받고, 이렇게 차감돼요.</div>
+
+        <div style="font-size:0.92rem; font-weight:800; color:#1B5E20; margin:0 0 8px;">➕ 획득</div>
+        <div style="display:flex; flex-direction:column; gap:7px; margin-bottom:16px;">
+            <div class="cg-row" style="display:flex; justify-content:space-between; gap:10px; background:#fff; border:1px solid #E8F0E8; border-radius:9px; padding:9px 12px;">
+                <span style="color:#333; font-size:0.9rem;">플래너 100% 달성</span><b style="color:#1B5E20; white-space:nowrap;">+2냥</b></div>
+            <div class="cg-row" style="display:flex; justify-content:space-between; gap:10px; background:#fff; border:1px solid #E8F0E8; border-radius:9px; padding:9px 12px;">
+                <span style="color:#333; font-size:0.9rem;">주간 개근 (월~금 모두 출석)</span><b style="color:#1B5E20; white-space:nowrap;">+5냥</b></div>
+            <div class="cg-row" style="display:flex; justify-content:space-between; gap:10px; background:#fff; border:1px solid #E8F0E8; border-radius:9px; padding:9px 12px;">
+                <span style="color:#333; font-size:0.9rem;">선생님 상점 · 교과쌤 칭찬</span><b style="color:#1B5E20; white-space:nowrap;">+α냥</b></div>
+        </div>
+
+        <div style="font-size:0.92rem; font-weight:800; color:#C62828; margin:0 0 8px;">➖ 차감</div>
+        <div style="display:flex; flex-direction:column; gap:7px; margin-bottom:16px;">
+            <div class="cg-row" style="display:flex; justify-content:space-between; gap:10px; background:#fff; border:1px solid #F3E3E3; border-radius:9px; padding:9px 12px;">
+                <span style="color:#333; font-size:0.9rem;">지각</span><b style="color:#C62828; white-space:nowrap;">−1냥</b></div>
+            <div class="cg-row" style="display:flex; justify-content:space-between; gap:10px; background:#fff; border:1px solid #F3E3E3; border-radius:9px; padding:9px 12px;">
+                <span style="color:#333; font-size:0.9rem;">결석</span><b style="color:#C62828; white-space:nowrap;">−2냥</b></div>
+            <div class="cg-row" style="display:flex; justify-content:space-between; gap:10px; background:#fff; border:1px solid #F3E3E3; border-radius:9px; padding:9px 12px;">
+                <span style="color:#333; font-size:0.9rem;">플래너 미작성</span><b style="color:#C62828; white-space:nowrap;">−1냥</b></div>
+            <div class="cg-row" style="display:flex; justify-content:space-between; gap:10px; background:#fff; border:1px solid #F3E3E3; border-radius:9px; padding:9px 12px;">
+                <span style="color:#333; font-size:0.9rem;">저잣거리 구매</span><b style="color:#C62828; white-space:nowrap;">−상품가격</b></div>
+            <div class="cg-row" style="display:flex; justify-content:space-between; gap:10px; background:#fff; border:1px solid #F3E3E3; border-radius:9px; padding:9px 12px;">
+                <span style="color:#333; font-size:0.9rem;">사면장 구매</span><b style="color:#C62828; white-space:nowrap;">−30냥</b></div>
+            <div class="cg-row" style="display:flex; justify-content:space-between; gap:10px; background:#fff; border:1px solid #F3E3E3; border-radius:9px; padding:9px 12px;">
+                <span style="color:#333; font-size:0.9rem;">선생님 벌점</span><b style="color:#C62828; white-space:nowrap;">−α냥</b></div>
+        </div>
+
+        <div style="background:rgba(201,166,107,0.13); border:1px solid var(--gold); border-radius:9px; padding:11px 12px; font-size:0.84rem; color:#5D4037; line-height:1.6;">
+            🎟️ <b>사면장</b>: 30냥에 구매해 두면, 지각한 날 사용해 그날 지각 차감(−1냥)을 취소할 수 있어요.
+        </div>
+    </div>
+</div>
+
 <!-- 백그라운드 저장 상태 표시기 (③ Optimistic UI) -->
 <div id="bg-status"></div>
 
@@ -685,6 +732,14 @@ input::placeholder, textarea::placeholder { color: #C4BDB6; }
                         <div style="font-size:0.78rem; color:var(--ink); font-weight:600;">내 QR코드</div>
                     </div>
                 </div>
+                <!-- 엽전 획득/차감 안내 -->
+                <button onclick="showCoinGuide()"
+                        style="width:100%; margin-top:10px; background:rgba(248,245,240,0.18);
+                               border:1px solid rgba(233,230,225,0.35); border-radius:12px; padding:11px;
+                               backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px);
+                               cursor:pointer; font-family:inherit; font-size:0.85rem; font-weight:600; color:var(--ink);">
+                    🪙 엽전 받는 법 · 차감 기준 보기
+                </button>
             </div>
 
             <!-- 교사: 학생 빠른 조회 -->
@@ -2168,6 +2223,10 @@ function showToast(msg, duration = 2200) {
     toast.classList.add('show');
     setTimeout(() => toast.classList.remove('show'), duration);
 }
+
+/** 엽전 획득/차감 안내 모달 열기/닫기 */
+function showCoinGuide()  { document.getElementById('coin-guide-overlay').classList.remove('hidden'); }
+function closeCoinGuide() { document.getElementById('coin-guide-overlay').classList.add('hidden'); }
 
 
 /* =========================================================
@@ -3751,32 +3810,42 @@ async function openMarket(tab) {
             }).join('');
 
     } else if (activeTab === 'sell') {
-        // 장원/교사: 판매 처리
+        // 장원/교사: 판매 처리 (여러 상품 한 번에)
         const memberSheet = await callApi('getAllMemberPoints');
         const students = memberSheet.filter(m => m.name !== '교사');
+        const stock    = (items||[]).filter(i => i.qty > 0);
         content.innerHTML = `
             <div class="card">
-                <div style="font-weight:bold;margin-bottom:10px;">🏷️ 판매 처리</div>
-                <select id="sell-student-select" style="width:100%;margin-bottom:8px;padding:9px;border:1px solid #ccc;border-radius:4px;font-family:inherit;"
-                        onchange="updateSellStudentCoins()">
+                <div style="font-weight:bold;margin-bottom:4px;">🏷️ 판매 처리</div>
+                <div style="font-size:0.8rem;color:#888;margin-bottom:10px;">학생을 고르고, 살 상품의 수량을 입력하세요. 여러 종류를 한 번에 살 수 있어요.</div>
+                <select id="sell-student-select" style="width:100%;margin-bottom:10px;padding:9px;border:1px solid #ccc;border-radius:4px;font-family:inherit;"
+                        onchange="updateSellTotal()">
                     <option value="">— 학생 선택 —</option>
                     ${students.map(m => `<option value="${m.name}" data-coins="${m.coins??0}">${m.name} (🪙${m.coins??0}냥)</option>`).join('')}
                 </select>
-                <select id="sell-item-select" style="width:100%;margin-bottom:8px;padding:9px;border:1px solid #ccc;border-radius:4px;font-family:inherit;"
-                        onchange="updateSellTotal()">
-                    <option value="">— 상품 선택 —</option>
-                    ${(items||[]).filter(i=>i.qty>0).map(i => `<option value="${i.name}" data-price="${i.price}" data-qty="${i.qty}">${i.name} (🪙${i.price}냥, 재고:${i.qty})</option>`).join('')}
-                </select>
-                <div style="display:flex;gap:8px;margin-bottom:8px;">
-                    <input id="sell-qty-input" type="number" min="1" value="1" placeholder="수량"
-                           style="flex:1;padding:9px;border:1px solid #ccc;border-radius:4px;font-family:inherit;"
-                           oninput="updateSellTotal()">
-                    <div id="sell-total-display"
-                         style="flex:1;padding:9px;background:#f5f5f5;border-radius:4px;text-align:center;font-weight:bold;color:#1B5E20;">
-                        합계: -냥
-                    </div>
+                <div id="sell-item-list" style="margin-bottom:8px;">
+                    ${stock.length === 0
+                        ? '<p style="text-align:center;color:#999;padding:10px 0;">판매할 상품이 없습니다.</p>'
+                        : stock.map((i, idx) => `
+                        <div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid #eee;">
+                            <div style="flex:1;min-width:0;">
+                                <div style="font-weight:bold;font-size:0.92rem;">${i.name}</div>
+                                <div style="font-size:0.8rem;color:#888;">🪙${i.price}냥 · 재고 ${i.qty}</div>
+                            </div>
+                            <button type="button" onclick="bumpSellQty(${idx},-1)"
+                                style="width:30px;height:34px;border:1px solid #ccc;background:#f7f7f7;border-radius:6px;font-size:1.1rem;cursor:pointer;font-family:inherit;">−</button>
+                            <input id="sell-q-${idx}" type="number" data-name="${i.name.replace(/"/g,'&quot;')}" data-price="${i.price}" data-max="${i.qty}"
+                                   min="0" max="${i.qty}" value="0" inputmode="numeric"
+                                   style="width:52px;height:34px;padding:6px;border:1px solid #ccc;border-radius:6px;text-align:center;font-family:inherit;"
+                                   oninput="updateSellTotal()">
+                            <button type="button" onclick="bumpSellQty(${idx},1)"
+                                style="width:30px;height:34px;border:1px solid #ccc;background:#f7f7f7;border-radius:6px;font-size:1.1rem;cursor:pointer;font-family:inherit;">+</button>
+                        </div>`).join('')}
                 </div>
-                <div id="sell-warn" style="font-size:0.85rem;color:#C62828;margin-bottom:6px;min-height:18px;"></div>
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                    <div id="sell-warn" style="font-size:0.85rem;color:#C62828;min-height:18px;"></div>
+                    <div id="sell-total-display" style="font-weight:bold;color:#1B5E20;font-size:1rem;">합계: 0냥</div>
+                </div>
                 <button onclick="processSell()"
                         style="width:100%;background:#6D4C41;color:white;border:none;padding:10px;border-radius:6px;cursor:pointer;font-family:inherit;font-size:0.95rem;font-weight:bold;">
                     판매 처리
@@ -3850,55 +3919,75 @@ async function openMarket(tab) {
     }
 }
 
-function updateSellTotal() {
-    const itemSel  = document.getElementById('sell-item-select');
-    const qtyInput = document.getElementById('sell-qty-input');
-    const display  = document.getElementById('sell-total-display');
-    const warn     = document.getElementById('sell-warn');
-    const price    = parseInt(itemSel.selectedOptions[0]?.dataset.price || '0', 10);
-    const maxQty   = parseInt(itemSel.selectedOptions[0]?.dataset.qty   || '0', 10);
-    const qty      = parseInt(qtyInput.value, 10) || 0;
-    const total    = price * qty;
-    display.textContent = `합계: ${total}냥`;
-
-    const stuSel   = document.getElementById('sell-student-select');
-    const stuCoins = parseInt(stuSel.selectedOptions[0]?.dataset.coins || '0', 10);
-    if (qty > maxQty)   warn.textContent = `⚠️ 재고 부족 (최대 ${maxQty}개)`;
-    else if (total > stuCoins) warn.textContent = `⚠️ 엽전 부족 (보유 ${stuCoins}냥)`;
-    else warn.textContent = '';
+/** +/- 버튼으로 수량 조절 */
+function bumpSellQty(idx, delta) {
+    const inp = document.getElementById(`sell-q-${idx}`);
+    if (!inp) return;
+    const max = parseInt(inp.dataset.max || '0', 10);
+    let v = (parseInt(inp.value, 10) || 0) + delta;
+    if (v < 0) v = 0;
+    if (v > max) v = max;
+    inp.value = v;
+    updateSellTotal();
 }
 
-function updateSellStudentCoins() { updateSellTotal(); }
+/** 판매 합계/경고 갱신 — 모든 상품 수량 입력을 합산 */
+function updateSellTotal() {
+    const inputs = document.querySelectorAll('[id^="sell-q-"]');
+    let total = 0, overStockName = '';
+    inputs.forEach(inp => {
+        let q = parseInt(inp.value, 10) || 0;
+        const max   = parseInt(inp.dataset.max   || '0', 10);
+        const price = parseInt(inp.dataset.price || '0', 10);
+        if (q < 0) q = 0;
+        if (q > max) { overStockName = inp.dataset.name; q = max; }
+        total += price * q;
+    });
+    const display = document.getElementById('sell-total-display');
+    if (display) display.textContent = `합계: ${total}냥`;
+
+    const stuSel   = document.getElementById('sell-student-select');
+    const stuCoins = parseInt(stuSel?.selectedOptions[0]?.dataset.coins || '0', 10);
+    const warn     = document.getElementById('sell-warn');
+    if (warn) {
+        if (overStockName)                                   warn.textContent = `⚠️ ${overStockName} 재고 초과`;
+        else if (stuSel && stuSel.value && total > stuCoins) warn.textContent = `⚠️ 엽전 부족 (보유 ${stuCoins}냥)`;
+        else                                                 warn.textContent = '';
+    }
+}
 
 async function processSell() {
     const name = document.getElementById('sell-student-select').value;
-    const item = document.getElementById('sell-item-select').value;
-    const qty  = parseInt(document.getElementById('sell-qty-input').value, 10);
     if (!name) return showToast('학생을 선택해주세요.');
-    if (!item) return showToast('상품을 선택해주세요.');
-    if (!qty || qty < 1) return showToast('수량을 입력해주세요.');
-    if (!confirm(`${name}에게 ${item} × ${qty}개를 판매하시겠습니까?`)) return;
+
+    // 수량 1개 이상인 상품 수집
+    const order = [];
+    document.querySelectorAll('[id^="sell-q-"]').forEach(inp => {
+        const q = parseInt(inp.value, 10) || 0;
+        if (q > 0) order.push({ itemName: inp.dataset.name, qty: q });
+    });
+    if (!order.length) return showToast('살 상품의 수량을 입력해주세요.');
+
+    const summary = order.map(o => `${o.itemName} × ${o.qty}`).join('\n');
+    if (!confirm(`${name}에게 아래 상품을 판매하시겠습니까?\n\n${summary}`)) return;
 
     try {
-        const res = await callApi('marketPurchase', {
-            studentName: name, itemName: item, qty: qty, actor: currentUser.name
+        const res = await callApi('marketPurchaseMulti', {
+            studentName: name, items: order, actor: currentUser.name
         });
 
-        // 관련 캐시 전부 무효화
         AppCache.invalidate('getMarketInventory', {});
         AppCache.invalidate('getAllMemberPoints', {});
         AppCache.invalidate('getMarketLog', {});
 
         if (res && res.newCoins !== undefined) {
-            showToast(`판매 완료! ${name} 잔액: ${res.newCoins}냥`);
-        } else if (res && res.error) {
-            showToast(`오류: ${res.error}`);
+            showToast(`판매 완료! (${res.count}종 / ${res.totalCost}냥) — ${name} 잔액: ${res.newCoins}냥`);
         } else {
             showToast('판매 처리되었습니다.');
         }
         openMarket('sell');
     } catch(e) {
-        showToast('판매 처리 중 오류가 발생했습니다.');
+        showToast(e.message || '판매 처리 중 오류가 발생했습니다.');
         console.error('[processSell]', e);
     }
 }
