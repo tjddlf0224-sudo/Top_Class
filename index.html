@@ -2292,6 +2292,8 @@ async function handleLogin() {
 
 function logout() {
     // 상태 초기화
+    if (typeof window.fsUnwatchMember === 'function') window.fsUnwatchMember();
+    _watchedMemberId = null;
     AppCache.clear();
     localStorage.removeItem(STORAGE_KEY);
     currentUser = null;
@@ -2319,6 +2321,73 @@ function logout() {
 /* =========================================================
    6. 홈 화면
    ========================================================= */
+
+// 내 엽전 실시간 구독 상태
+let _watchedMemberId    = null;   // 현재 구독 중인 학번
+let _selfCoinChangeUntil = 0;     // 본인 행동으로 인한 변동 — 이 시각까지는 변동 토스트 억제
+
+/** 본인 행동(사면장/지각/플래너100%)으로 엽전이 바뀔 때 호출 → 실시간 리스너의 중복 토스트 억제 */
+function markSelfCoinChange() { _selfCoinChangeUntil = Date.now() + 4000; }
+
+/** 학생 홈의 엽전·사면장 표시 렌더 (loadHome + 실시간 리스너가 공용) */
+function renderMyCoins() {
+    if (!currentUser) return;
+    const coins   = currentUser.coins   ?? 0;
+    const amnesty = currentUser.amnesty ?? 0;
+    const coinsEl = document.getElementById('my-coins');
+    if (coinsEl) {
+        coinsEl.textContent = `${coins}냥`;
+        coinsEl.style.color = 'var(--ink)';
+    }
+    const btnArea   = document.getElementById('amnesty-btn-area');
+    const todayLate = currentUser.checkedIn === '지각';
+    let btns = '';
+    if (coins >= 30) {
+        btns += `<button onclick="buyAmnesty()"
+            style="background:var(--gold);color:white;border:none;border-radius:7px;
+                   padding:7px 12px;cursor:pointer;font-family:inherit;
+                   font-size:0.78rem;font-weight:700;width:100%;margin-top:2px;">
+            사면장 구매 (30냥)</button>`;
+    }
+    if (amnesty > 0 && todayLate) {
+        btns += `<button onclick="useAmnesty()"
+            style="background:var(--stone);color:var(--ink);border:none;border-radius:7px;
+                   padding:7px 12px;cursor:pointer;font-family:inherit;
+                   font-size:0.78rem;width:100%;margin-top:4px;">
+            사면장 사용</button>`;
+    }
+    if (btnArea) btnArea.innerHTML = btns;
+}
+
+/** 내 members/{학번} 문서를 실시간 구독 — 엽전 변동 시 화면 즉시 갱신 + 알림 */
+function startMyCoinWatch() {
+    if (!currentUser || currentUser.role === 'teacher') return;
+    if (typeof window.fsWatchMember !== 'function') return;
+    if (_watchedMemberId === currentUser.id) return;   // 이미 같은 학생 구독 중
+    _watchedMemberId = currentUser.id;
+
+    window.fsWatchMember(currentUser.id, function(d) {
+        const prevCoins = currentUser.coins ?? 0;
+        const delta     = (d.coins ?? 0) - prevCoins;
+
+        // 상태 갱신 + 저장
+        currentUser.coins   = d.coins;
+        currentUser.amnesty = d.amnesty;
+        currentUser.role    = d.role;
+        currentUser.alert   = d.alert;
+        try { localStorage.setItem(STORAGE_KEY, JSON.stringify(currentUser)); } catch(e) {}
+
+        // 홈 화면이 보이는 중이면 즉시 반영
+        const home = document.getElementById('sec-home');
+        if (home && !home.classList.contains('hidden')) renderMyCoins();
+
+        // 변동 알림 — 본인 행동 직후(4초 내)면 중복 토스트 억제
+        if (delta !== 0 && Date.now() > _selfCoinChangeUntil) {
+            if (delta > 0) showToast(`🪙 상점! +${delta}냥 받았소 (총 ${d.coins}냥)`);
+            else           showToast(`🪙 벌점 ${delta}냥 (총 ${d.coins}냥)`);
+        }
+    });
+}
 
 /**
  * 홈 화면 렌더링
@@ -2376,34 +2445,10 @@ function loadHome() {
         if (nameEl) nameEl.textContent = currentUser.name;
         if (roleEl) roleEl.textContent = currentUser.role || '관원';
 
-        // 엽전 표시
-        const coins   = currentUser.coins   ?? 0;
-        const amnesty = currentUser.amnesty ?? 0;
-        const coinsEl = document.getElementById('my-coins');
-        if (coinsEl) {
-            coinsEl.textContent = `${coins}냥`;
-            coinsEl.style.color = 'var(--ink)';
-        }
-
-        // 사면장 버튼 영역 (엽전 카드 하단)
-        const btnArea   = document.getElementById('amnesty-btn-area');
-        const todayLate = currentUser.checkedIn === '지각';
-        let btns = '';
-        if (coins >= 30) {
-            btns += `<button onclick="buyAmnesty()"
-                style="background:var(--gold);color:white;border:none;border-radius:7px;
-                       padding:7px 12px;cursor:pointer;font-family:inherit;
-                       font-size:0.78rem;font-weight:700;width:100%;margin-top:2px;">
-                사면장 구매 (30냥)</button>`;
-        }
-        if (amnesty > 0 && todayLate) {
-            btns += `<button onclick="useAmnesty()"
-                style="background:var(--stone);color:var(--ink);border:none;border-radius:7px;
-                       padding:7px 12px;cursor:pointer;font-family:inherit;
-                       font-size:0.78rem;width:100%;margin-top:4px;">
-                사면장 사용</button>`;
-        }
-        if (btnArea) btnArea.innerHTML = btns;
+        // 엽전·사면장 표시 (실시간 갱신을 위해 함수로 분리)
+        renderMyCoins();
+        // 내 엽전 실시간 구독 시작 (상점/벌점/저잣거리 변동 즉시 반영)
+        startMyCoinWatch();
 
         document.querySelectorAll('.student-only').forEach(el => el.style.display = '');
         document.querySelectorAll('.teacher-only').forEach(el => el.style.display = 'none');
@@ -2855,6 +2900,7 @@ async function doCheckIn() {
         currentUser.checkedIn  = res.status;
         currentUser._savedDate = toDateStr();
         if (res.newCoins !== null && res.newCoins !== undefined) {
+            markSelfCoinChange();   // 지각 차감은 본인 행동 → 실시간 리스너 중복 토스트 억제
             currentUser.coins = res.newCoins;
         }
         localStorage.setItem(STORAGE_KEY, JSON.stringify(currentUser));
@@ -3118,6 +3164,7 @@ function savePlannerData() {
     // 100% 달성 & 이전 저장이 100%가 아닌 경우 → 프론트 알림
     const prevProgress = currentUser.todayPlanner?.progress ?? 0;
     if (progress === 100 && prevProgress < 100) {
+        markSelfCoinChange();   // 본인 행동 → 실시간 리스너 중복 토스트 억제
         setTimeout(() => showToast('🪙 +2냥! 플래너 100% 달성 엽전이 지급되었소.'), 1200);
         currentUser.coins = (currentUser.coins ?? 0) + 2;
         localStorage.setItem(STORAGE_KEY, JSON.stringify(currentUser));
@@ -3555,6 +3602,7 @@ async function grantPoint() {
    ========================================================= */
 async function buyAmnesty() {
     if (!confirm('엽전 30냥을 소모하여 사면장을 구매하시겠소?')) return;
+    markSelfCoinChange();   // 본인 행동 → 실시간 리스너 중복 토스트 억제
     const res = await callApi('buyAmnesty', { name: currentUser.name });
     currentUser.coins   = res.coins;
     currentUser.amnesty = res.amnesty;
@@ -3566,6 +3614,7 @@ async function buyAmnesty() {
 
 async function useAmnesty() {
     if (!confirm('사면장을 사용하여 오늘 지각을 취소하시겠소?')) return;
+    markSelfCoinChange();   // 본인 행동 → 실시간 리스너 중복 토스트 억제
     const res = await callApi('useAmnesty', { name: currentUser.name });
     currentUser.coins   = res.coins;
     currentUser.amnesty = res.amnesty;
@@ -7725,7 +7774,7 @@ async function updateTriggerPauseBadge() {
 ====================================================== -->
 <script type="module">
   import { initializeApp }            from "https://www.gstatic.com/firebasejs/12.12.1/firebase-app.js";
-  import { getFirestore, doc, getDoc,
+  import { getFirestore, doc, getDoc, onSnapshot,
            collection, getDocs,
            query, where }             from "https://www.gstatic.com/firebasejs/12.12.1/firebase-firestore.js";
 
@@ -7916,6 +7965,41 @@ async function updateTriggerPauseBadge() {
       console.warn('[FS] fsGetLegacyStats 실패 → GAS fallback:', e.message);
       return null;
     }
+  };
+
+  // ──────────────────────────────────────────────────────
+  // 5. 내 엽전 실시간 구독: members/{학번} onSnapshot
+  //    엽전 변동(상점/벌점/저잣거리 등)이 Firestore에 push되면 즉시 콜백
+  //    → 학생 화면에서 새로고침 없이 실시간 반영
+  // ──────────────────────────────────────────────────────
+  let _memberUnsub = null;
+
+  window.fsWatchMember = function(id, cb) {
+    // 기존 구독 해제 (중복 방지)
+    if (_memberUnsub) { try { _memberUnsub(); } catch(e) {} _memberUnsub = null; }
+    if (!id) return;
+    try {
+      _memberUnsub = onSnapshot(
+        doc(db, 'members', String(id).trim()),
+        function(snap) {
+          if (!snap.exists()) return;
+          const d = snap.data();
+          cb({
+            coins:   Number(d.coins)   || 0,
+            amnesty: Number(d.amnesty) || 0,
+            role:    d.role  || '관원',
+            dorm:    d.dorm === true || String(d.dorm).toUpperCase() === 'Y',
+            track:   d.track || '공무원',
+            alert:   d.alert || ''
+          });
+        },
+        function(err) { console.warn('[FS] member watch 오류:', err.message); }
+      );
+    } catch(e) { console.warn('[FS] fsWatchMember 실패:', e.message); }
+  };
+
+  window.fsUnwatchMember = function() {
+    if (_memberUnsub) { try { _memberUnsub(); } catch(e) {} _memberUnsub = null; }
   };
 
   console.log('[Firebase] Firestore 초기화 완료 — topclass-be740');
