@@ -599,6 +599,8 @@ input::placeholder, textarea::placeholder { color: #C4BDB6; }
         <div style="font-size:0.92rem; font-weight:800; color:#1B5E20; margin:0 0 8px;">➕ 획득</div>
         <div style="display:flex; flex-direction:column; gap:7px; margin-bottom:16px;">
             <div class="cg-row" style="display:flex; justify-content:space-between; gap:10px; background:#fff; border:1px solid #E8F0E8; border-radius:9px; padding:9px 12px;">
+                <span style="color:#333; font-size:0.9rem;">제시간 출석</span><b style="color:#1B5E20; white-space:nowrap;">+1냥</b></div>
+            <div class="cg-row" style="display:flex; justify-content:space-between; gap:10px; background:#fff; border:1px solid #E8F0E8; border-radius:9px; padding:9px 12px;">
                 <span style="color:#333; font-size:0.9rem;">플래너 100% 달성</span><b style="color:#1B5E20; white-space:nowrap;">+2냥</b></div>
             <div class="cg-row" style="display:flex; justify-content:space-between; gap:10px; background:#fff; border:1px solid #E8F0E8; border-radius:9px; padding:9px 12px;">
                 <span style="color:#333; font-size:0.9rem;">주간 개근 (월~금 모두 출석)</span><b style="color:#1B5E20; white-space:nowrap;">+5냥</b></div>
@@ -624,6 +626,62 @@ input::placeholder, textarea::placeholder { color: #C4BDB6; }
 
         <div style="background:rgba(201,166,107,0.13); border:1px solid var(--gold); border-radius:9px; padding:11px 12px; font-size:0.84rem; color:#5D4037; line-height:1.6;">
             🎟️ <b>사면장</b>: 30냥에 구매해 두면, 지각한 날 사용해 그날 지각 차감(−1냥)을 취소할 수 있어요.
+        </div>
+    </div>
+</div>
+
+<!-- 엽전 내역 수정 모달 (교사) -->
+<div id="pointedit-overlay" class="hidden"
+     style="position:fixed; inset:0; z-index:1000; background:rgba(0,0,0,0.45);
+            display:flex; align-items:center; justify-content:center; padding:20px;"
+     onclick="if(event.target===this) closePointEdit()">
+    <div style="background:var(--hanji); border-radius:16px; max-width:360px; width:100%;
+                padding:22px 20px; box-shadow:0 10px 40px rgba(0,0,0,0.3);">
+        <div style="font-family:'Nanum Myeongjo',serif; font-size:1.15rem; font-weight:800; color:var(--ink);">엽전 내역 수정</div>
+        <div id="pointedit-target" style="font-size:0.82rem; color:var(--muted); margin:4px 0 14px;"></div>
+        <label style="display:block; font-size:0.82rem; color:#555; margin-bottom:5px; font-weight:bold;">엽전 변동량 <span style="color:#999;font-weight:normal;">(음수=차감, 예: -2)</span></label>
+        <input id="pointedit-delta" type="number" inputmode="numeric"
+               style="width:100%; margin-bottom:12px; padding:10px; border:1px solid #ccc; border-radius:8px; font-family:inherit; box-sizing:border-box;">
+        <label style="display:block; font-size:0.82rem; color:#555; margin-bottom:5px; font-weight:bold;">사유</label>
+        <input id="pointedit-reason" type="text"
+               style="width:100%; margin-bottom:16px; padding:10px; border:1px solid #ccc; border-radius:8px; font-family:inherit; box-sizing:border-box;">
+        <div style="display:flex; gap:8px;">
+            <button onclick="closePointEdit()" style="flex:1; background:var(--stone); color:var(--ink); border:none; border-radius:9px; padding:11px; cursor:pointer; font-family:inherit; font-weight:600;">취소</button>
+            <button onclick="savePointEdit()" style="flex:1; background:var(--ink); color:white; border:none; border-radius:9px; padding:11px; cursor:pointer; font-family:inherit; font-weight:700;">저장</button>
+        </div>
+    </div>
+</div>
+
+<!-- 엽전 내역 수정요청 모달 (학생) -->
+<div id="editreq-overlay" class="hidden"
+     style="position:fixed; inset:0; z-index:1000; background:rgba(0,0,0,0.45);
+            display:flex; align-items:center; justify-content:center; padding:20px;"
+     onclick="if(event.target===this) closeEditRequest()">
+    <div style="background:var(--hanji); border-radius:16px; max-width:360px; width:100%;
+                padding:22px 20px; box-shadow:0 10px 40px rgba(0,0,0,0.3);">
+        <div style="font-family:'Nanum Myeongjo',serif; font-size:1.15rem; font-weight:800; color:var(--ink);">엽전 내역 수정요청</div>
+        <div id="editreq-target" style="font-size:0.82rem; color:var(--muted); margin:4px 0 14px;"></div>
+
+        <div style="display:flex; gap:8px; margin-bottom:12px;">
+            <button id="editreq-type-edit" onclick="setEditReqType('edit')"
+                    style="flex:1; padding:9px; border-radius:8px; border:2px solid var(--gold); background:#fff; color:var(--ink); font-family:inherit; font-weight:700; cursor:pointer;">금액 수정</button>
+            <button id="editreq-type-delete" onclick="setEditReqType('delete')"
+                    style="flex:1; padding:9px; border-radius:8px; border:2px solid #ddd; background:#fff; color:#777; font-family:inherit; font-weight:700; cursor:pointer;">취소(삭제)</button>
+        </div>
+
+        <div id="editreq-delta-wrap">
+            <label style="display:block; font-size:0.82rem; color:#555; margin-bottom:5px; font-weight:bold;">올바른 엽전 변동량은?</label>
+            <input id="editreq-delta" type="number" inputmode="numeric" placeholder="예: 0 또는 -1"
+                   style="width:100%; margin-bottom:12px; padding:10px; border:1px solid #ccc; border-radius:8px; font-family:inherit; box-sizing:border-box;">
+        </div>
+
+        <label style="display:block; font-size:0.82rem; color:#555; margin-bottom:5px; font-weight:bold;">사유 (왜 수정이 필요한가요?)</label>
+        <textarea id="editreq-note" rows="3" placeholder="예: 그날 병결 처리됐는데 결석으로 차감됐어요"
+                  style="width:100%; margin-bottom:16px; padding:10px; border:1px solid #ccc; border-radius:8px; font-family:inherit; box-sizing:border-box; resize:vertical;"></textarea>
+
+        <div style="display:flex; gap:8px;">
+            <button onclick="closeEditRequest()" style="flex:1; background:var(--stone); color:var(--ink); border:none; border-radius:9px; padding:11px; cursor:pointer; font-family:inherit; font-weight:600;">취소</button>
+            <button onclick="submitEditRequest()" style="flex:1; background:var(--ink); color:white; border:none; border-radius:9px; padding:11px; cursor:pointer; font-family:inherit; font-weight:700;">요청 보내기</button>
         </div>
     </div>
 </div>
@@ -2967,7 +3025,7 @@ async function doCheckIn() {
         if (res.status === '지각') {
             showToast(`[${res.time}] 지각 확인. -1냥 차감되었습니다.`);
         } else {
-            showToast(`[${res.time}] 출석 확인되었습니다.`);
+            showToast(`[${res.time}] 출석 확인! 🪙 +1냥 지급되었습니다.`);
         }
         loadHome();
 
@@ -3355,10 +3413,11 @@ async function openPointLog(tab) {
     if (currentUser.role === 'teacher') {
         const activeTab = tab || 'log';
         tabsDiv.innerHTML = `
-            <button onclick="openPointLog('log')"     style="${tabStyle('log',     activeTab)}">📋 기록</button>
-            <button onclick="openPointLog('grant')"   style="${tabStyle('grant',   activeTab)}">✏️ 엽전<br>부여</button>
-            <button onclick="openPointLog('status')"  style="${tabStyle('status',  activeTab)}">🪙 현황</button>
-            <button onclick="openAbsence()"           style="${tabStyle('absence', activeTab)}">📋 결석<br>사유</button>`;
+            <button onclick="openPointLog('log')"      style="${tabStyle('log',      activeTab)}">📋 기록</button>
+            <button onclick="openPointLog('grant')"    style="${tabStyle('grant',    activeTab)}">✏️ 엽전<br>부여</button>
+            <button onclick="openPointLog('requests')" style="${tabStyle('requests', activeTab)}">📨 수정<br>요청</button>
+            <button onclick="openPointLog('status')"   style="${tabStyle('status',   activeTab)}">🪙 현황</button>
+            <button onclick="openAbsence()"            style="${tabStyle('absence',  activeTab)}">📋 결석<br>사유</button>`;
         listDiv.innerHTML = '<p style="text-align:center;color:#999;">불러오는 중...</p>';
 
         if (activeTab === 'log') {
@@ -3512,6 +3571,39 @@ async function openPointLog(tab) {
                     </div>`;
                 listDiv.appendChild(div);
             });
+
+        } else if (activeTab === 'requests') {
+            const reqs = await callApi('getPointEditRequests', {});
+            listDiv.innerHTML = '';
+            if (!reqs || reqs.length === 0) {
+                listDiv.innerHTML = '<p style="text-align:center;color:#999;">대기 중인 수정요청이 없습니다.</p>';
+                return;
+            }
+            reqs.forEach(req => {
+                const origStr = `${(req.origDelta>=0?'+':'')}${req.origDelta}냥`;
+                const wantStr = req.type === 'delete'
+                    ? '<b style="color:#C62828;">취소(삭제) 요청</b>'
+                    : `<b style="color:#1565C0;">→ ${(req.newDelta>=0?'+':'')}${req.newDelta}냥으로 수정 요청</b>`;
+                const div = document.createElement('div');
+                div.className = 'card';
+                div.style.marginBottom = '8px';
+                div.innerHTML = `
+                    <div style="font-size:0.78rem;color:var(--muted);">${req.requestAt} · ${req.name}</div>
+                    <div style="margin-top:5px;font-size:0.9rem;">
+                        원기록: <span style="color:#555;">${req.origDate} · ${req.origReason} · ${origStr}</span>
+                    </div>
+                    <div style="margin-top:3px;font-size:0.9rem;">${wantStr}</div>
+                    <div style="margin-top:6px;background:rgba(201,166,107,0.12);border-radius:7px;padding:8px 10px;font-size:0.86rem;color:#5D4037;">
+                        “${req.note}”
+                    </div>
+                    <div style="display:flex;gap:6px;margin-top:10px;">
+                        <button onclick="resolveEditRequest(${req.row}, true)"
+                                style="flex:1;background:#2E7D32;color:white;border:none;border-radius:7px;padding:8px;cursor:pointer;font-family:inherit;font-weight:700;font-size:0.85rem;">승인(반영)</button>
+                        <button onclick="resolveEditRequest(${req.row}, false)"
+                                style="flex:1;background:rgba(198,40,40,0.08);color:#C62828;border:1px solid rgba(198,40,40,0.3);border-radius:7px;padding:8px;cursor:pointer;font-family:inherit;font-weight:700;font-size:0.85rem;">반려</button>
+                    </div>`;
+                listDiv.appendChild(div);
+            });
         }
 
     } else {
@@ -3519,12 +3611,15 @@ async function openPointLog(tab) {
         tabsDiv.innerHTML = '';
         listDiv.innerHTML = '<p style="text-align:center;color:#999;">불러오는 중...</p>';
         const logs = await callApi('getMyPointLog', { name: currentUser.name });
+        window._myPointLogs = logs || [];
         listDiv.innerHTML = '';
         if (!logs || logs.length === 0) {
             listDiv.innerHTML = '<p style="text-align:center;color:#999;">기록이 없습니다.</p>';
             return;
         }
-        logs.forEach(log => {
+        listDiv.insertAdjacentHTML('beforeend',
+            '<p style="text-align:center;font-size:0.8rem;color:#aaa;margin:0 0 8px;">잘못된 기록이 있으면 “수정 요청”으로 선생님께 알릴 수 있어요.</p>');
+        logs.forEach((log, idx) => {
             const delta     = Number(log.delta) || 0;
             const isPlus    = delta >= 0;
             const isPending = log.status === '대기';
@@ -3546,10 +3641,60 @@ async function openPointLog(tab) {
                             ${isPending ? '⏳ 대기' : '✅ 완료'}
                         </div>
                     </div>
-                </div>`;
+                </div>
+                <button onclick="openEditRequest(${idx})"
+                        style="width:100%;margin-top:8px;background:rgba(44,44,44,0.06);border:1px solid var(--stone);
+                               color:var(--muted);border-radius:7px;padding:6px;cursor:pointer;
+                               font-family:inherit;font-size:0.8rem;">✏️ 수정 요청</button>`;
             listDiv.appendChild(div);
         });
     }
+}
+
+/* ── 학생: 엽전내역 수정요청 모달 ── */
+let _editReqCtx = null;   // { origDate, origDelta, origReason }
+let _editReqType = 'edit';
+
+function openEditRequest(idx) {
+    const log = (window._myPointLogs || [])[idx];
+    if (!log) return;
+    _editReqCtx = { origDate: log.date, origDelta: Number(log.delta) || 0, origReason: log.reason || '' };
+    document.getElementById('editreq-target').textContent =
+        `${log.date} · ${log.reason} · ${(Number(log.delta)||0) >= 0 ? '+' : ''}${Number(log.delta)||0}냥`;
+    document.getElementById('editreq-delta').value = '';
+    document.getElementById('editreq-note').value  = '';
+    setEditReqType('edit');
+    document.getElementById('editreq-overlay').classList.remove('hidden');
+}
+function closeEditRequest() { document.getElementById('editreq-overlay').classList.add('hidden'); }
+function setEditReqType(t) {
+    _editReqType = t;
+    const eb = document.getElementById('editreq-type-edit');
+    const db = document.getElementById('editreq-type-delete');
+    const on  = '2px solid var(--gold)', off = '2px solid #ddd';
+    eb.style.border = t==='edit'   ? on : off; eb.style.color = t==='edit'   ? 'var(--ink)' : '#777';
+    db.style.border = t==='delete' ? on : off; db.style.color = t==='delete' ? 'var(--ink)' : '#777';
+    document.getElementById('editreq-delta-wrap').style.display = t==='edit' ? 'block' : 'none';
+}
+async function submitEditRequest() {
+    if (!_editReqCtx) return;
+    const note = document.getElementById('editreq-note').value.trim();
+    if (!note) return showToast('수정이 필요한 사유를 적어주세요.');
+    const payload = {
+        name: currentUser.name,
+        origDate: _editReqCtx.origDate, origDelta: _editReqCtx.origDelta, origReason: _editReqCtx.origReason,
+        type: _editReqType, note
+    };
+    if (_editReqType === 'edit') {
+        const d = Number(document.getElementById('editreq-delta').value);
+        if (isNaN(d)) return showToast('올바른 엽전 변동량을 입력해주세요.');
+        payload.newDelta = d;
+    }
+    closeEditRequest();
+    try {
+        await callApi('requestPointEdit', payload);
+        showToast('📨 수정요청을 보냈어요. 선생님 승인을 기다려주세요.');
+    } catch(e) { showToast('요청 실패: ' + (e.message || '')); }
 }
 
 /* PointLog 체크박스 전체 선택 */
@@ -3586,42 +3731,60 @@ async function bulkDeletePointLogs() {
     if (checked.length === 0) return;
     if (!confirm(`선택한 ${checked.length}개의 기록을 삭제하시겠습니까?\n엽전 변동량도 모두 복원됩니다.`)) return;
 
-    // 행 번호가 큰 것부터 삭제 (작은 행부터 삭제하면 행 번호가 밀림)
-    const items = checked
-        .map(cb => ({ row: Number(cb.dataset.row), name: cb.dataset.name }))
-        .sort((a, b) => b.row - a.row);
+    const rows = checked.map(cb => Number(cb.dataset.row));
 
-    showToast(`${items.length}개 삭제 중...`);
-    let success = 0;
-    for (const item of items) {
-        try {
-            await callApi('deletePointLog', { row: item.row, name: item.name });
-            success++;
-        } catch(e) {
-            console.error('[bulkDelete] row:', item.row, e.message);
-        }
+    showToast(`${rows.length}개 삭제 중...`);
+    try {
+        // ★ 한 번의 호출로 일괄 처리 (이전: 항목마다 GAS 왕복 → 매우 느림)
+        const res = await callApi('deletePointLogBatch', { rows });
+        AppCache.invalidate('getAdminPointLog', {});
+        AppCache.invalidate('getAllMemberPoints', {});
+        showToast(`${(res && res.deleted) || rows.length}개 삭제 완료.`);
+    } catch(e) {
+        showToast('삭제 중 오류: ' + (e.message || ''));
     }
-
-    AppCache.invalidate('getAdminPointLog', {});
-    AppCache.invalidate('getAllMemberPoints', {});
-    showToast(`${success}개 삭제 완료.`);
     openPointLog('log');
 }
 
-/* PointLog 수정 */
-async function editPointLog(row, name, currentDelta, currentReason) {
-    const newReason = prompt(`사유 수정 (${name})`, currentReason);
-    if (newReason === null) return;
-    const newDeltaStr = prompt(`엽전 변동량 수정 (현재: ${currentDelta})`, currentDelta);
-    if (newDeltaStr === null) return;
-    const newDelta = Number(newDeltaStr);
-    if (isNaN(newDelta)) return showToast('올바른 숫자를 입력해주세요.');
-    await callApi('editPointLog', { row, delta: newDelta, reason: newReason, actor: currentUser.name });
+/* PointLog 수정 — 모달로 엽전 변동량 + 사유 함께 편집 */
+let _editingPoint = null;
+function editPointLog(row, name, currentDelta, currentReason) {
+    _editingPoint = { row, name };
+    document.getElementById('pointedit-target').textContent =
+        `${name} · 현재 ${currentDelta >= 0 ? '+' : ''}${currentDelta}냥`;
+    document.getElementById('pointedit-delta').value  = currentDelta;
+    document.getElementById('pointedit-reason').value = currentReason;
+    document.getElementById('pointedit-overlay').classList.remove('hidden');
+}
+function closePointEdit() { document.getElementById('pointedit-overlay').classList.add('hidden'); }
+async function savePointEdit() {
+    if (!_editingPoint) return;
+    const delta  = Number(document.getElementById('pointedit-delta').value);
+    const reason = document.getElementById('pointedit-reason').value.trim();
+    if (isNaN(delta)) return showToast('엽전 변동량을 숫자로 입력해주세요.');
+    if (!reason)      return showToast('사유를 입력해주세요.');
+    const { row, name } = _editingPoint;
+    closePointEdit();
+    await callApi('editPointLog', { row, delta, reason, actor: currentUser.name });
     AppCache.invalidate('getAdminPointLog', {});
     AppCache.invalidate('getAllMemberPoints', {});
     AppCache.invalidate('getMyPointLog', { name });
     showToast('수정되었습니다.');
     openPointLog('log');
+}
+
+/* 학생 수정요청 승인/반려 (교사) */
+async function resolveEditRequest(row, approve) {
+    if (!confirm(approve ? '이 수정요청을 승인하고 엽전에 반영하시겠소?' : '이 수정요청을 반려하시겠소?')) return;
+    try {
+        await callApi('resolvePointEditRequest', { row, approve });
+        AppCache.invalidate('getAllMemberPoints', {});
+        AppCache.invalidate('getAdminPointLog', {});
+        showToast(approve ? '승인 처리되어 엽전에 반영했소.' : '반려 처리했소.');
+        openPointLog('requests');
+    } catch(e) {
+        showToast('처리 실패: ' + (e.message || ''));
+    }
 }
 
 /* PointLog 삭제 */
