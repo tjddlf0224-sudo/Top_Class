@@ -686,6 +686,64 @@ input::placeholder, textarea::placeholder { color: #C4BDB6; }
     </div>
 </div>
 
+<!-- 방과후: 날짜 상세 모달 -->
+<div id="asday-overlay" class="hidden"
+     style="position:fixed; inset:0; z-index:1000; background:rgba(0,0,0,0.45);
+            display:flex; align-items:center; justify-content:center; padding:20px;"
+     onclick="if(event.target===this) asCloseDay()">
+    <div style="background:var(--hanji); border-radius:16px; max-width:380px; width:100%; max-height:82vh; overflow-y:auto; padding:20px; box-shadow:0 10px 40px rgba(0,0,0,0.3);">
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;">
+            <div id="asday-title" style="font-family:'Nanum Myeongjo',serif; font-size:1.15rem; font-weight:800; color:var(--ink);"></div>
+            <button onclick="asCloseDay()" style="background:none; border:none; font-size:1.4rem; cursor:pointer; color:var(--muted); padding:2px 6px;">×</button>
+        </div>
+        <div id="asday-content"></div>
+        <button id="asday-add-btn" onclick="asOpenForm('date')" style="display:none; width:100%; margin-top:12px; background:var(--ink); color:white; border:none; border-radius:9px; padding:11px; cursor:pointer; font-family:inherit; font-weight:700;">+ 이 날짜에 수업 추가</button>
+    </div>
+</div>
+
+<!-- 방과후: 수업 입력 폼 모달 -->
+<div id="asform-overlay" class="hidden"
+     style="position:fixed; inset:0; z-index:1001; background:rgba(0,0,0,0.45);
+            display:flex; align-items:center; justify-content:center; padding:20px;"
+     onclick="if(event.target===this) asCloseForm()">
+    <div style="background:var(--hanji); border-radius:16px; max-width:360px; width:100%; max-height:85vh; overflow-y:auto; padding:20px; box-shadow:0 10px 40px rgba(0,0,0,0.3);">
+        <div id="asform-title" style="font-family:'Nanum Myeongjo',serif; font-size:1.15rem; font-weight:800; color:var(--ink); margin-bottom:14px;">수업 추가</div>
+
+        <div id="asform-when" style="font-size:0.85rem; color:var(--muted); margin-bottom:10px;"></div>
+
+        <div style="display:flex; gap:8px; margin-bottom:12px;">
+            <input id="asform-start" type="time" style="flex:1; padding:9px; border:1px solid #ccc; border-radius:8px; font-family:inherit;">
+            <span style="align-self:center; color:#999;">~</span>
+            <input id="asform-end" type="time" style="flex:1; padding:9px; border:1px solid #ccc; border-radius:8px; font-family:inherit;">
+        </div>
+        <input id="asform-subject" type="text" placeholder="과목명 (예: 방과후_국어)" style="width:100%; margin-bottom:8px; padding:10px; border:1px solid #ccc; border-radius:8px; font-family:inherit; box-sizing:border-box;">
+        <input id="asform-teacher" type="text" placeholder="강사명" style="width:100%; margin-bottom:8px; padding:10px; border:1px solid #ccc; border-radius:8px; font-family:inherit; box-sizing:border-box;">
+        <input id="asform-place" type="text" placeholder="장소 (예: 컴퓨터실)" style="width:100%; margin-bottom:8px; padding:10px; border:1px solid #ccc; border-radius:8px; font-family:inherit; box-sizing:border-box;">
+        <input id="asform-note" type="text" placeholder="비고 (선택)" style="width:100%; margin-bottom:16px; padding:10px; border:1px solid #ccc; border-radius:8px; font-family:inherit; box-sizing:border-box;">
+
+        <div style="display:flex; gap:8px;">
+            <button onclick="asCloseForm()" style="flex:1; background:var(--stone); color:var(--ink); border:none; border-radius:9px; padding:11px; cursor:pointer; font-family:inherit; font-weight:600;">취소</button>
+            <button onclick="asSaveForm()" style="flex:2; background:var(--ink); color:white; border:none; border-radius:9px; padding:11px; cursor:pointer; font-family:inherit; font-weight:700;">저장</button>
+        </div>
+    </div>
+</div>
+
+<!-- 방과후: 매주 반복 수업 관리 모달 -->
+<div id="asweekly-overlay" class="hidden"
+     style="position:fixed; inset:0; z-index:1000; background:rgba(0,0,0,0.45);
+            display:flex; align-items:center; justify-content:center; padding:20px;"
+     onclick="if(event.target===this) asCloseWeekly()">
+    <div style="background:var(--hanji); border-radius:16px; max-width:380px; width:100%; max-height:82vh; overflow-y:auto; padding:20px; box-shadow:0 10px 40px rgba(0,0,0,0.3);">
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:6px;">
+            <div style="font-family:'Nanum Myeongjo',serif; font-size:1.15rem; font-weight:800; color:var(--ink);">🔁 매주 반복 수업</div>
+            <button onclick="asCloseWeekly()" style="background:none; border:none; font-size:1.4rem; cursor:pointer; color:var(--muted); padding:2px 6px;">×</button>
+        </div>
+        <div style="font-size:0.8rem; color:var(--muted); margin-bottom:12px;">매주 같은 요일·시간에 반복되는 수업입니다.</div>
+        <div id="asweekly-content"></div>
+        <button onclick="asOpenForm('weekly')" style="width:100%; margin-top:12px; background:var(--ink); color:white; border:none; border-radius:9px; padding:11px; cursor:pointer; font-family:inherit; font-weight:700;">+ 반복 수업 추가</button>
+    </div>
+</div>
+
 <!-- 백그라운드 저장 상태 표시기 (③ Optimistic UI) -->
 <div id="bg-status"></div>
 
@@ -714,6 +772,21 @@ input::placeholder, textarea::placeholder { color: #C4BDB6; }
                 onclick="handleLogin()">
                 입실하기 &nbsp;→
             </button>
+
+            <!-- 방과후 강사 로그인 -->
+            <div id="instructor-login-wrap" style="margin-top:18px;">
+                <div id="instructor-login-toggle" onclick="toggleInstructorLogin()"
+                     style="text-align:center; font-size:0.82rem; color:rgba(44,44,44,0.55); cursor:pointer; text-decoration:underline;">
+                    👩‍🏫 방과후 강사 로그인
+                </div>
+                <div id="instructor-login-form" class="hidden" style="margin-top:12px;">
+                    <input type="text" id="inst-name" placeholder="성함"
+                        style="background:rgba(255,252,246,0.55); border:1px solid rgba(180,160,130,0.4); border-radius:10px; margin-bottom:10px;">
+                    <input type="text" id="inst-phone" placeholder="전화번호 뒷 4자리" maxlength="4" inputmode="numeric"
+                        style="background:rgba(255,252,246,0.55); border:1px solid rgba(180,160,130,0.4); border-radius:10px; margin-bottom:12px;">
+                    <button class="btn" style="background:#5D6D7E; border-radius:12px;" onclick="instructorLogin()">강사 입실 → 방과후 시간표</button>
+                </div>
+            </div>
         </div>
     </section>
 
@@ -799,6 +872,15 @@ input::placeholder, textarea::placeholder { color: #C4BDB6; }
                     🪙 엽전 받는 법 · 차감 기준 보기
                 </button>
             </div>
+
+            <!-- 방과후 시간표 바로가기 (학생·교사 공통) -->
+            <button onclick="openAfterSchool()"
+                    style="width:100%; margin-bottom:12px; background:rgba(248,245,240,0.18);
+                           border:1px solid rgba(233,230,225,0.35); border-radius:14px; padding:14px;
+                           backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px);
+                           cursor:pointer; font-family:inherit; font-size:0.92rem; font-weight:700; color:var(--ink);">
+                📅 방과후 시간표
+            </button>
 
             <!-- 교사: 학생 빠른 조회 -->
             <div id="card-student-quick" class="teacher-only"
@@ -1214,6 +1296,49 @@ input::placeholder, textarea::placeholder { color: #C4BDB6; }
 
             <button class="btn btn-outline" style="margin-top:20px;"
                     onclick="showSection('sec-home')">뒤로 가기</button>
+        </div>
+    </section>
+
+    <!-- =====================================================
+         [화면] 방과후 시간표 (#sec-afterschool)  — 월 달력
+    ====================================================== -->
+    <section id="sec-afterschool" class="hidden"
+             style="position:relative; background:var(--hanji); height:calc(var(--vh, 1vh) * 100);
+                    max-height:calc(var(--vh, 1vh) * 100); display:flex; flex-direction:column;">
+        <div style="display:flex; align-items:center; justify-content:center;
+                    padding:calc(env(safe-area-inset-top) + 14px) 20px 8px; flex-shrink:0;">
+            <button id="as-back-btn" onclick="asBack()"
+                    style="position:absolute; left:16px; background:none; border:none; cursor:pointer; padding:4px; display:flex; align-items:center; color:var(--ink);">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
+            </button>
+            <div style="font-family:'Nanum Myeongjo',serif; font-size:1.1rem; font-weight:800; letter-spacing:3px; color:var(--ink);">방과후 시간표</div>
+        </div>
+
+        <!-- 월 네비게이션 -->
+        <div style="display:flex; align-items:center; justify-content:center; gap:18px; padding:6px 16px; flex-shrink:0;">
+            <button onclick="asChangeMonth(-1)" style="background:none; border:none; cursor:pointer; font-size:1.3rem; color:var(--ink); padding:4px 10px;">‹</button>
+            <div id="as-month-label" style="font-family:'Nanum Myeongjo',serif; font-size:1.05rem; font-weight:700; color:var(--ink); min-width:120px; text-align:center;">—</div>
+            <button onclick="asChangeMonth(1)" style="background:none; border:none; cursor:pointer; font-size:1.3rem; color:var(--ink); padding:4px 10px;">›</button>
+        </div>
+
+        <!-- 요일 헤더 -->
+        <div style="display:grid; grid-template-columns:repeat(7,1fr); padding:4px 8px 0; flex-shrink:0;">
+            <div style="text-align:center; font-size:0.72rem; font-weight:700; color:#C62828;">일</div>
+            <div style="text-align:center; font-size:0.72rem; font-weight:700; color:var(--muted);">월</div>
+            <div style="text-align:center; font-size:0.72rem; font-weight:700; color:var(--muted);">화</div>
+            <div style="text-align:center; font-size:0.72rem; font-weight:700; color:var(--muted);">수</div>
+            <div style="text-align:center; font-size:0.72rem; font-weight:700; color:var(--muted);">목</div>
+            <div style="text-align:center; font-size:0.72rem; font-weight:700; color:var(--muted);">금</div>
+            <div style="text-align:center; font-size:0.72rem; font-weight:700; color:#1565C0;">토</div>
+        </div>
+
+        <!-- 달력 그리드 -->
+        <div id="as-grid" style="flex:1; overflow-y:auto; display:grid; grid-template-columns:repeat(7,1fr);
+                    grid-auto-rows:minmax(64px,auto); gap:2px; padding:4px 8px 12px;"></div>
+
+        <!-- 교사 전용 도구 -->
+        <div id="as-teacher-tools" style="display:none; padding:8px 16px calc(env(safe-area-inset-bottom) + 10px); flex-shrink:0; border-top:1px solid var(--stone);">
+            <button class="btn" style="width:100%; background:#5D6D7E;" onclick="asOpenWeekly()">🔁 매주 반복 수업 관리</button>
         </div>
     </section>
 
@@ -2286,6 +2411,261 @@ function showToast(msg, duration = 2200) {
 function showCoinGuide()  { document.getElementById('coin-guide-overlay').classList.remove('hidden'); }
 function closeCoinGuide() { document.getElementById('coin-guide-overlay').classList.add('hidden'); }
 
+/* =========================================================
+   방과후 시간표 (월 달력)
+   ========================================================= */
+const AS_WEEKDAYS = ['일','월','화','수','목','금','토'];
+let asYear, asMonth, asData = { weekly: [], exceptions: [] };
+let asSelectedDate = null, asDayItems = [];
+let asFormMode = 'date', asFormId = null;
+
+function asPad2(n) { return String(n).padStart(2, '0'); }
+
+async function openAfterSchool() {
+    showSection('sec-afterschool');
+    const isT = currentUser && currentUser.role === 'teacher';
+    document.getElementById('as-teacher-tools').style.display = isT ? 'block' : 'none';
+    const t = new Date(); asYear = t.getFullYear(); asMonth = t.getMonth();
+    // 1) GAS로 즉시 로드
+    try { asData = await callApi('getAfterSchool', {}) || { weekly: [], exceptions: [] }; }
+    catch(e) { asData = { weekly: [], exceptions: [] }; }
+    renderMonth();
+    // 2) 실시간 구독 — 교사가 수정하면 강사·학생 화면에 즉시 반영
+    if (typeof window.fsWatchAfterSchool === 'function') {
+        window.fsWatchAfterSchool(function(d) {
+            asData = d || { weekly: [], exceptions: [] };
+            const sec = document.getElementById('sec-afterschool');
+            if (sec && !sec.classList.contains('hidden')) renderMonth();
+        });
+    }
+}
+
+function asBack() {
+    if (typeof window.fsUnwatchAfterSchool === 'function') window.fsUnwatchAfterSchool();
+    if (currentUser && currentUser.role === 'instructor') logout();
+    else showSection('sec-home');
+}
+
+function asChangeMonth(delta) {
+    asMonth += delta;
+    if (asMonth < 0)  { asMonth = 11; asYear--; }
+    if (asMonth > 11) { asMonth = 0;  asYear++; }
+    renderMonth();
+}
+
+/** 특정 날짜의 수업 = 그 요일 반복수업(휴강 반영) + 그 날짜 특강 */
+function asResolveDay(y, m, d) {
+    const wd = AS_WEEKDAYS[new Date(y, m, d).getDay()];
+    const ds = `${y}-${asPad2(m + 1)}-${asPad2(d)}`;
+    const cancels = (asData.exceptions || []).filter(e => e.date === ds && e.type === '휴강');
+    let items = (asData.weekly || []).filter(c => c.day === wd).map(c => {
+        const cc = cancels.find(x => x.subject === c.subject && (!x.start || x.start === c.start));
+        return { start: c.start, end: c.end, subject: c.subject, teacher: c.teacher, place: c.place,
+                 note: c.note, kind: 'weekly', cancelled: !!cc, exId: cc ? cc.id : null };
+    });
+    (asData.exceptions || []).filter(e => e.date === ds && e.type === '특강').forEach(e => {
+        items.push({ start: e.start, end: e.end, subject: e.subject, teacher: e.teacher, place: e.place,
+                     note: e.note, kind: 'date', id: e.id, cancelled: false });
+    });
+    items.sort((a, b) => (a.start || '').localeCompare(b.start || ''));
+    return { dateStr: ds, weekday: wd, items };
+}
+
+function renderMonth() {
+    const label = document.getElementById('as-month-label');
+    if (label) label.textContent = `${asYear}년 ${asMonth + 1}월`;
+    const grid = document.getElementById('as-grid');
+    if (!grid) return;
+    const firstDow = new Date(asYear, asMonth, 1).getDay();
+    const days     = new Date(asYear, asMonth + 1, 0).getDate();
+    const today = new Date();
+    const tY = today.getFullYear(), tM = today.getMonth(), tD = today.getDate();
+
+    let html = '';
+    for (let i = 0; i < firstDow; i++) html += '<div></div>';
+    for (let d = 1; d <= days; d++) {
+        const r = asResolveDay(asYear, asMonth, d);
+        const dow = new Date(asYear, asMonth, d).getDay();
+        const isToday = (asYear === tY && asMonth === tM && d === tD);
+        const numColor = dow === 0 ? '#C62828' : dow === 6 ? '#1565C0' : 'var(--ink)';
+        let chips = r.items.slice(0, 3).map(it =>
+            `<div style="font-size:0.6rem;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+                  color:${it.cancelled ? '#bbb' : '#5D4037'};${it.cancelled ? 'text-decoration:line-through;' : ''}">${it.subject}</div>`
+        ).join('');
+        if (r.items.length > 3) chips += `<div style="font-size:0.58rem;color:#999;">+${r.items.length - 3}</div>`;
+        html += `<div onclick="asOpenDay(${asYear},${asMonth},${d})"
+            style="border:1px solid ${isToday ? 'var(--gold)' : 'rgba(233,230,225,0.6)'};border-radius:6px;padding:3px 4px;
+                   background:${isToday ? 'rgba(201,166,107,0.12)' : 'rgba(255,255,255,0.4)'};cursor:pointer;overflow:hidden;min-width:0;">
+            <div style="font-size:0.72rem;font-weight:700;color:${numColor};">${d}</div>${chips}</div>`;
+    }
+    grid.innerHTML = html;
+}
+
+function asOpenDay(y, m, d) {
+    const r = asResolveDay(y, m, d);
+    asSelectedDate = r.dateStr;
+    asDayItems = r.items;
+    document.getElementById('asday-title').textContent = `${m + 1}월 ${d}일 (${r.weekday})`;
+    const isT = currentUser && currentUser.role === 'teacher';
+    const content = document.getElementById('asday-content');
+    if (!r.items.length) {
+        content.innerHTML = '<p style="color:#999;text-align:center;padding:10px 0;">수업이 없습니다.</p>';
+    } else {
+        content.innerHTML = r.items.map((it, idx) => {
+            const time = (it.start || '') + (it.end ? '~' + it.end : '');
+            const tag  = it.kind === 'date' ? '<span style="font-size:0.68rem;background:#E3F2FD;color:#1565C0;border-radius:4px;padding:1px 5px;margin-left:5px;">이날만</span>' : '';
+            let ctrl = '';
+            if (isT) {
+                if (it.kind === 'weekly' && !it.cancelled)
+                    ctrl = `<button onclick="asCancelDate(${idx})" style="background:rgba(198,40,40,0.08);color:#C62828;border:1px solid rgba(198,40,40,0.3);border-radius:6px;padding:5px 10px;cursor:pointer;font-size:0.78rem;">이 날 휴강</button>`;
+                else if (it.kind === 'weekly' && it.cancelled)
+                    ctrl = `<button onclick="asDelExceptionIdx(${idx})" style="background:rgba(46,125,50,0.08);color:#2E7D32;border:1px solid rgba(46,125,50,0.3);border-radius:6px;padding:5px 10px;cursor:pointer;font-size:0.78rem;">휴강 취소</button>`;
+                else if (it.kind === 'date')
+                    ctrl = `<button onclick="asDelExceptionIdx(${idx})" style="background:rgba(198,40,40,0.08);color:#C62828;border:1px solid rgba(198,40,40,0.3);border-radius:6px;padding:5px 10px;cursor:pointer;font-size:0.78rem;">삭제</button>`;
+            }
+            return `<div style="background:#fff;border:1px solid var(--stone);border-radius:9px;padding:10px 12px;margin-bottom:6px;${it.cancelled ? 'opacity:0.55;' : ''}">
+                <div style="display:flex;justify-content:space-between;align-items:center;">
+                    <div style="min-width:0;">
+                        <div style="font-size:0.78rem;color:var(--muted);">${time}${tag}</div>
+                        <div style="font-weight:700;${it.cancelled ? 'text-decoration:line-through;' : ''}">${it.subject}${it.cancelled ? ' (휴강)' : ''}</div>
+                        <div style="font-size:0.82rem;color:var(--muted);">${it.teacher || ''}${it.place ? ' · ' + it.place : ''}</div>
+                    </div>
+                    ${ctrl}
+                </div></div>`;
+        }).join('');
+    }
+    document.getElementById('asday-add-btn').style.display = isT ? 'block' : 'none';
+    document.getElementById('asday-overlay').classList.remove('hidden');
+}
+function asCloseDay() { document.getElementById('asday-overlay').classList.add('hidden'); }
+
+/** 편집 후 최신 데이터 재조회 + 화면 갱신 */
+async function asReload(reopenDate) {
+    try { asData = await callApi('getAfterSchool', {}) || { weekly: [], exceptions: [] }; } catch(e) {}
+    renderMonth();
+    if (reopenDate) { const p = reopenDate.split('-').map(Number); asOpenDay(p[0], p[1] - 1, p[2]); }
+}
+
+async function asCancelDate(idx) {
+    const it = asDayItems[idx]; if (!it) return;
+    if (!confirm(`${asSelectedDate} '${it.subject}' 수업을 이 날 휴강 처리하시겠소?`)) return;
+    try { await callApi('saveAfterSchoolException', { date: asSelectedDate, type: '휴강', subject: it.subject, start: it.start }); }
+    catch(e) { return showToast('실패: ' + (e.message || '')); }
+    showToast('휴강 처리했습니다.');
+    asReload(asSelectedDate);
+}
+
+async function asDelExceptionIdx(idx) {
+    const it = asDayItems[idx]; if (!it) return;
+    const id = it.exId || it.id; if (!id) return;
+    if (!confirm(it.cancelled ? '휴강을 취소(되살리기)하시겠소?' : '이 수업을 삭제하시겠소?')) return;
+    try { await callApi('deleteAfterSchoolException', { id }); }
+    catch(e) { return showToast('실패: ' + (e.message || '')); }
+    showToast(it.cancelled ? '휴강을 취소했습니다.' : '삭제했습니다.');
+    asReload(asSelectedDate);
+}
+
+/* 수업 입력 폼 */
+function asOpenForm(mode, existing) {
+    asFormMode = mode; asFormId = existing ? existing.id : null;
+    document.getElementById('asform-title').textContent = existing ? '수업 수정' : (mode === 'weekly' ? '반복 수업 추가' : '수업 추가');
+    const when = document.getElementById('asform-when');
+    if (mode === 'weekly') {
+        when.innerHTML = '요일 <select id="asform-day" style="padding:8px;border:1px solid #ccc;border-radius:8px;font-family:inherit;margin-left:6px;">' +
+            ['월','화','수','목','금','토','일'].map(dd => `<option ${existing && existing.day === dd ? 'selected' : ''}>${dd}</option>`).join('') + '</select>';
+    } else {
+        when.textContent = `📅 ${asSelectedDate}`;
+    }
+    document.getElementById('asform-start').value   = existing ? (existing.start || '')   : '';
+    document.getElementById('asform-end').value     = existing ? (existing.end || '')     : '';
+    document.getElementById('asform-subject').value = existing ? (existing.subject || '') : '';
+    document.getElementById('asform-teacher').value = existing ? (existing.teacher || '') : '';
+    document.getElementById('asform-place').value   = existing ? (existing.place || '')   : '';
+    document.getElementById('asform-note').value    = existing ? (existing.note || '')    : '';
+    document.getElementById('asform-overlay').classList.remove('hidden');
+}
+function asCloseForm() { document.getElementById('asform-overlay').classList.add('hidden'); }
+
+async function asSaveForm() {
+    const subject = document.getElementById('asform-subject').value.trim();
+    if (!subject) return showToast('과목명을 입력해주세요.');
+    const payload = {
+        start:   document.getElementById('asform-start').value,
+        end:     document.getElementById('asform-end').value,
+        subject: subject,
+        teacher: document.getElementById('asform-teacher').value.trim(),
+        place:   document.getElementById('asform-place').value.trim(),
+        note:    document.getElementById('asform-note').value.trim()
+    };
+    try {
+        if (asFormMode === 'weekly') {
+            payload.day = document.getElementById('asform-day').value;
+            if (asFormId) payload.id = asFormId;
+            await callApi('saveAfterSchoolClass', payload);
+        } else {
+            payload.date = asSelectedDate; payload.type = '특강';
+            if (asFormId) payload.id = asFormId;
+            await callApi('saveAfterSchoolException', payload);
+        }
+    } catch(e) { return showToast('저장 실패: ' + (e.message || '')); }
+    asCloseForm();
+    showToast('저장되었습니다.');
+    if (asFormMode === 'weekly') { await asReload(); asOpenWeekly(); }
+    else { await asReload(asSelectedDate); }
+}
+
+/* 매주 반복 수업 관리 */
+function asOpenWeekly() {
+    const order = ['월','화','수','목','금','토','일'];
+    const byDay = {};
+    (asData.weekly || []).forEach(c => { (byDay[c.day] = byDay[c.day] || []).push(c); });
+    let html = '';
+    order.forEach(day => {
+        const list = (byDay[day] || []).sort((a, b) => (a.start || '').localeCompare(b.start || ''));
+        if (!list.length) return;
+        html += `<div style="font-weight:700;color:var(--ink);margin:10px 0 4px;">${day}요일</div>`;
+        list.forEach(c => {
+            html += `<div style="display:flex;justify-content:space-between;align-items:center;background:#fff;border:1px solid var(--stone);border-radius:8px;padding:8px 10px;margin-bottom:5px;">
+                <div style="min-width:0;">
+                    <div style="font-size:0.9rem;font-weight:600;">${c.subject}</div>
+                    <div style="font-size:0.78rem;color:var(--muted);">${(c.start || '') + (c.end ? '~' + c.end : '')}${c.teacher ? ' · ' + c.teacher : ''}${c.place ? ' · ' + c.place : ''}</div>
+                </div>
+                <button onclick="asDelWeekly('${c.id}')" style="background:rgba(198,40,40,0.08);color:#C62828;border:1px solid rgba(198,40,40,0.3);border-radius:6px;padding:5px 9px;cursor:pointer;font-size:0.8rem;flex-shrink:0;">삭제</button>
+            </div>`;
+        });
+    });
+    if (!html) html = '<p style="color:#999;text-align:center;padding:10px 0;">등록된 반복 수업이 없습니다.</p>';
+    document.getElementById('asweekly-content').innerHTML = html;
+    document.getElementById('asweekly-overlay').classList.remove('hidden');
+}
+function asCloseWeekly() { document.getElementById('asweekly-overlay').classList.add('hidden'); }
+
+async function asDelWeekly(id) {
+    if (!confirm('이 반복 수업을 삭제하시겠소? (매주 사라집니다)')) return;
+    try { await callApi('deleteAfterSchoolClass', { id }); }
+    catch(e) { return showToast('삭제 실패: ' + (e.message || '')); }
+    showToast('삭제되었습니다.');
+    await asReload(); asOpenWeekly();
+}
+
+/* 강사 로그인 */
+function toggleInstructorLogin() {
+    document.getElementById('instructor-login-form').classList.toggle('hidden');
+}
+async function instructorLogin() {
+    const name  = document.getElementById('inst-name').value.trim();
+    const phone = document.getElementById('inst-phone').value.trim();
+    if (!name) return showToast('성함을 입력해주세요.');
+    if (!/^\d{4}$/.test(phone)) return showToast('전화번호 뒷 4자리를 입력해주세요.');
+    let res;
+    try { res = await callApi('instructorLogin', { name, phone }); }
+    catch(e) { return; }   // callApi가 오류 토스트 표시
+    currentUser = { name: res.name, role: 'instructor', subject: res.subject || '' };
+    currentUser._savedDate = toDateStr();
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(currentUser));
+    openAfterSchool();
+}
+
 
 /* =========================================================
    4. 앱 초기화
@@ -2305,6 +2685,12 @@ window.onload = () => {
     }
     if (parsedUser) {
         currentUser = parsedUser;
+
+        // 방과후 강사 → 시간표로 바로 (홈/프리페치 건너뜀)
+        if (currentUser.role === 'instructor') {
+            openAfterSchool();
+            return;
+        }
 
         // ★ 날짜가 바뀌었으면 checkedIn/todayPlanner 초기화
         const today       = toDateStr();
@@ -8252,6 +8638,28 @@ async function updateTriggerPauseBadge() {
 
   window.fsUnwatchMember = function() {
     if (_memberUnsub) { try { _memberUnsub(); } catch(e) {} _memberUnsub = null; }
+  };
+
+  // ──────────────────────────────────────────────────────
+  // 6. 방과후 일정 실시간 구독: schedule/afterschool onSnapshot
+  //    weekly/exceptions가 JSON 문자열로 저장됨 → 파싱해서 콜백
+  // ──────────────────────────────────────────────────────
+  let _schedUnsub = null;
+  window.fsWatchAfterSchool = function(cb) {
+    if (_schedUnsub) { try { _schedUnsub(); } catch(e) {} _schedUnsub = null; }
+    try {
+      _schedUnsub = onSnapshot(doc(db, 'schedule', 'afterschool'), function(snap) {
+        if (!snap.exists()) { cb({ weekly: [], exceptions: [] }); return; }
+        const d = snap.data();
+        let weekly = [], exceptions = [];
+        try { weekly     = JSON.parse(d.weekly     || '[]'); } catch(e) {}
+        try { exceptions = JSON.parse(d.exceptions || '[]'); } catch(e) {}
+        cb({ weekly, exceptions });
+      }, function(err) { console.warn('[FS] afterschool watch 오류:', err.message); });
+    } catch(e) { console.warn('[FS] fsWatchAfterSchool 실패:', e.message); }
+  };
+  window.fsUnwatchAfterSchool = function() {
+    if (_schedUnsub) { try { _schedUnsub(); } catch(e) {} _schedUnsub = null; }
   };
 
   console.log('[Firebase] Firestore 초기화 완료 — topclass-be740');
