@@ -2539,30 +2539,37 @@ function asOpenDay(y, m, d) {
 }
 function asCloseDay() { document.getElementById('asday-overlay').classList.add('hidden'); }
 
-/** 편집 후 최신 데이터 재조회 + 화면 갱신 */
+function asGenId() { return 'c' + Date.now() + Math.floor(Math.random() * 1000); }
+
+/** 로컬 데이터만으로 화면 갱신 (GAS 재조회 없음 — 즉시 반영) */
+function asRerender(reopenDate) {
+    renderMonth();
+    if (reopenDate) { const p = reopenDate.split('-').map(Number); asOpenDay(p[0], p[1] - 1, p[2]); }
+}
+
+/** (오류 시에만) GAS에서 최신 데이터 재조회 → 낙관적 변경 되돌리기 */
 async function asReload(reopenDate) {
     try { asData = await callApi('getAfterSchool', {}) || { weekly: [], exceptions: [] }; } catch(e) {}
     renderMonth();
     if (reopenDate) { const p = reopenDate.split('-').map(Number); asOpenDay(p[0], p[1] - 1, p[2]); }
 }
 
-async function asCancelDate(idx) {
+function asCancelDate(idx) {
     const it = asDayItems[idx]; if (!it) return;
     if (!confirm(`${asSelectedDate} '${it.subject}' 수업을 이 날 휴강 처리하시겠소?`)) return;
-    try { await callApi('saveAfterSchoolException', { date: asSelectedDate, type: '휴강', subject: it.subject, start: it.start }); }
-    catch(e) { return showToast('실패: ' + (e.message || '')); }
-    showToast('휴강 처리했습니다.');
-    asReload(asSelectedDate);
+    const ex = { id: asGenId(), date: asSelectedDate, type: '휴강', subject: it.subject, start: it.start };
+    asData.exceptions.push(ex);                 // 낙관적 반영 (즉시)
+    asRerender(asSelectedDate);
+    callApiBg('saveAfterSchoolException', ex, '휴강 처리').catch(() => asReload(asSelectedDate));
 }
 
-async function asDelExceptionIdx(idx) {
+function asDelExceptionIdx(idx) {
     const it = asDayItems[idx]; if (!it) return;
     const id = it.exId || it.id; if (!id) return;
     if (!confirm(it.cancelled ? '휴강을 취소(되살리기)하시겠소?' : '이 수업을 삭제하시겠소?')) return;
-    try { await callApi('deleteAfterSchoolException', { id }); }
-    catch(e) { return showToast('실패: ' + (e.message || '')); }
-    showToast(it.cancelled ? '휴강을 취소했습니다.' : '삭제했습니다.');
-    asReload(asSelectedDate);
+    asData.exceptions = asData.exceptions.filter(x => x.id !== id);   // 낙관적 삭제
+    asRerender(asSelectedDate);
+    callApiBg('deleteAfterSchoolException', { id }, '삭제').catch(() => asReload(asSelectedDate));
 }
 
 /* 수업 입력 폼 */
@@ -2597,21 +2604,33 @@ async function asSaveForm() {
         place:   document.getElementById('asform-place').value.trim(),
         note:    document.getElementById('asform-note').value.trim()
     };
-    try {
-        if (asFormMode === 'weekly') {
-            payload.day = document.getElementById('asform-day').value;
-            if (asFormId) payload.id = asFormId;
-            await callApi('saveAfterSchoolClass', payload);
-        } else {
-            payload.date = asSelectedDate; payload.type = '특강';
-            if (asFormId) payload.id = asFormId;
-            await callApi('saveAfterSchoolException', payload);
-        }
-    } catch(e) { return showToast('저장 실패: ' + (e.message || '')); }
+    const isEdit = !!asFormId;
+    const id     = asFormId || asGenId();
+    const mode   = asFormMode;
+    payload.id   = id;
+
+    let action;
+    if (mode === 'weekly') {
+        payload.day = document.getElementById('asform-day').value;
+        action = 'saveAfterSchoolClass';
+        if (isEdit) { const w = asData.weekly.find(c => c.id === id); if (w) Object.assign(w, payload); }
+        else asData.weekly.push(Object.assign({}, payload));
+    } else {
+        payload.date = asSelectedDate; payload.type = '특강';
+        action = 'saveAfterSchoolException';
+        if (isEdit) { const e = asData.exceptions.find(x => x.id === id); if (e) Object.assign(e, payload); }
+        else asData.exceptions.push(Object.assign({}, payload));
+    }
+
+    // 화면 즉시 반영 후 닫기 (GAS 기다리지 않음)
     asCloseForm();
-    showToast('저장되었습니다.');
-    if (asFormMode === 'weekly') { await asReload(); asOpenWeekly(); }
-    else { await asReload(asSelectedDate); }
+    if (mode === 'weekly') { renderMonth(); asOpenWeekly(); } else asRerender(asSelectedDate);
+
+    // GAS 저장은 백그라운드 (실패 시에만 되돌림)
+    callApiBg(action, payload, '일정 저장').catch(async () => {
+        await asReload(mode === 'weekly' ? '' : asSelectedDate);
+        if (mode === 'weekly') asOpenWeekly();
+    });
 }
 
 /* 매주 반복 수업 관리 */
@@ -2640,12 +2659,11 @@ function asOpenWeekly() {
 }
 function asCloseWeekly() { document.getElementById('asweekly-overlay').classList.add('hidden'); }
 
-async function asDelWeekly(id) {
+function asDelWeekly(id) {
     if (!confirm('이 반복 수업을 삭제하시겠소? (매주 사라집니다)')) return;
-    try { await callApi('deleteAfterSchoolClass', { id }); }
-    catch(e) { return showToast('삭제 실패: ' + (e.message || '')); }
-    showToast('삭제되었습니다.');
-    await asReload(); asOpenWeekly();
+    asData.weekly = asData.weekly.filter(c => c.id !== id);   // 낙관적 삭제
+    renderMonth(); asOpenWeekly();
+    callApiBg('deleteAfterSchoolClass', { id }, '삭제').catch(async () => { await asReload(); asOpenWeekly(); });
 }
 
 /* 강사 로그인 */
