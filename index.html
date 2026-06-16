@@ -1334,7 +1334,7 @@ input::placeholder, textarea::placeholder { color: #C4BDB6; }
 
         <!-- 달력 그리드 -->
         <div id="as-grid" style="flex:1; overflow-y:auto; display:grid; grid-template-columns:repeat(7,1fr);
-                    grid-auto-rows:minmax(64px,auto); gap:2px; padding:4px 8px 12px;"></div>
+                    grid-auto-rows:minmax(52px,auto); align-content:start; gap:2px; padding:4px 8px 12px;"></div>
 
         <!-- 교사 전용 도구 -->
         <div id="as-teacher-tools" style="display:none; padding:8px 16px calc(env(safe-area-inset-bottom) + 10px); flex-shrink:0; border-top:1px solid var(--stone);">
@@ -2474,8 +2474,8 @@ function asResolveDay(y, m, d) {
     const cancels = (asData.exceptions || []).filter(e => e.date === ds && e.type === '휴강');
     let items = (asData.weekly || []).filter(c => c.day === wd).map(c => {
         const cc = cancels.find(x => x.subject === c.subject && (!x.start || x.start === c.start));
-        return { start: c.start, end: c.end, subject: c.subject, teacher: c.teacher, place: c.place,
-                 note: c.note, kind: 'weekly', cancelled: !!cc, exId: cc ? cc.id : null };
+        return { id: c.id, day: c.day, start: c.start, end: c.end, subject: c.subject, teacher: c.teacher,
+                 place: c.place, note: c.note, kind: 'weekly', cancelled: !!cc, exId: cc ? cc.id : null };
     });
     (asData.exceptions || []).filter(e => e.date === ds && e.type === '특강').forEach(e => {
         items.push({ start: e.start, end: e.end, subject: e.subject, teacher: e.teacher, place: e.place,
@@ -2526,25 +2526,33 @@ function asOpenDay(y, m, d) {
         content.innerHTML = '<p style="color:#999;text-align:center;padding:10px 0;">수업이 없습니다.</p>';
     } else {
         content.innerHTML = r.items.map((it, idx) => {
-            const time = (it.start || '') + (it.end ? '~' + it.end : '');
-            const tag  = it.kind === 'date' ? '<span style="font-size:0.68rem;background:#E3F2FD;color:#1565C0;border-radius:4px;padding:1px 5px;margin-left:5px;">이날만</span>' : '';
+            const time  = asTimeRange(it.start, it.end);
+            const place = asCleanPlace(it.place);
+            const meta  = (it.teacher || '') + (place ? ' · ' + place : '');
+            const tag   = it.kind === 'date' ? '<span style="font-size:0.68rem;background:#E3F2FD;color:#1565C0;border-radius:4px;padding:1px 5px;margin-left:5px;">이날만</span>' : '';
+            const timeLine = time
+                ? time
+                : (isT ? '<span style="color:#C62828;">시간 미설정 — 수정하세요</span>' : '시간 미설정');
+            const btn = (label, handler, color) =>
+                `<button onclick="${handler}" style="background:${color.bg};color:${color.fg};border:1px solid ${color.bd};border-radius:6px;padding:5px 10px;cursor:pointer;font-size:0.78rem;white-space:nowrap;">${label}</button>`;
+            const editBtn = btn('수정', `asEditItem(${idx})`, { bg:'rgba(44,44,44,0.06)', fg:'var(--ink)', bd:'var(--stone)' });
             let ctrl = '';
             if (isT) {
                 if (it.kind === 'weekly' && !it.cancelled)
-                    ctrl = `<button onclick="asCancelDate(${idx})" style="background:rgba(198,40,40,0.08);color:#C62828;border:1px solid rgba(198,40,40,0.3);border-radius:6px;padding:5px 10px;cursor:pointer;font-size:0.78rem;">이 날 휴강</button>`;
+                    ctrl = editBtn + btn('이 날 휴강', `asCancelDate(${idx})`, { bg:'rgba(198,40,40,0.08)', fg:'#C62828', bd:'rgba(198,40,40,0.3)' });
                 else if (it.kind === 'weekly' && it.cancelled)
-                    ctrl = `<button onclick="asDelExceptionIdx(${idx})" style="background:rgba(46,125,50,0.08);color:#2E7D32;border:1px solid rgba(46,125,50,0.3);border-radius:6px;padding:5px 10px;cursor:pointer;font-size:0.78rem;">휴강 취소</button>`;
+                    ctrl = btn('휴강 취소', `asDelExceptionIdx(${idx})`, { bg:'rgba(46,125,50,0.08)', fg:'#2E7D32', bd:'rgba(46,125,50,0.3)' });
                 else if (it.kind === 'date')
-                    ctrl = `<button onclick="asDelExceptionIdx(${idx})" style="background:rgba(198,40,40,0.08);color:#C62828;border:1px solid rgba(198,40,40,0.3);border-radius:6px;padding:5px 10px;cursor:pointer;font-size:0.78rem;">삭제</button>`;
+                    ctrl = editBtn + btn('삭제', `asDelExceptionIdx(${idx})`, { bg:'rgba(198,40,40,0.08)', fg:'#C62828', bd:'rgba(198,40,40,0.3)' });
             }
             return `<div style="background:#fff;border:1px solid var(--stone);border-radius:9px;padding:10px 12px;margin-bottom:6px;${it.cancelled ? 'opacity:0.55;' : ''}">
-                <div style="display:flex;justify-content:space-between;align-items:center;">
+                <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
                     <div style="min-width:0;">
-                        <div style="font-size:0.78rem;color:var(--muted);">${time}${tag}</div>
+                        <div style="font-size:0.78rem;color:var(--muted);">${timeLine}${tag}</div>
                         <div style="font-weight:700;${it.cancelled ? 'text-decoration:line-through;' : ''}">${it.subject}${it.cancelled ? ' (휴강)' : ''}</div>
-                        <div style="font-size:0.82rem;color:var(--muted);">${it.teacher || ''}${it.place ? ' · ' + it.place : ''}</div>
+                        <div style="font-size:0.82rem;color:var(--muted);">${meta}</div>
                     </div>
-                    ${ctrl}
+                    <div style="display:flex;flex-direction:column;gap:4px;flex-shrink:0;">${ctrl}</div>
                 </div></div>`;
         }).join('');
     }
@@ -2554,6 +2562,29 @@ function asOpenDay(y, m, d) {
 function asCloseDay() { document.getElementById('asday-overlay').classList.add('hidden'); }
 
 function asGenId() { return 'c' + Date.now() + Math.floor(Math.random() * 1000); }
+
+/** 시간 값을 HH:MM으로 정제 (Date 문자열·빈값 등 안전 처리) */
+function asFmtTime(v) {
+    if (v == null) return '';
+    const s = String(v).trim();
+    if (!s) return '';
+    const m = s.match(/^(\d{1,2}):(\d{2})/);
+    if (m) return m[1].padStart(2, '0') + ':' + m[2];
+    const d = new Date(s);
+    if (!isNaN(d.getTime())) return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+    return '';
+}
+function asTimeRange(start, end) {
+    const a = asFmtTime(start), b = asFmtTime(end);
+    return a ? (a + (b ? '~' + b : '')) : '';
+}
+/** 장소 정제: Date.toString() 같은 쓰레기값이면 버림 */
+function asCleanPlace(v) {
+    const s = String(v || '').trim();
+    if (!s) return '';
+    if (/GMT|\b(Mon|Tue|Wed|Thu|Fri|Sat|Sun)\b/.test(s)) return '';
+    return s;
+}
 
 /** 로컬 데이터만으로 화면 갱신 (GAS 재조회 없음 — 즉시 반영) */
 function asRerender(reopenDate) {
@@ -2588,6 +2619,12 @@ function asDelExceptionIdx(idx) {
     asPersist();
 }
 
+/* 날짜상세에서 항목 수정 열기 */
+function asEditItem(idx) {
+    const it = asDayItems[idx]; if (!it) return;
+    asOpenForm(it.kind === 'weekly' ? 'weekly' : 'date', it);
+}
+
 /* 수업 입력 폼 */
 function asOpenForm(mode, existing) {
     asFormMode = mode; asFormId = existing ? existing.id : null;
@@ -2599,12 +2636,12 @@ function asOpenForm(mode, existing) {
     } else {
         when.textContent = `📅 ${asSelectedDate}`;
     }
-    document.getElementById('asform-start').value   = existing ? (existing.start || '')   : '';
-    document.getElementById('asform-end').value     = existing ? (existing.end || '')     : '';
-    document.getElementById('asform-subject').value = existing ? (existing.subject || '') : '';
-    document.getElementById('asform-teacher').value = existing ? (existing.teacher || '') : '';
-    document.getElementById('asform-place').value   = existing ? (existing.place || '')   : '';
-    document.getElementById('asform-note').value    = existing ? (existing.note || '')    : '';
+    document.getElementById('asform-start').value   = existing ? asFmtTime(existing.start)   : '';
+    document.getElementById('asform-end').value     = existing ? asFmtTime(existing.end)     : '';
+    document.getElementById('asform-subject').value = existing ? (existing.subject || '')    : '';
+    document.getElementById('asform-teacher').value = existing ? (existing.teacher || '')    : '';
+    document.getElementById('asform-place').value   = existing ? asCleanPlace(existing.place): '';
+    document.getElementById('asform-note').value    = existing ? (existing.note || '')       : '';
     document.getElementById('asform-overlay').classList.remove('hidden');
 }
 function asCloseForm() { document.getElementById('asform-overlay').classList.add('hidden'); }
