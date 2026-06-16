@@ -717,6 +717,11 @@ input::placeholder, textarea::placeholder { color: #C4BDB6; }
             <input id="asform-end" type="time" style="flex:1; padding:9px; border:1px solid #ccc; border-radius:8px; font-family:inherit;">
         </div>
         <input id="asform-subject" type="text" placeholder="과목명 (예: 방과후_국어)" style="width:100%; margin-bottom:8px; padding:10px; border:1px solid #ccc; border-radius:8px; font-family:inherit; box-sizing:border-box;">
+        <select id="asform-track" style="width:100%; margin-bottom:8px; padding:10px; border:1px solid #ccc; border-radius:8px; font-family:inherit; box-sizing:border-box;">
+            <option value="공통">대상: 전체</option>
+            <option value="공무원">대상: 공무원반</option>
+            <option value="공기업">대상: 공기업반</option>
+        </select>
         <input id="asform-teacher" type="text" placeholder="강사명" style="width:100%; margin-bottom:8px; padding:10px; border:1px solid #ccc; border-radius:8px; font-family:inherit; box-sizing:border-box;">
         <input id="asform-place" type="text" placeholder="장소 (예: 컴퓨터실)" style="width:100%; margin-bottom:8px; padding:10px; border:1px solid #ccc; border-radius:8px; font-family:inherit; box-sizing:border-box;">
         <input id="asform-note" type="text" placeholder="비고 (선택)" style="width:100%; margin-bottom:16px; padding:10px; border:1px solid #ccc; border-radius:8px; font-family:inherit; box-sizing:border-box;">
@@ -2515,11 +2520,11 @@ function asResolveDay(y, m, d) {
     let items = (asData.weekly || []).filter(c => c.day === wd).map(c => {
         const cc = cancels.find(x => x.subject === c.subject && (!x.start || x.start === c.start));
         return { id: c.id, day: c.day, start: c.start, end: c.end, subject: c.subject, teacher: c.teacher,
-                 place: c.place, note: c.note, kind: 'weekly', cancelled: !!cc, exId: cc ? cc.id : null };
+                 track: c.track, place: c.place, note: c.note, kind: 'weekly', cancelled: !!cc, exId: cc ? cc.id : null };
     });
     (asData.exceptions || []).filter(e => e.date === ds && e.type === '특강').forEach(e => {
-        items.push({ start: e.start, end: e.end, subject: e.subject, teacher: e.teacher, place: e.place,
-                     note: e.note, kind: 'date', id: e.id, cancelled: false });
+        items.push({ start: e.start, end: e.end, subject: e.subject, teacher: e.teacher, track: e.track,
+                     place: e.place, note: e.note, kind: 'date', id: e.id, cancelled: false });
     });
     items.sort((a, b) => (a.start || '').localeCompare(b.start || ''));
     return { dateStr: ds, weekday: wd, items };
@@ -2569,7 +2574,9 @@ function asOpenDay(y, m, d) {
             const time  = asTimeRange(it.start, it.end);
             const place = asCleanPlace(it.place);
             const meta  = (it.teacher || '') + (place ? ' · ' + place : '');
-            const tag   = it.kind === 'date' ? '<span style="font-size:0.68rem;background:#E3F2FD;color:#1565C0;border-radius:4px;padding:1px 5px;margin-left:5px;">이날만</span>' : '';
+            const tr    = (it.track === '공무원' || it.track === '공기업') ? it.track + '반' : '';
+            const trTag = tr ? `<span style="font-size:0.68rem;background:rgba(201,166,107,0.2);color:#8B6914;border-radius:4px;padding:1px 5px;margin-left:5px;">${tr}</span>` : '';
+            const tag   = (it.kind === 'date' ? '<span style="font-size:0.68rem;background:#E3F2FD;color:#1565C0;border-radius:4px;padding:1px 5px;margin-left:5px;">이날만</span>' : '') + trTag;
             const timeLine = time
                 ? time
                 : (isT ? '<span style="color:#C62828;">시간 미설정 — 수정하세요</span>' : '시간 미설정');
@@ -2680,6 +2687,7 @@ function asOpenForm(mode, existing) {
     document.getElementById('asform-end').value     = existing ? asFmtTime(existing.end)     : '';
     document.getElementById('asform-subject').value = existing ? (existing.subject || '')    : '';
     document.getElementById('asform-teacher').value = existing ? (existing.teacher || '')    : '';
+    document.getElementById('asform-track').value   = (existing && existing.track) ? existing.track : '공통';
     document.getElementById('asform-place').value   = existing ? asCleanPlace(existing.place): '';
     document.getElementById('asform-note').value    = existing ? (existing.note || '')       : '';
     document.getElementById('asform-overlay').classList.remove('hidden');
@@ -2693,6 +2701,7 @@ async function asSaveForm() {
         start:   document.getElementById('asform-start').value,
         end:     document.getElementById('asform-end').value,
         subject: subject,
+        track:   document.getElementById('asform-track').value,
         teacher: document.getElementById('asform-teacher').value.trim(),
         place:   document.getElementById('asform-place').value.trim(),
         note:    document.getElementById('asform-note').value.trim()
