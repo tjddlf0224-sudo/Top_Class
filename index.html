@@ -863,24 +863,31 @@ input::placeholder, textarea::placeholder { color: #C4BDB6; }
                         <div style="font-size:0.78rem; color:var(--ink); font-weight:600;">내 QR코드</div>
                     </div>
                 </div>
-                <!-- 엽전 획득/차감 안내 -->
-                <button onclick="showCoinGuide()"
-                        style="width:100%; margin-top:10px; background:rgba(248,245,240,0.18);
-                               border:1px solid rgba(233,230,225,0.35); border-radius:12px; padding:11px;
-                               backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px);
-                               cursor:pointer; font-family:inherit; font-size:0.85rem; font-weight:600; color:var(--ink);">
-                    🪙 엽전 받는 법 · 차감 기준 보기
-                </button>
             </div>
 
-            <!-- 방과후 시간표 바로가기 (학생·교사 공통) -->
-            <button onclick="openAfterSchool()"
-                    style="width:100%; margin-bottom:12px; background:rgba(248,245,240,0.18);
-                           border:1px solid rgba(233,230,225,0.35); border-radius:14px; padding:14px;
-                           backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px);
-                           cursor:pointer; font-family:inherit; font-size:0.92rem; font-weight:700; color:var(--ink);">
-                📅 방과후 시간표
-            </button>
+            <!-- 빠른 메뉴: 엽전 안내 · 방과후 시간표 (네모 카드, 학생·교사 공통) -->
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:12px;">
+                <button onclick="showCoinGuide()"
+                        style="background:rgba(248,245,240,0.18); border:1px solid rgba(233,230,225,0.35);
+                               border-radius:14px; padding:15px 8px; backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px);
+                               cursor:pointer; font-family:inherit; color:var(--ink);
+                               display:flex; flex-direction:column; align-items:center; gap:6px;">
+                    <div style="width:36px; height:36px; border-radius:50%; background:rgba(201,166,107,0.18);
+                                display:flex; align-items:center; justify-content:center; font-size:18px;">🪙</div>
+                    <div style="font-size:0.86rem; font-weight:700;">엽전 안내</div>
+                    <div style="font-size:0.7rem; color:var(--muted);">받는 법 · 차감</div>
+                </button>
+                <button onclick="openAfterSchool()"
+                        style="background:rgba(248,245,240,0.18); border:1px solid rgba(233,230,225,0.35);
+                               border-radius:14px; padding:15px 8px; backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px);
+                               cursor:pointer; font-family:inherit; color:var(--ink);
+                               display:flex; flex-direction:column; align-items:center; gap:6px;">
+                    <div style="width:36px; height:36px; border-radius:50%; background:rgba(201,166,107,0.18);
+                                display:flex; align-items:center; justify-content:center; font-size:18px;">📅</div>
+                    <div style="font-size:0.86rem; font-weight:700;">방과후 시간표</div>
+                    <div style="font-size:0.7rem; color:var(--muted);">이번 달 일정</div>
+                </button>
+            </div>
 
             <!-- 교사: 학생 빠른 조회 -->
             <div id="card-student-quick" class="teacher-only"
