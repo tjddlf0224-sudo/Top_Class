@@ -802,6 +802,70 @@ input::placeholder, textarea::placeholder { color: #C4BDB6; }
     </div>
 </div>
 
+<!-- 관원 명부 등록 모달 -->
+<div id="addmember-overlay" class="hidden"
+     style="position:fixed; inset:0; z-index:1000; background:rgba(0,0,0,0.45);
+            display:flex; align-items:center; justify-content:center; padding:18px;"
+     onclick="if(event.target===this) closeAdminModal('addmember')">
+    <div style="background:var(--hanji); border-radius:16px; max-width:400px; width:100%; padding:20px; box-shadow:0 10px 40px rgba(0,0,0,0.3);">
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:6px;">
+            <div style="font-family:'Nanum Myeongjo',serif; font-size:1.15rem; font-weight:800; color:var(--ink);">➕ 관원 명부 등록</div>
+            <button onclick="closeAdminModal('addmember')" style="background:none;border:none;font-size:1.4rem;cursor:pointer;color:var(--muted);">×</button>
+        </div>
+        <p style="font-size:0.84rem; color:#777; margin:0 0 12px 0;">새 관원을 명부에 등록합니다. 엽전 0냥·일반 관원으로 시작합니다.</p>
+        <div style="display:flex; gap:8px;">
+            <input id="add-member-id" type="text" placeholder="학번" autocomplete="off" style="flex:1; color:var(--ink);">
+            <input id="add-member-name" type="text" placeholder="이름" autocomplete="off" style="flex:1; color:var(--ink);">
+        </div>
+        <select id="add-member-track" style="color:var(--ink);">
+            <option value="공무원">공무원반</option>
+            <option value="공기업">공기업반</option>
+        </select>
+        <label style="display:flex; align-items:center; gap:8px; font-size:0.9rem; color:#555; margin:4px 0 14px;">
+            <input type="checkbox" id="add-member-dorm" style="width:auto; margin:0; accent-color:#2C2C2C;">
+            기숙사생으로 등록 (지각 기준 08:30)
+        </label>
+        <button class="btn" style="margin:0;" onclick="adminAddMember()">관원 등록</button>
+    </div>
+</div>
+
+<!-- 관직 제수 모달 -->
+<div id="assignrole-overlay" class="hidden"
+     style="position:fixed; inset:0; z-index:1000; background:rgba(0,0,0,0.45);
+            display:flex; align-items:center; justify-content:center; padding:18px;"
+     onclick="if(event.target===this) closeAdminModal('assignrole')">
+    <div style="background:var(--hanji); border-radius:16px; max-width:400px; width:100%; padding:20px; box-shadow:0 10px 40px rgba(0,0,0,0.3);">
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;">
+            <div style="font-family:'Nanum Myeongjo',serif; font-size:1.15rem; font-weight:800; color:var(--ink);">🏅 관직 제수 (역할 부여)</div>
+            <button onclick="closeAdminModal('assignrole')" style="background:none;border:none;font-size:1.4rem;cursor:pointer;color:var(--muted);">×</button>
+        </div>
+        <select id="admin-student-select" style="color:var(--ink);"></select>
+        <select id="admin-role-select" style="color:var(--ink);">
+            <option value="관원">일반 관원</option>
+            <option value="장원">장원 (반장)</option>
+            <option value="암행어사">암행어사 (출결)</option>
+            <option value="집현전학사">집현전학사 (학습)</option>
+            <option value="포도대장">포도대장 (생활)</option>
+        </select>
+        <button class="btn" style="margin-top:4px;" onclick="adminAssignRole()">임명하기</button>
+    </div>
+</div>
+
+<!-- 기숙사생 관리 모달 -->
+<div id="dorm-overlay" class="hidden"
+     style="position:fixed; inset:0; z-index:1000; background:rgba(0,0,0,0.45);
+            display:flex; align-items:center; justify-content:center; padding:18px;"
+     onclick="if(event.target===this) closeAdminModal('dorm')">
+    <div style="background:var(--hanji); border-radius:16px; max-width:400px; width:100%; max-height:86vh; overflow-y:auto; padding:20px; box-shadow:0 10px 40px rgba(0,0,0,0.3);">
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:6px;">
+            <div style="font-family:'Nanum Myeongjo',serif; font-size:1.15rem; font-weight:800; color:var(--ink);">🏠 기숙사생 관리</div>
+            <button onclick="closeAdminModal('dorm')" style="background:none;border:none;font-size:1.4rem;cursor:pointer;color:var(--muted);">×</button>
+        </div>
+        <p style="font-size:0.84rem; color:#777; margin:0 0 12px 0;">기숙사생은 등교 인증 지각 기준이 <strong>08:30</strong>으로 적용됩니다.</p>
+        <div id="dorm-list"></div>
+    </div>
+</div>
+
 <div id="app">
 
     <!-- =====================================================
@@ -838,9 +902,9 @@ input::placeholder, textarea::placeholder { color: #C4BDB6; }
                 </button>
                 <div id="instructor-login-form" class="hidden" style="margin-top:12px;">
                     <input type="text" id="inst-name" placeholder="성함"
-                        style="background:rgba(255,252,246,0.55); border:1px solid rgba(180,160,130,0.4); border-radius:10px; margin-bottom:10px;">
+                        style="background:#fff; color:var(--ink); border:1px solid rgba(180,160,130,0.4); border-radius:10px; margin-bottom:10px;">
                     <input type="text" id="inst-phone" placeholder="전화번호 뒷 4자리" maxlength="4" inputmode="numeric"
-                        style="background:rgba(255,252,246,0.55); border:1px solid rgba(180,160,130,0.4); border-radius:10px; margin-bottom:12px;">
+                        style="background:#fff; color:var(--ink); border:1px solid rgba(180,160,130,0.4); border-radius:10px; margin-bottom:12px;">
                     <button class="btn" style="background:#5D6D7E; border-radius:12px;" onclick="instructorLogin()">강사 입실 → 방과후 시간표</button>
                 </div>
             </div>
@@ -1286,50 +1350,11 @@ input::placeholder, textarea::placeholder { color: #C4BDB6; }
             <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:6px;">
                 <button class="btn" style="background:#6D4C41; margin:0;" onclick="openTeacherLog()">📔 교사일지</button>
                 <button class="btn" style="background:#455A64; margin:0;" onclick="openPromote()">🎓 학년도 전환</button>
+                <button class="btn" style="background:var(--ink); margin:0;" onclick="openAddMemberModal()">➕ 관원 명부 등록</button>
+                <button class="btn" style="background:var(--ink); margin:0;" onclick="openAssignRoleModal()">🏅 관직 제수</button>
+                <button class="btn" style="background:#5D6D7E; margin:0;" onclick="openTriggerPause()">⏸️ 트리거 일시정지</button>
+                <button class="btn" style="background:#5D6D7E; margin:0;" onclick="openDormModal()">🏠 기숙사생 관리</button>
             </div>
-
-            <hr>
-
-            <h3>관원 명부 등록 (학생 추가)</h3>
-            <p style="font-size:0.85rem; color:#777; margin:0 0 10px 0;">
-                새 관원을 명부(Member)에 등록합니다. 엽전 0냥·일반 관원으로 시작합니다.
-            </p>
-            <div style="display:flex; gap:8px;">
-                <input id="add-member-id" type="text" placeholder="학번" autocomplete="off" style="flex:1;">
-                <input id="add-member-name" type="text" placeholder="이름" autocomplete="off" style="flex:1;">
-            </div>
-            <select id="add-member-track">
-                <option value="공무원">공무원반</option>
-                <option value="공기업">공기업반</option>
-            </select>
-            <label style="display:flex; align-items:center; gap:8px; font-size:0.9rem; color:#555; margin:4px 0 12px;">
-                <input type="checkbox" id="add-member-dorm" style="width:auto; margin:0;">
-                기숙사생으로 등록 (지각 기준 08:30)
-            </label>
-            <button class="btn" onclick="adminAddMember()">관원 등록</button>
-
-            <hr>
-
-            <h3>관직 제수 (역할 부여)</h3>
-            <select id="admin-student-select"></select>
-            <select id="admin-role-select">
-                <option value="관원">일반 관원</option>
-                <option value="장원">장원 (반장)</option>
-                <option value="암행어사">암행어사 (출결)</option>
-                <option value="집현전학사">집현전학사 (학습)</option>
-                <option value="포도대장">포도대장 (생활)</option>
-            </select>
-            <button class="btn" onclick="adminAssignRole()">임명하기</button>
-
-            <hr>
-
-            <h3>트리거 일시정지</h3>
-            <p style="font-size:0.85rem; color:#777; margin:0 0 10px 0;">
-                시험기간·방학 등 특정 기간 동안 결석·플래너 자동 차감을 중단합니다.
-            </p>
-            <div id="trigger-pause-status" style="margin-bottom:10px;"></div>
-            <button class="btn" style="width:100%; background:#5D6D7E; margin-bottom:6px;"
-                    onclick="openTriggerPause()">⏸️ 일시정지 기간 설정</button>
 
             <hr>
 
@@ -1349,14 +1374,6 @@ input::placeholder, textarea::placeholder { color: #C4BDB6; }
                         onclick="openMarket('inventory')">저잣거리 재고관리</button>
             </div>
             <div id="admin-pending-badge" style="display:none; font-size:0.85rem; color:#C62828; margin-bottom:4px; text-align:center;"></div>
-
-            <hr>
-
-            <h3>기숙사생 관리</h3>
-            <p style="font-size:0.85rem; color:#777; margin:0 0 10px 0;">
-                기숙사생은 등교 인증 지각 기준이 <strong>08:30</strong>으로 적용됩니다.
-            </p>
-            <div id="dorm-list" style="margin-bottom:10px;"></div>
 
             <hr>
 
@@ -2599,11 +2616,24 @@ async function openPromote() {
     const el = document.getElementById('promote-roster');
     if (!_promoteRoster.length) { el.innerHTML = '<p style="color:#999;">명단이 없습니다.</p>'; return; }
     el.innerHTML = _promoteRoster.map(m => `
-        <label style="display:flex;align-items:center;gap:10px;background:#fff;border:1px solid var(--stone);border-radius:8px;padding:8px 12px;margin-bottom:5px;cursor:pointer;">
-            <input type="checkbox" class="promote-grad-cb" data-name="${m.name}" style="width:18px;height:18px;accent-color:#C62828;margin:0;">
+        <div class="promote-row" data-name="${m.name}" data-grad="0" onclick="togglePromoteRow(this)"
+             style="display:flex;align-items:center;gap:10px;background:#fff;border:1px solid var(--stone);border-radius:8px;padding:9px 12px;margin-bottom:5px;cursor:pointer;">
+            <span class="promote-box" style="width:22px;height:22px;border-radius:5px;border:2px solid #999;background:#fff;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:16px;color:var(--ink);"></span>
             <span style="flex:1;font-size:0.92rem;">${m.name} <span style="color:#999;font-size:0.78rem;">${m.track||'공무원'}</span></span>
-            <span style="font-size:0.75rem;color:#C62828;">졸업 체크</span>
-        </label>`).join('');
+            <span style="font-size:0.75rem;color:#888;">졸업 체크</span>
+        </div>`).join('');
+}
+function togglePromoteRow(el) {
+    const on = el.dataset.grad === '1';
+    el.dataset.grad = on ? '0' : '1';
+    const box = el.querySelector('.promote-box');
+    if (el.dataset.grad === '1') {
+        box.textContent = '✓'; box.style.background = '#2C2C2C'; box.style.borderColor = '#2C2C2C'; box.style.color = '#fff';
+        el.style.background = '#F0EEE9';
+    } else {
+        box.textContent = ''; box.style.background = '#fff'; box.style.borderColor = '#999';
+        el.style.background = '#fff';
+    }
 }
 function closePromote() { document.getElementById('promote-overlay').classList.add('hidden'); }
 function addPromoteNewRow() {
@@ -2622,7 +2652,7 @@ function addPromoteNewRow() {
 async function runPromote() {
     const cohort = document.getElementById('promote-cohort').value.trim();
     if (!cohort) return showToast('졸업 기수 라벨을 입력해주세요.');
-    const graduates = [...document.querySelectorAll('.promote-grad-cb:checked')].map(cb => cb.dataset.name);
+    const graduates = [...document.querySelectorAll('.promote-row[data-grad="1"]')].map(el => el.dataset.name);
     const newStudents = [...document.querySelectorAll('#promote-new-list > div')].map(d => ({
         id:    d.querySelector('.pnew-id').value.trim(),
         name:  d.querySelector('.pnew-name').value.trim(),
@@ -5253,45 +5283,67 @@ async function openAdmin() {
     // 트리거 일시정지 배지
     updateTriggerPauseBadge();
 
-    // 학생 드롭다운
-    const sel = document.getElementById('admin-student-select');
-    sel.innerHTML = '';
-    data.members.forEach(m => {
-        if (m.name === '교사') return;
-        const opt       = document.createElement('option');
-        opt.value       = m.name;
-        opt.innerText   = `${m.name} (${m.role})`;
-        sel.appendChild(opt);
-    });
+}
 
-    // 기숙사생 목록 렌더링
-    const dormList = document.getElementById('dorm-list');
-    if (dormList) {
-        const students = data.members.filter(m => m.name !== '교사');
-        let dormHtml = '<div style="display:flex; flex-direction:column; gap:6px;">';
-        students.forEach(m => {
-            const isDorm = !!m.dorm;
-            dormHtml += `
-                <div style="display:flex; justify-content:space-between; align-items:center;
-                            background:white; border-radius:8px; padding:8px 12px;
-                            border:1px solid ${isDorm ? '#A5D6A7' : '#eee'};">
-                    <span style="font-size:0.9rem;">
-                        ${isDorm ? '🏠' : '🏫'} ${m.name}
-                        ${isDorm ? '<span style="font-size:0.75rem; color:#2E7D32; margin-left:4px;">기숙사</span>' : ''}
-                    </span>
-                    <button onclick="toggleDorm('${m.name}', ${!isDorm})"
-                            style="background:${isDorm ? '#FFEBEE' : '#E8F5E9'};
-                                   color:${isDorm ? '#C62828' : '#2E7D32'};
-                                   border:1px solid ${isDorm ? '#FFCDD2' : '#C8E6C9'};
-                                   border-radius:12px; padding:4px 12px;
-                                   font-size:0.78rem; cursor:pointer; font-family:inherit;">
-                        ${isDorm ? '해제' : '기숙사 등록'}
-                    </button>
-                </div>`;
+/* ── 집무실 관리 모달 ── */
+function closeAdminModal(which) { document.getElementById(which + '-overlay').classList.add('hidden'); }
+
+function openAddMemberModal() {
+    document.getElementById('add-member-id').value = '';
+    document.getElementById('add-member-name').value = '';
+    document.getElementById('add-member-dorm').checked = false;
+    document.getElementById('addmember-overlay').classList.remove('hidden');
+}
+
+async function openAssignRoleModal() {
+    document.getElementById('assignrole-overlay').classList.remove('hidden');
+    const sel = document.getElementById('admin-student-select');
+    sel.innerHTML = '<option>불러오는 중...</option>';
+    try {
+        const data = await callApi('getAdminData');
+        sel.innerHTML = '';
+        (data.members || []).forEach(m => {
+            if (m.name === '교사') return;
+            const opt = document.createElement('option');
+            opt.value = m.name; opt.innerText = `${m.name} (${m.role})`;
+            sel.appendChild(opt);
         });
-        dormHtml += '</div>';
-        dormList.innerHTML = dormHtml;
-    }
+    } catch(e) { sel.innerHTML = '<option>불러오기 실패</option>'; }
+}
+
+async function openDormModal() {
+    document.getElementById('dorm-overlay').classList.remove('hidden');
+    await renderDormList();
+}
+async function renderDormList() {
+    const dormList = document.getElementById('dorm-list');
+    if (!dormList) return;
+    dormList.innerHTML = '<p style="text-align:center;color:#999;">불러오는 중...</p>';
+    let students = [];
+    try { const data = await callApi('getAdminData'); students = (data.members || []).filter(m => m.name !== '교사'); } catch(e) {}
+    let html = '<div style="display:flex; flex-direction:column; gap:6px;">';
+    students.forEach(m => {
+        const isDorm = !!m.dorm;
+        html += `
+            <div style="display:flex; justify-content:space-between; align-items:center;
+                        background:white; border-radius:8px; padding:8px 12px;
+                        border:1px solid ${isDorm ? '#A5D6A7' : '#eee'};">
+                <span style="font-size:0.9rem;">
+                    ${isDorm ? '🏠' : '🏫'} ${m.name}
+                    ${isDorm ? '<span style="font-size:0.75rem; color:#2E7D32; margin-left:4px;">기숙사</span>' : ''}
+                </span>
+                <button onclick="toggleDorm('${m.name}', ${!isDorm})"
+                        style="background:${isDorm ? '#FFEBEE' : '#E8F5E9'};
+                               color:${isDorm ? '#C62828' : '#2E7D32'};
+                               border:1px solid ${isDorm ? '#FFCDD2' : '#C8E6C9'};
+                               border-radius:12px; padding:4px 12px;
+                               font-size:0.78rem; cursor:pointer; font-family:inherit;">
+                    ${isDorm ? '해제' : '기숙사 등록'}
+                </button>
+            </div>`;
+    });
+    html += '</div>';
+    dormList.innerHTML = html;
 }
 
 async function approvePenalty(name, reason) {
@@ -5331,11 +5383,8 @@ async function adminAddMember() {
     AppCache.invalidate('getAllMemberPoints', {});
     fetchToCache('getAdminData', {});
 
-    document.getElementById('add-member-id').value   = '';
-    document.getElementById('add-member-name').value = '';
-    document.getElementById('add-member-dorm').checked = false;
+    closeAdminModal('addmember');
     showToast(`${name} 관원을 명부에 등록했습니다.`);
-    openAdmin();
 }
 
 async function adminAssignRole() {
@@ -5346,8 +5395,8 @@ async function adminAssignRole() {
     await callApi('adminAction', { type: 'setRole', targetName: name, role: role });
     AppCache.invalidate('getAdminData', {});
     fetchToCache('getAdminData', {});
+    closeAdminModal('assignrole');
     showToast(`${name} 관원을 ${role}로 임명했습니다.`);
-    openAdmin();
 }
 
 async function toggleDorm(name, setDorm) {
@@ -5358,7 +5407,7 @@ async function toggleDorm(name, setDorm) {
     AppCache.invalidate('getAllMemberPoints', {});
     fetchToCache('getAdminData', {});
     showToast(`${name} 관원 ${label} 완료되었습니다.`);
-    openAdmin();
+    renderDormList();   // 모달 내 목록 즉시 갱신
 }
 
 async function viewAdminPlanner() {
