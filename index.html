@@ -780,10 +780,12 @@ input::placeholder, textarea::placeholder { color: #C4BDB6; }
 
             <!-- 방과후 강사 로그인 -->
             <div id="instructor-login-wrap" style="margin-top:18px;">
-                <div id="instructor-login-toggle" onclick="toggleInstructorLogin()"
-                     style="text-align:center; font-size:0.82rem; color:rgba(44,44,44,0.55); cursor:pointer; text-decoration:underline;">
+                <button id="instructor-login-toggle" onclick="toggleInstructorLogin()"
+                        style="width:100%; background:rgba(255,252,246,0.7); border:1.5px solid var(--gold);
+                               border-radius:12px; padding:13px; cursor:pointer; font-family:'Nanum Myeongjo',serif;
+                               font-size:0.95rem; font-weight:700; color:var(--ink);">
                     👩‍🏫 방과후 강사 로그인
-                </div>
+                </button>
                 <div id="instructor-login-form" class="hidden" style="margin-top:12px;">
                     <input type="text" id="inst-name" placeholder="성함"
                         style="background:rgba(255,252,246,0.55); border:1px solid rgba(180,160,130,0.4); border-radius:10px; margin-bottom:10px;">
@@ -818,6 +820,16 @@ input::placeholder, textarea::placeholder { color: #C4BDB6; }
                      style="font-size:0.78rem; color:var(--muted); margin-top:2px; letter-spacing:0.5px;"></div>
             </div>
             <div style="display:flex; align-items:center; gap:12px;">
+                <!-- 수정요청 바로가기 (교사 전용) -->
+                <button id="btn-edit-requests" onclick="openPointLog('requests')" class="teacher-only"
+                        style="display:none; position:relative; background:none; border:none; cursor:pointer; padding:4px; color:var(--muted);">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                        <path d="M4 4h16v12H5.2L4 17.5V4z"/><line x1="8" y1="9" x2="16" y2="9"/><line x1="8" y1="12.5" x2="13" y2="12.5"/>
+                    </svg>
+                    <span id="edit-req-badge" style="display:none; position:absolute; top:-2px; right:-2px;
+                          background:#C62828; color:#fff; font-size:0.6rem; font-weight:700; min-width:15px; height:15px;
+                          border-radius:8px; line-height:15px; text-align:center; padding:0 3px;">0</span>
+                </button>
                 <button id="btn-global-refresh" onclick="globalRefresh()" class="hidden"
                         style="background:none;border:none;cursor:pointer;font-size:1rem;
                                color:var(--muted);padding:4px;">&#x21bb;</button>
@@ -2452,6 +2464,19 @@ function refreshPushBanner() {
     b.style.display = (perm === 'granted' || perm === 'unsupported') ? 'none' : 'flex';
 }
 
+/** 교사 홈: 대기중 수정요청 개수 배지 갱신 */
+async function updateEditReqBadge() {
+    if (!currentUser || currentUser.role !== 'teacher') return;
+    const badge = document.getElementById('edit-req-badge');
+    if (!badge) return;
+    try {
+        const reqs = await callApi('getPointEditRequests', {});
+        const n = (reqs || []).length;
+        badge.textContent = n;
+        badge.style.display = n > 0 ? 'block' : 'none';
+    } catch(e) {}
+}
+
 /** 엽전 획득/차감 안내 모달 열기/닫기 */
 function showCoinGuide()  { document.getElementById('coin-guide-overlay').classList.remove('hidden'); }
 function closeCoinGuide() { document.getElementById('coin-guide-overlay').classList.add('hidden'); }
@@ -2460,6 +2485,14 @@ function closeCoinGuide() { document.getElementById('coin-guide-overlay').classL
    방과후 시간표 (월 달력)
    ========================================================= */
 const AS_WEEKDAYS = ['일','월','화','수','목','금','토'];
+/** 과목명 → 고유 색상 (색만 봐도 어떤 방과후 수업인지 식별) */
+const AS_PALETTE = ['#C62828','#1565C0','#2E7D32','#6A1B9A','#E65100','#00838F','#AD1457','#4527A0','#558B2F','#5D4037','#283593','#00695C'];
+function asColor(subject) {
+    const s = String(subject || '');
+    let h = 0;
+    for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) % 1000000;
+    return AS_PALETTE[h % AS_PALETTE.length];
+}
 let asYear, asMonth, asData = { weekly: [], exceptions: [] };
 let asSelectedDate = null, asDayItems = [];
 let asFormMode = 'date', asFormId = null;
@@ -2547,10 +2580,12 @@ function renderMonth() {
         const dow = new Date(asYear, asMonth, d).getDay();
         const isToday = (asYear === tY && asMonth === tM && d === tD);
         const numColor = dow === 0 ? '#C62828' : dow === 6 ? '#1565C0' : 'var(--ink)';
-        let chips = r.items.slice(0, 3).map(it =>
-            `<div style="font-size:0.6rem;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
-                  color:${it.cancelled ? '#bbb' : '#5D4037'};${it.cancelled ? 'text-decoration:line-through;' : ''}">${it.subject}</div>`
-        ).join('');
+        let chips = r.items.slice(0, 3).map(it => {
+            const col = it.cancelled ? '#bbb' : asColor(it.subject);
+            return `<div style="font-size:0.6rem;line-height:1.35;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+                  border-left:3px solid ${col};padding-left:3px;margin-bottom:1px;
+                  color:${col};${it.cancelled ? 'text-decoration:line-through;' : ''}">${it.subject}</div>`;
+        }).join('');
         if (r.items.length > 3) chips += `<div style="font-size:0.58rem;color:#999;">+${r.items.length - 3}</div>`;
         html += `<div onclick="asOpenDay(${asYear},${asMonth},${d})"
             style="border:1px solid ${isToday ? 'var(--gold)' : 'rgba(233,230,225,0.6)'};border-radius:6px;padding:3px 4px;
@@ -2592,7 +2627,8 @@ function asOpenDay(y, m, d) {
                 else if (it.kind === 'date')
                     ctrl = editBtn + btn('삭제', `asDelExceptionIdx(${idx})`, { bg:'rgba(198,40,40,0.08)', fg:'#C62828', bd:'rgba(198,40,40,0.3)' });
             }
-            return `<div style="background:#fff;border:1px solid var(--stone);border-radius:9px;padding:10px 12px;margin-bottom:6px;${it.cancelled ? 'opacity:0.55;' : ''}">
+            const accent = it.cancelled ? '#ccc' : asColor(it.subject);
+            return `<div style="background:#fff;border:1px solid var(--stone);border-left:5px solid ${accent};border-radius:9px;padding:10px 12px;margin-bottom:6px;${it.cancelled ? 'opacity:0.55;' : ''}">
                 <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
                     <div style="min-width:0;">
                         <div style="font-size:0.78rem;color:var(--muted);">${timeLine}${tag}</div>
@@ -3027,6 +3063,7 @@ function loadHome() {
         // 교사는 엽전 카드 숨김 (student-only로 처리됨)
         document.querySelectorAll('.student-only').forEach(el => el.style.display = 'none');
         document.querySelectorAll('.teacher-only').forEach(el => el.style.display = '');
+        updateEditReqBadge();   // 수정요청 배지
         // 전체 관원 현황 버튼 텍스트 변경
         const rBtn = document.getElementById('btn-role-page'); if(rBtn && rBtn.querySelector('span')) rBtn.querySelector('span').textContent = '출결/플래너';
         document.getElementById('admin-btn-area').innerHTML =
@@ -4279,7 +4316,9 @@ async function resolveEditRequest(row, approve) {
         await callApi('resolvePointEditRequest', { row, approve });
         AppCache.invalidate('getAllMemberPoints', {});
         AppCache.invalidate('getAdminPointLog', {});
+        AppCache.invalidate('getPointEditRequests', {});   // 목록 즉시 갱신(캐시 제거)
         showToast(approve ? '승인 처리되어 엽전에 반영했소.' : '반려 처리했소.');
+        updateEditReqBadge();
         openPointLog('requests');
     } catch(e) {
         showToast('처리 실패: ' + (e.message || ''));
@@ -6763,12 +6802,13 @@ function openCounselEdit(name, date, currentDone, currentMemo) {
     modal.innerHTML = `
         <div style="background:white; border-radius:12px; padding:20px; width:100%; max-width:400px;">
             <h3 style="margin:0 0 14px 0;">💬 ${name} 상담 (${date})</h3>
-            <label style="display:flex; align-items:center; gap:10px; margin-bottom:14px; cursor:pointer;
-                           font-size:1rem; background:#E8F5E9; padding:10px 12px; border-radius:8px;">
-                <input type="checkbox" id="counsel-done-chk" ${currentDone ? 'checked' : ''}
-                       style="width:20px; height:20px; accent-color:#2E7D32; margin:0;">
-                <span style="font-weight:bold; color:#2E7D32;">상담 완료</span>
-            </label>
+            <div id="counsel-done-toggle" data-done="${currentDone ? '1' : '0'}" onclick="toggleCounselDone()"
+                 style="display:flex; align-items:center; gap:12px; margin-bottom:14px; cursor:pointer;
+                        padding:12px 14px; border-radius:10px;">
+                <span id="counsel-done-box" style="width:26px; height:26px; border-radius:6px; flex-shrink:0;
+                        display:flex; align-items:center; justify-content:center; font-size:18px; font-weight:900;"></span>
+                <span id="counsel-done-text" style="font-weight:bold; font-size:1rem;"></span>
+            </div>
             <label style="font-size:0.85rem; color:#666; margin-bottom:5px; display:block;">상담 메모</label>
             <textarea id="counsel-memo-input" rows="4"
                       style="width:calc(100% - 16px); font-size:0.9rem; resize:vertical;"
@@ -6781,11 +6821,34 @@ function openCounselEdit(name, date, currentDone, currentMemo) {
             </div>
         </div>`;
     document.body.appendChild(modal);
+    renderCounselDoneToggle();
+}
+
+/** 상담 완료 토글 표시 갱신 (체크 상태가 확실히 보이도록 색상 대비) */
+function renderCounselDoneToggle() {
+    const t = document.getElementById('counsel-done-toggle');
+    if (!t) return;
+    const done = t.dataset.done === '1';
+    const box  = document.getElementById('counsel-done-box');
+    const txt  = document.getElementById('counsel-done-text');
+    t.style.background = done ? '#2E7D32' : '#F0EEE9';
+    t.style.border     = done ? '2px solid #2E7D32' : '2px solid #D8D4CC';
+    box.style.background = '#fff';
+    box.style.border     = done ? '2px solid #2E7D32' : '2px solid #B9B5AC';
+    box.style.color      = '#2E7D32';
+    box.textContent      = done ? '✓' : '';
+    txt.textContent  = done ? '상담 완료' : '상담 미완료 (탭하여 완료)';
+    txt.style.color  = done ? '#fff' : '#888';
+}
+function toggleCounselDone() {
+    const t = document.getElementById('counsel-done-toggle');
+    t.dataset.done = t.dataset.done === '1' ? '0' : '1';
+    renderCounselDoneToggle();
 }
 
 /** 상담 저장 실행 */
 async function saveCounselEntry(name, date) {
-    const done = document.getElementById('counsel-done-chk').checked;
+    const done = document.getElementById('counsel-done-toggle').dataset.done === '1';
     const memo = document.getElementById('counsel-memo-input').value.trim();
 
     document.getElementById('counsel-modal').remove();
