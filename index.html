@@ -752,6 +752,56 @@ input::placeholder, textarea::placeholder { color: #C4BDB6; }
 <!-- 백그라운드 저장 상태 표시기 (③ Optimistic UI) -->
 <div id="bg-status"></div>
 
+<!-- 교사일지 모달 -->
+<div id="teacherlog-overlay" class="hidden"
+     style="position:fixed; inset:0; z-index:1000; background:rgba(0,0,0,0.45);
+            display:flex; align-items:center; justify-content:center; padding:16px;"
+     onclick="if(event.target===this) closeTeacherLog()">
+    <div style="background:var(--hanji); border-radius:16px; max-width:420px; width:100%; max-height:88vh; overflow-y:auto; padding:20px; box-shadow:0 10px 40px rgba(0,0,0,0.3);">
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;">
+            <div style="font-family:'Nanum Myeongjo',serif; font-size:1.2rem; font-weight:800; color:var(--ink);">📔 교사일지</div>
+            <button onclick="closeTeacherLog()" style="background:none; border:none; font-size:1.4rem; cursor:pointer; color:var(--muted);">×</button>
+        </div>
+        <div style="display:flex; gap:8px; margin-bottom:8px;">
+            <input id="tlog-date" type="date" style="flex:0 0 auto; padding:9px; border:1px solid #ccc; border-radius:8px; font-family:inherit;">
+        </div>
+        <textarea id="tlog-content" rows="3" placeholder="교감선생님 말씀 등 기록..."
+                  style="width:100%; padding:10px; border:1px solid #ccc; border-radius:8px; font-family:inherit; box-sizing:border-box; resize:vertical; margin-bottom:8px;"></textarea>
+        <button class="btn" style="width:100%; margin:0 0 14px;" onclick="saveTeacherLogEntry()">기록 저장</button>
+        <div id="tlog-list"></div>
+    </div>
+</div>
+
+<!-- 학년도 전환 모달 -->
+<div id="promote-overlay" class="hidden"
+     style="position:fixed; inset:0; z-index:1000; background:rgba(0,0,0,0.5);
+            display:flex; align-items:center; justify-content:center; padding:16px;"
+     onclick="if(event.target===this) closePromote()">
+    <div style="background:var(--hanji); border-radius:16px; max-width:440px; width:100%; max-height:90vh; overflow-y:auto; padding:20px; box-shadow:0 10px 40px rgba(0,0,0,0.3);">
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:6px;">
+            <div style="font-family:'Nanum Myeongjo',serif; font-size:1.2rem; font-weight:800; color:var(--ink);">🎓 학년도 전환</div>
+            <button onclick="closePromote()" style="background:none; border:none; font-size:1.4rem; cursor:pointer; color:var(--muted);">×</button>
+        </div>
+        <div style="background:#FFF3E0; border:1px solid #FFB74D; border-radius:9px; padding:10px 12px; font-size:0.82rem; color:#7A4F01; line-height:1.6; margin-bottom:14px;">
+            ⚠️ 졸업 체크한 학생은 <b>명단에서 제외</b>되고 성적은 졸업생 데이터로 이동합니다.
+            잔류 학생 엽전은 <b>0으로 초기화</b>됩니다. <b>되돌릴 수 없으니</b> 신중히 진행하세요.
+        </div>
+
+        <label style="font-size:0.85rem; font-weight:bold; color:#555; display:block; margin-bottom:5px;">졸업 기수 라벨</label>
+        <input id="promote-cohort" type="text" placeholder="예: 2026 졸업"
+               style="width:100%; padding:10px; border:1px solid #ccc; border-radius:8px; font-family:inherit; box-sizing:border-box; margin-bottom:14px;">
+
+        <div style="font-size:0.85rem; font-weight:bold; color:#555; margin-bottom:6px;">현재 명단 — 졸업할 학생 체크</div>
+        <div id="promote-roster" style="margin-bottom:14px;"></div>
+
+        <div style="font-size:0.85rem; font-weight:bold; color:#555; margin-bottom:6px;">신입생 추가 (선택)</div>
+        <div id="promote-new-list" style="margin-bottom:6px;"></div>
+        <button class="btn btn-outline" style="width:100%; margin:0 0 14px; font-size:0.85rem; padding:8px;" onclick="addPromoteNewRow()">＋ 신입생 줄 추가</button>
+
+        <button class="btn" style="width:100%; background:#C62828; margin:0;" onclick="runPromote()">학년도 전환 실행</button>
+    </div>
+</div>
+
 <div id="app">
 
     <!-- =====================================================
@@ -1233,6 +1283,13 @@ input::placeholder, textarea::placeholder { color: #C4BDB6; }
                         font-weight:800; letter-spacing:3px; color:var(--ink);">이조판서 집무실</div>
         </div>
         <div class="container" style="position:relative;z-index:1;flex:1;overflow-y:auto;">
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:6px;">
+                <button class="btn" style="background:#6D4C41; margin:0;" onclick="openTeacherLog()">📔 교사일지</button>
+                <button class="btn" style="background:#455A64; margin:0;" onclick="openPromote()">🎓 학년도 전환</button>
+            </div>
+
+            <hr>
+
             <h3>관원 명부 등록 (학생 추가)</h3>
             <p style="font-size:0.85rem; color:#777; margin:0 0 10px 0;">
                 새 관원을 명부(Member)에 등록합니다. 엽전 0냥·일반 관원으로 시작합니다.
@@ -1474,6 +1531,18 @@ input::placeholder, textarea::placeholder { color: #C4BDB6; }
 
             <!-- 탭 4: 역대 선배 비교 -->
             <div id="exam-tab-legacy" style="display:none;">
+                <!-- 졸업생 개인 성적 검색 -->
+                <div class="card" style="margin-bottom:12px;">
+                    <div style="font-weight:bold; margin-bottom:8px;">🎓 졸업생 성적 검색</div>
+                    <div style="display:flex; gap:8px;">
+                        <input id="grad-search-name" type="text" placeholder="졸업생 이름"
+                               style="flex:1; padding:9px; border:1px solid #ccc; border-radius:8px; font-family:inherit;"
+                               onkeydown="if(event.key==='Enter') searchGraduateScores()">
+                        <button class="btn" style="width:80px; margin:0;" onclick="searchGraduateScores()">검색</button>
+                    </div>
+                    <div id="grad-search-result" style="margin-top:10px;"></div>
+                </div>
+
                 <!-- 서브탭: 분포 / 기수별 -->
                 <div class="history-tab-wrap">
                     <button class="history-tab-btn active" id="htab-dist"
@@ -2475,6 +2544,118 @@ async function updateEditReqBadge() {
         badge.textContent = n;
         badge.style.display = n > 0 ? 'block' : 'none';
     } catch(e) {}
+}
+
+/* ===== 교사일지 ===== */
+async function openTeacherLog() {
+    document.getElementById('tlog-date').value = toDateStr();
+    document.getElementById('tlog-content').value = '';
+    document.getElementById('tlog-list').innerHTML = '<p style="text-align:center;color:#999;">불러오는 중...</p>';
+    document.getElementById('teacherlog-overlay').classList.remove('hidden');
+    await renderTeacherLog();
+}
+function closeTeacherLog() { document.getElementById('teacherlog-overlay').classList.add('hidden'); }
+async function renderTeacherLog() {
+    let logs = [];
+    try { logs = await callApi('getTeacherLog', {}); } catch(e) {}
+    const el = document.getElementById('tlog-list');
+    if (!logs || !logs.length) { el.innerHTML = '<p style="text-align:center;color:#999;padding:8px 0;">기록이 없습니다.</p>'; return; }
+    el.innerHTML = logs.map(l => `
+        <div style="background:#fff;border:1px solid var(--stone);border-radius:9px;padding:10px 12px;margin-bottom:6px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;">
+                <div style="font-size:0.78rem;color:var(--muted);">${l.date}</div>
+                <button onclick="deleteTeacherLogEntry(${l.row})" style="background:none;border:none;color:#C62828;cursor:pointer;font-size:0.8rem;">삭제</button>
+            </div>
+            <div style="white-space:pre-wrap;font-size:0.92rem;color:var(--ink);margin-top:3px;">${(l.content||'').replace(/</g,'&lt;')}</div>
+        </div>`).join('');
+}
+async function saveTeacherLogEntry() {
+    const date = document.getElementById('tlog-date').value || toDateStr();
+    const content = document.getElementById('tlog-content').value.trim();
+    if (!content) return showToast('내용을 입력해주세요.');
+    try { await callApi('saveTeacherLog', { date, content }); } catch(e) { return showToast('저장 실패'); }
+    AppCache.invalidate('getTeacherLog', {});
+    document.getElementById('tlog-content').value = '';
+    showToast('기록되었습니다.');
+    await renderTeacherLog();
+}
+async function deleteTeacherLogEntry(row) {
+    if (!confirm('이 기록을 삭제하시겠습니까?')) return;
+    try { await callApi('deleteTeacherLog', { row }); } catch(e) { return showToast('삭제 실패'); }
+    AppCache.invalidate('getTeacherLog', {});
+    await renderTeacherLog();
+}
+
+/* ===== 학년도 전환 ===== */
+let _promoteRoster = [];
+async function openPromote() {
+    document.getElementById('promote-cohort').value = (new Date().getFullYear()) + ' 졸업';
+    document.getElementById('promote-new-list').innerHTML = '';
+    document.getElementById('promote-roster').innerHTML = '<p style="text-align:center;color:#999;">불러오는 중...</p>';
+    document.getElementById('promote-overlay').classList.remove('hidden');
+    let members = [];
+    try { members = await callApi('getAllMemberPoints', {}); } catch(e) {}
+    _promoteRoster = (members || []).filter(m => m.name !== '교사');
+    const el = document.getElementById('promote-roster');
+    if (!_promoteRoster.length) { el.innerHTML = '<p style="color:#999;">명단이 없습니다.</p>'; return; }
+    el.innerHTML = _promoteRoster.map(m => `
+        <label style="display:flex;align-items:center;gap:10px;background:#fff;border:1px solid var(--stone);border-radius:8px;padding:8px 12px;margin-bottom:5px;cursor:pointer;">
+            <input type="checkbox" class="promote-grad-cb" data-name="${m.name}" style="width:18px;height:18px;accent-color:#C62828;margin:0;">
+            <span style="flex:1;font-size:0.92rem;">${m.name} <span style="color:#999;font-size:0.78rem;">${m.track||'공무원'}</span></span>
+            <span style="font-size:0.75rem;color:#C62828;">졸업 체크</span>
+        </label>`).join('');
+}
+function closePromote() { document.getElementById('promote-overlay').classList.add('hidden'); }
+function addPromoteNewRow() {
+    const wrap = document.getElementById('promote-new-list');
+    const div = document.createElement('div');
+    div.style.cssText = 'display:grid; grid-template-columns:58px 1fr 64px 20px; gap:6px; align-items:center; margin-bottom:6px;';
+    div.innerHTML = `
+        <input type="text" class="pnew-id" placeholder="학번" style="width:100%;min-width:0;box-sizing:border-box;padding:8px 5px;border:1px solid #ccc;border-radius:6px;font-family:inherit;">
+        <input type="text" class="pnew-name" placeholder="이름" style="width:100%;min-width:0;box-sizing:border-box;padding:8px;border:1px solid #ccc;border-radius:6px;font-family:inherit;">
+        <select class="pnew-track" style="width:100%;min-width:0;box-sizing:border-box;padding:8px 2px;border:1px solid #ccc;border-radius:6px;font-family:inherit;font-size:0.8rem;">
+            <option value="공무원">공무원</option><option value="공기업">공기업</option>
+        </select>
+        <button onclick="this.parentElement.remove()" style="background:none;border:none;color:#C62828;font-size:1.2rem;cursor:pointer;padding:0;">×</button>`;
+    wrap.appendChild(div);
+}
+async function runPromote() {
+    const cohort = document.getElementById('promote-cohort').value.trim();
+    if (!cohort) return showToast('졸업 기수 라벨을 입력해주세요.');
+    const graduates = [...document.querySelectorAll('.promote-grad-cb:checked')].map(cb => cb.dataset.name);
+    const newStudents = [...document.querySelectorAll('#promote-new-list > div')].map(d => ({
+        id:    d.querySelector('.pnew-id').value.trim(),
+        name:  d.querySelector('.pnew-name').value.trim(),
+        track: d.querySelector('.pnew-track').value,
+        dorm:  false
+    })).filter(s => s.id && s.name);
+    if (!graduates.length && !newStudents.length) return showToast('졸업 또는 신입 중 최소 하나는 지정해주세요.');
+    if (!confirm(`학년도 전환을 실행합니다.\n\n· 졸업: ${graduates.length}명 (명단 제외 + 성적 이동)\n· 신입: ${newStudents.length}명 추가\n· 잔류 학생 엽전 0 초기화\n\n되돌릴 수 없습니다. 진행할까요?`)) return;
+    showToast('전환 처리 중...');
+    try {
+        const res = await callApi('promoteSchoolYear', { graduates, newStudents, cohort });
+        AppCache.invalidate('getAllMemberPoints', {});
+        AppCache.invalidate('getAdminData', {});
+        closePromote();
+        showToast(`전환 완료: 졸업 ${res.graduated}명 · 신입 ${res.added}명 · 성적 ${res.movedScores}건 이동`);
+    } catch(e) { showToast('전환 실패: ' + (e.message || '')); }
+}
+
+/* ===== 졸업생 성적 검색 ===== */
+async function searchGraduateScores() {
+    const name = (document.getElementById('grad-search-name').value || '').trim();
+    const out  = document.getElementById('grad-search-result');
+    if (!name) return showToast('이름을 입력해주세요.');
+    out.innerHTML = '<p style="text-align:center;color:#999;">검색 중...</p>';
+    let rows = [];
+    try { rows = await callApi('getGraduateScores', { name }); } catch(e) { out.innerHTML = '<p style="color:#C62828;">검색 실패</p>'; return; }
+    if (!rows || !rows.length) { out.innerHTML = `<p style="text-align:center;color:#999;padding:8px 0;">'${name}' 졸업생 성적이 없습니다.</p>`; return; }
+    rows.sort((a, b) => (a.cohort + a.examName).localeCompare(b.cohort + b.examName));
+    out.innerHTML = rows.map(r => `
+        <div style="background:#fff;border:1px solid var(--stone);border-radius:9px;padding:10px 12px;margin-bottom:6px;">
+            <div style="font-size:0.78rem;color:var(--muted);">${r.cohort} · ${r.track} · ${r.examName}</div>
+            <div style="font-size:0.9rem;margin-top:3px;">국 ${r.korean} · 영 ${r.english} · 한 ${r.history} · <b>합계 ${r.total}</b>${r.passed ? ' <span style="color:#2E7D32;">합격</span>' : ''}</div>
+        </div>`).join('');
 }
 
 /** 엽전 획득/차감 안내 모달 열기/닫기 */
