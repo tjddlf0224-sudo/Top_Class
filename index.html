@@ -1034,7 +1034,7 @@ input::placeholder, textarea::placeholder { color: #C4BDB6; }
                  style="display:none; background:rgba(248,245,240,0.18); border:1px solid rgba(233,230,225,0.35);
                         border-radius:14px; padding:16px; backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px); overflow:hidden;">
                 <div style="font-size:0.78rem; font-weight:700; color:var(--muted);
-                     letter-spacing:1px; margin-bottom:10px;">학생 현황</div>
+                     letter-spacing:1px; margin-bottom:10px;">학생 현황 <span id="quick-track-count" style="font-weight:500;"></span></div>
                 <select id="quick-student-select" style="margin:0 0 10px;"
                         onchange="loadStudentQuickView()">
                     <option value="">학생을 선택하세요</option>
@@ -3394,6 +3394,15 @@ async function loadQuickStudentList() {
     if (!sel) return;
     const adminData = await callApi('getAdminData');
     const students  = adminData.members.filter(m => m.name !== '교사' && m.role !== 'teacher');
+
+    // 반별 인원 수 ('학생 현황' 옆에 표시)
+    const cntEl = document.getElementById('quick-track-count');
+    if (cntEl) {
+        const gongiup  = students.filter(s => s.track === '공기업').length;
+        const gongmuwon = students.length - gongiup;  // 공기업 외 전부 공무원반
+        cntEl.textContent = '(공무원반 ' + gongmuwon + '명, 공기업반 ' + gongiup + '명)';
+    }
+
     sel.innerHTML = '<option value="">학생을 선택하세요</option>';
     students.forEach(s => {
         const opt = document.createElement('option');
