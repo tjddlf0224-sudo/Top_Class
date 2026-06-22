@@ -3398,7 +3398,7 @@ async function loadQuickStudentList() {
     students.forEach(s => {
         const opt = document.createElement('option');
         opt.value = s.name;
-        opt.textContent = s.name + ' (' + (s.role || '관원') + ')';
+        opt.textContent = s.name + ' (' + ((s.track || '공무원') + '반') + ')';
         sel.appendChild(opt);
     });
 }
