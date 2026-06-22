@@ -7155,7 +7155,7 @@ async function loadCounselingStudentList() {
                     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:${cnt.total>0?'8px':'0'};">
                         <div>
                             <b>${student.name}</b>
-                            <span style="font-size:0.8rem; color:#999; margin-left:6px;">${student.role || '관원'}</span>
+                            <span style="font-size:0.8rem; color:#999; margin-left:6px;">${(student.track || '공무원')}반</span>
                         </div>
                         <div style="text-align:right;">
                             ${cnt.total === 0
