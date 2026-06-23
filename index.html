@@ -1370,7 +1370,7 @@ input::placeholder, textarea::placeholder { color: #C4BDB6; }
 
             <hr>
 
-            <h3>날짜별 학습 현황 조회 조회</h3>
+            <h3>날짜별 학습 현황 조회</h3>
             <div style="display:flex; gap:5px;">
                 <input type="date" id="admin-plan-date">
                 <button class="btn" style="width:80px; margin:10px 0;"
@@ -1380,7 +1380,7 @@ input::placeholder, textarea::placeholder { color: #C4BDB6; }
 
             <hr>
 
-            <h3>날짜별 출결 현황 조회 조회</h3>
+            <h3>날짜별 출결 현황 조회</h3>
             <div style="display:flex; gap:5px;">
                 <input type="date" id="admin-att-date">
                 <button class="btn" style="width:80px; margin:10px 0;"
@@ -4273,30 +4273,29 @@ async function openPointLog(tab) {
                 callApi('getAdminData'),
                 callApi('getAllMemberPoints')
             ]);
-            const members  = adminData.members.filter(m => m.name !== '교사' && m.role !== 'teacher');
             const pointMap = {};
             if (memberSheet) memberSheet.forEach(m => { pointMap[m.name] = m; });
+            // 가나다순 정렬
+            const members = adminData.members
+                .filter(m => m.name !== '교사' && m.role !== 'teacher')
+                .sort((a, b) => String(a.name).localeCompare(String(b.name), 'ko'));
 
-            const statusRows = members.map(m => {
-                const info   = pointMap[m.name] || { coins: 0, amnesty: 0 };
-                const coins  = info.coins ?? 0;
-                return `<div style="display:flex;justify-content:space-between;align-items:center;
-                                    padding:8px 0;border-bottom:1px solid #eee;">
-                    <div><b>${m.name}</b>
-                        <span style="font-size:0.78rem;color:#999;margin-left:5px;">${m.role||'관원'}</span>
-                    </div>
-                    <div style="font-size:0.9rem;font-weight:bold;color:${coins<0?'#C62828':coins>=30?'#1B5E20':'#333'};">
-                        🪙 ${coins}냥
-                    </div>
-                </div>`;
+            const rows = members.map(m => {
+                const coins = pointMap[m.name]?.coins ?? 0;
+                return `
+                <label class="grant-row" data-name="${m.name}"
+                       style="display:flex;align-items:center;gap:9px;padding:8px 4px;border-bottom:1px solid #f0f0f0;cursor:pointer;">
+                    <input type="checkbox" class="grant-cb" data-name="${m.name}" onchange="updateGrantCount()"
+                           style="width:17px;height:17px;flex-shrink:0;">
+                    <span style="flex:1;min-width:0;"><b>${m.name}</b>
+                        <span style="font-size:0.75rem;color:#999;margin-left:4px;">${m.role||'관원'}</span></span>
+                    <span style="font-size:0.82rem;font-weight:bold;flex-shrink:0;color:${coins<0?'#C62828':coins>=30?'#1B5E20':'#666'};">🪙${coins}</span>
+                </label>`;
             }).join('');
 
             listDiv.innerHTML = `
                 <div class="card">
-                    <div style="font-weight:bold;margin-bottom:10px;">✏️ 엽전 직접 부여/차감</div>
-                    <select id="grant-student-select" style="width:100%;margin-bottom:8px;padding:8px;border:1px solid #ccc;border-radius:4px;font-family:inherit;">
-                        ${members.map(m => `<option value="${m.name}">${m.name} (${m.role||'관원'})</option>`).join('')}
-                    </select>
+                    <div style="font-weight:bold;margin-bottom:8px;">✏️ 엽전 부여/차감 <span style="font-size:0.78rem;color:#999;font-weight:normal;">(여러 명 동시 가능)</span></div>
                     <div style="display:flex;gap:8px;margin-bottom:8px;">
                         <select id="grant-sign-select" style="width:90px;padding:8px;border:1px solid #ccc;border-radius:4px;font-family:inherit;">
                             <option value="+">+ 지급</option>
@@ -4307,15 +4306,21 @@ async function openPointLog(tab) {
                     </div>
                     <input id="grant-reason-input" type="text" placeholder="사유를 입력하시오"
                            style="width:calc(100% - 18px);margin-bottom:10px;padding:8px;border:1px solid #ccc;border-radius:4px;font-family:inherit;">
-                    <button onclick="grantPoint()"
+                    <button onclick="grantPointBatchSubmit()"
                             style="width:100%;background:var(--primary);color:white;border:none;padding:10px;border-radius:6px;cursor:pointer;font-family:inherit;font-size:0.95rem;font-weight:bold;">
-                        부여하기
+                        선택한 <span id="grant-selected-count">0</span>명에게 부여하기
                     </button>
                 </div>
                 <div class="card" style="margin-top:12px;">
-                    <div style="font-weight:bold;margin-bottom:4px;">🪙 전체 엽전 현황</div>
-                    ${statusRows}
+                    <input type="text" oninput="filterGrantStudents(this.value)" placeholder="🔍 이름 검색"
+                           style="width:calc(100% - 18px);margin-bottom:8px;padding:8px;border:1px solid #ccc;border-radius:6px;font-family:inherit;">
+                    <label style="display:flex;align-items:center;gap:9px;padding:6px 4px;border-bottom:2px solid #eee;cursor:pointer;font-size:0.85rem;color:#555;">
+                        <input type="checkbox" id="grant-select-all" onchange="toggleAllGrant(this.checked)" style="width:17px;height:17px;">
+                        전체 선택 (검색된 항목)
+                    </label>
+                    ${rows}
                 </div>`;
+            updateGrantCount();
 
         } else if (activeTab === 'status') {
             const memberSheet = await callApi('getAllMemberPoints');
@@ -4591,6 +4596,7 @@ async function savePointEdit() {
     if (isNaN(delta)) return showToast('엽전 변동량을 숫자로 입력해주세요.');
     if (!reason)      return showToast('사유를 입력해주세요.');
     const { row, name } = _editingPoint;
+    if (!confirm(`${name}의 이 기록을 ${delta >= 0 ? '+' : ''}${delta}냥 (${reason})으로 수정하시겠소?\n잔액이 즉시 보정됩니다.`)) return;
     closePointEdit();
     await callApi('editPointLog', { row, delta, reason, actor: currentUser.name });
     AppCache.invalidate('getAdminPointLog', {});
@@ -4627,24 +4633,68 @@ async function deletePointLog(row, name) {
     openPointLog('log');
 }
 
-async function grantPoint() {
-    const name   = document.getElementById('grant-student-select').value;
+/* 엽전 부여 화면: 선택 개수 표시 + 전체선택 동기화 */
+function updateGrantCount() {
+    const cbs     = [...document.querySelectorAll('.grant-cb')];
+    const checked = cbs.filter(c => c.checked);
+    const cntEl   = document.getElementById('grant-selected-count');
+    if (cntEl) cntEl.textContent = checked.length;
+    const all = document.getElementById('grant-select-all');
+    if (all) {
+        all.checked       = checked.length === cbs.length && cbs.length > 0;
+        all.indeterminate = checked.length > 0 && checked.length < cbs.length;
+    }
+}
+
+/* 전체 선택 토글 — 검색으로 보이는 항목만 대상 */
+function toggleAllGrant(checked) {
+    document.querySelectorAll('.grant-row').forEach(row => {
+        if (row.style.display === 'none') return;
+        const cb = row.querySelector('.grant-cb');
+        if (cb) cb.checked = checked;
+    });
+    updateGrantCount();
+}
+
+/* 이름 검색 필터 */
+function filterGrantStudents(q) {
+    q = (q || '').trim().toLowerCase();
+    document.querySelectorAll('.grant-row').forEach(row => {
+        const n = String(row.dataset.name || '').toLowerCase();
+        row.style.display = (!q || n.includes(q)) ? 'flex' : 'none';
+    });
+}
+
+/* 선택한 학생들에게 엽전 일괄 부여/차감 */
+async function grantPointBatchSubmit() {
+    const names  = [...document.querySelectorAll('.grant-cb:checked')].map(cb => cb.dataset.name);
     const sign   = document.getElementById('grant-sign-select').value;
     const amt    = parseInt(document.getElementById('grant-amount-input').value, 10);
     const reason = document.getElementById('grant-reason-input').value.trim();
-    if (!name)           return showToast('관원을 선택해주세요.');
-    if (!amt || amt < 1) return showToast('엽전 수량을 입력해주세요.');
-    if (!reason)         return showToast('사유를 입력해주세요.');
+    if (names.length === 0) return showToast('학생을 한 명 이상 선택해주세요.');
+    if (!amt || amt < 1)    return showToast('엽전 수량을 입력해주세요.');
+    if (!reason)            return showToast('사유를 입력해주세요.');
     const amount = sign === '+' ? amt : -amt;
-    if (!confirm(`${name} 관원에게 ${amount > 0 ? '+' : ''}${amount}냥을 부여하시겠소?\n사유: ${reason}`)) return;
-    await callApi('adminAction', { type: 'grantPoint', targetName: name, amount: amount, reason: reason });
-    AppCache.invalidate('getAllMemberPoints', {});
-    AppCache.invalidate('getAdminData', {});
-    AppCache.invalidate('getMyPointLog', { name });
-    fetchToCache('getAllMemberPoints', {});
-    fetchToCache('getAdminData', {});
-    showToast(`${name} 관원에게 ${amount}냥을 처리했소.`);
-    openPointLog('grant');
+    const who = names.length === 1 ? `${names[0]} 관원에게` : `선택한 ${names.length}명에게`;
+    if (!confirm(`${who} ${amount > 0 ? '+' : ''}${amount}냥을 부여하시겠소?\n사유: ${reason}`)) return;
+    try {
+        // ★ 쓰기 작업이므로 callApiBg 사용 (callApi는 동일 파라미터를 캐시해 반복 부여가 무시될 수 있음)
+        const res = await callApiBg('grantPointBatch', { names, amount, reason }, '엽전 일괄 부여');
+        AppCache.invalidate('getAllMemberPoints', {});
+        AppCache.invalidate('getAdminData', {});
+        names.forEach(n => AppCache.invalidate('getMyPointLog', { name: n }));
+        fetchToCache('getAllMemberPoints', {});
+        fetchToCache('getAdminData', {});
+        const failed = (res.results || []).filter(r => !r.ok);
+        if (failed.length) {
+            showToast(`${res.count}명 처리, ${failed.length}명 실패: ${failed.map(f => f.name).join(', ')}`, 3500);
+        } else {
+            showToast(`✅ ${res.count}명에게 ${amount > 0 ? '+' : ''}${amount}냥 처리 완료.`);
+        }
+        openPointLog('grant');
+    } catch(e) {
+        showToast('처리 실패: ' + (e.message || ''));
+    }
 }
 
 
@@ -4656,7 +4706,8 @@ async function openAbsence() {
     // 학생 목록 채우기
     const adminData = await callApi('getAdminData');
     const sel = document.getElementById('absence-student-select');
-    const students = adminData.members.filter(m => m.name !== '교사' && m.role !== 'teacher');
+    const students = adminData.members.filter(m => m.name !== '교사' && m.role !== 'teacher')
+        .sort((a, b) => String(a.name).localeCompare(String(b.name), 'ko'));   // 가나다순
     sel.innerHTML = '<option value="">— 학생 선택 —</option>' +
         students.map(m => `<option value="${m.name}">${m.name}</option>`).join('');
     // 오늘 날짜 기본값
@@ -4699,8 +4750,16 @@ async function saveAbsenceReason() {
     const name   = document.getElementById('absence-student-select').value;
     const reason = document.getElementById('absence-reason-select').value;
     if (!date || !name) return showToast('날짜와 학생을 선택해주세요.');
-    await callApi('saveAbsenceReason', { date, name, reason, actor: '교사' });
-    showToast(`${name} (${date}) 결석사유 등록 완료되었습니다.`);
+    const res = await callApi('saveAbsenceReason', { date, name, reason, actor: '교사' });
+    // 환불/출결 변경 반영 → 관련 캐시 무효화
+    AppCache.invalidate('getAllMemberPoints', {});
+    AppCache.invalidate('getAdminAttendance', { date });
+    AppCache.invalidate('getMyPointLog', { name });
+    if (res && res.refunded) {
+        showToast(`✅ ${name} 결석사유 등록 — 차감됐던 ${res.refund}냥을 자동 환불했어요 (잔액 ${res.newCoins}냥).`, 3200);
+    } else {
+        showToast(`${name} (${date}) 결석사유 등록 완료되었습니다.`);
+    }
     loadAbsenceList();
 }
 
@@ -5552,6 +5611,16 @@ async function viewAdminAttendance() {
         const statusColor = isAbsent ? '#C62828' : isLate ? '#F57C00' : '#2E7D32';
         const statusText  = isAbsent ? '❌ 결석' : isLate ? '⏰ 지각' : '✅ 출석';
 
+        const statuses = ['출석','지각','결석','공결','미출석'];
+        const selectHtml = `
+            <div style="margin-top:8px; display:flex; align-items:center; gap:6px;">
+                <span style="font-size:0.76rem; color:#999; flex-shrink:0;">✏️ 정정</span>
+                <select data-old="${item.status}" onchange="correctAttendance('${dateStr}','${item.name}', this)"
+                        style="flex:1; padding:5px 6px; border:1px solid #ddd; border-radius:6px; font-family:inherit; font-size:0.82rem; background:#fff;">
+                    ${statuses.map(s => `<option value="${s}"${s===item.status?' selected':''}>${s}</option>`).join('')}
+                </select>
+            </div>`;
+
         const div = document.createElement('div');
         div.className = 'card';
         div.style.cssText = `margin-bottom:8px; border-left:4px solid ${borderColor};`;
@@ -5570,9 +5639,33 @@ async function viewAdminAttendance() {
                        <span style="color:#333; margin-left:6px;">${item.reason}</span>`
                     : `<span style="color:#bbb;">소명 미제출</span>`}
             </div>` : ''}
+            ${selectHtml}
         `;
         resultDiv.appendChild(div);
     });
+}
+
+/** 교사: 출결 직접 정정 (상태 변경 + 엽전 자동 보정) */
+async function correctAttendance(date, name, sel) {
+    const newStatus = sel.value;
+    const oldStatus = sel.dataset.old;
+    if (newStatus === oldStatus) return;
+    if (!confirm(`${name}의 ${date} 출결을 '${oldStatus}' → '${newStatus}'(으)로 정정하시겠소?\n엽전도 자동으로 보정됩니다.`)) {
+        sel.value = oldStatus;   // 취소 → 원래대로
+        return;
+    }
+    try {
+        const res = await callApi('updateAttendance', { date, name, newStatus });
+        AppCache.invalidate('getAdminAttendance', { date });
+        AppCache.invalidate('getAllMemberPoints', {});
+        AppCache.invalidate('getMyPointLog', { name });
+        const dtxt = (res && res.delta) ? ` (엽전 ${res.delta > 0 ? '+' : ''}${res.delta}냥)` : '';
+        showToast(`✅ ${name} 출결 정정: ${res.oldStatus}→${res.newStatus}${dtxt}`);
+        viewAdminAttendance();   // 목록 새로고침
+    } catch(e) {
+        showToast('정정 실패: ' + (e.message || ''));
+        sel.value = oldStatus;
+    }
 }
 
 async function loadClassStats() {
@@ -7607,6 +7700,10 @@ async function loadCounselStats() {
 
         window._attMap  = attMap;
         window._planMap = planMap;
+        // ★ 엽전 현황(특히 마이너스 학생)용 데이터 저장
+        window._coinList = (memberPoints || [])
+            .filter(m => m.name && m.name !== '교사')
+            .map(m => ({ name: m.name, coins: m.coins ?? 0 }));
 
         // 연도 셀렉트 구성
         const sel = document.getElementById('counsel-stat-year');
@@ -7716,6 +7813,11 @@ function renderCounselStats() {
             </div>
             <div id="plan-rank-list"><p style="text-align:center;color:#999;font-size:0.85rem;">데이터 로딩 중...</p></div>
         </div>
+
+        <div class="stat-card" id="coin-rank-card">
+            <div class="stat-card-title">🪙 엽전 현황 <span style="font-size:0.7rem;color:#bbb;font-weight:normal;">(낮은 순 · 마이너스 주의)</span></div>
+            <div id="coin-rank-list"><p style="text-align:center;color:#999;font-size:0.85rem;">데이터 로딩 중...</p></div>
+        </div>
     `;
 
     // 차트 렌더링
@@ -7738,7 +7840,33 @@ function renderCounselStats() {
         if (top.length) switchCounselRankTab('many');
         switchRankTab('att',  'bad');
         switchRankTab('plan', 'bad');
+        renderCoinRank();
     }, 100);
+}
+
+/* ─── 엽전 현황 (낮은 순, 마이너스 학생 강조) ─── */
+function renderCoinRank() {
+    const el = document.getElementById('coin-rank-list');
+    if (!el) return;
+    const list = window._coinList || [];
+    if (!list.length) {
+        el.innerHTML = '<p style="text-align:center;color:#999;font-size:0.85rem;">데이터가 없습니다.</p>';
+        return;
+    }
+    const negCount = list.filter(c => c.coins < 0).length;
+    const sorted   = [...list].sort((a, b) => a.coins - b.coins).slice(0, 10);
+    el.innerHTML =
+        `<div style="font-size:0.82rem;color:#555;margin-bottom:10px;">
+            마이너스 엽전 학생: <b style="color:${negCount ? '#C62828' : '#2E7D32'};">${negCount}명</b>
+            <span style="color:#bbb;">· 하위 ${sorted.length}명 표시</span>
+        </div>` +
+        sorted.map(c => {
+            const neg = c.coins < 0;
+            return `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid #f3f3f3;">
+                <span style="flex:1;${neg ? 'font-weight:700;color:#C62828;' : ''}">${c.name}</span>
+                <span style="font-weight:bold;color:${neg ? '#C62828' : c.coins >= 30 ? '#1B5E20' : '#555'};">🪙 ${c.coins}냥</span>
+            </div>`;
+        }).join('');
 }
 
 /* ─── 상담 횟수 순위 탭 전환 ─── */
