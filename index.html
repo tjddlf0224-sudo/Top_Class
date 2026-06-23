@@ -4231,7 +4231,7 @@ async function openPointLog(tab) {
                 div.style.cssText = 'margin-bottom:8px;transition:background 0.15s;';
                 div.innerHTML = `
                     <div style="display:flex;align-items:flex-start;gap:10px;">
-                        <input type="checkbox" class="pointlog-cb" data-row="${log.row}" data-name="${log.name}"
+                        <input type="checkbox" class="pointlog-cb" data-row="${log.row}" data-name="${log.name}" data-delta="${delta}"
                                onclick="event.stopPropagation();updatePointLogSelection()"
                                style="width:20px;height:20px;margin-top:2px;flex-shrink:0;cursor:pointer;
                                       accent-color:#C9A66B;-webkit-appearance:checkbox;">
@@ -4258,7 +4258,7 @@ async function openPointLog(tab) {
                                         style="flex:1;background:rgba(44,44,44,0.08);border:1px solid var(--stone);
                                                color:var(--ink);border-radius:7px;padding:6px;cursor:pointer;
                                                font-family:inherit;font-size:0.82rem;">수정</button>
-                                <button onclick="deletePointLog(${log.row},'${log.name}')"
+                                <button onclick="deletePointLog(${log.row},'${log.name}','${log.date}',${delta})"
                                         style="flex:1;background:rgba(198,40,40,0.08);border:1px solid rgba(198,40,40,0.3);
                                                color:#C62828;border-radius:7px;padding:6px;cursor:pointer;
                                                font-family:inherit;font-size:0.82rem;">삭제</button>
@@ -4563,15 +4563,20 @@ async function bulkDeletePointLogs() {
     if (checked.length === 0) return;
     if (!confirm(`선택한 ${checked.length}개의 기록을 삭제하시겠습니까?\n엽전 변동량도 모두 복원됩니다.`)) return;
 
-    const rows = checked.map(cb => Number(cb.dataset.row));
+    // items에 기대값(이름·변동량) 포함 → 백엔드가 행 밀림 검증(오삭제 방지)
+    const items = checked.map(cb => ({
+        row:   Number(cb.dataset.row),
+        name:  cb.dataset.name,
+        delta: Number(cb.dataset.delta)
+    }));
 
-    showToast(`${rows.length}개 삭제 중...`);
+    showToast(`${items.length}개 삭제 중...`);
     try {
-        // ★ 한 번의 호출로 일괄 처리 (이전: 항목마다 GAS 왕복 → 매우 느림)
-        const res = await callApi('deletePointLogBatch', { rows });
+        // ★ 한 번의 호출로 일괄 처리. rows도 함께 보내 구버전 code.gs와 호환
+        const res = await callApi('deletePointLogBatch', { items, rows: items.map(it => it.row) });
         AppCache.invalidate('getAdminPointLog', {});
         AppCache.invalidate('getAllMemberPoints', {});
-        showToast(`${(res && res.deleted) || rows.length}개 삭제 완료.`);
+        showToast(`${(res && res.deleted) || items.length}개 삭제 완료.`);
     } catch(e) {
         showToast('삭제 중 오류: ' + (e.message || ''));
     }
@@ -4623,13 +4628,18 @@ async function resolveEditRequest(row, approve) {
 }
 
 /* PointLog 삭제 */
-async function deletePointLog(row, name) {
+async function deletePointLog(row, name, date, delta) {
     if (!confirm(`이 기록을 삭제하시겠습니까?\n삭제 시 엽전 변동량도 복원됩니다.`)) return;
-    await callApi('deletePointLog', { row, name });
-    AppCache.invalidate('getAdminPointLog', {});
-    AppCache.invalidate('getAllMemberPoints', {});
-    AppCache.invalidate('getMyPointLog', { name });
-    showToast('삭제되었습니다.');
+    try {
+        // expect* = 안전장치(행 밀림 시 오삭제 방지)
+        await callApi('deletePointLog', { row, name, expectName: name, expectDate: date, expectDelta: delta });
+        AppCache.invalidate('getAdminPointLog', {});
+        AppCache.invalidate('getAllMemberPoints', {});
+        AppCache.invalidate('getMyPointLog', { name });
+        showToast('삭제되었습니다.');
+    } catch(e) {
+        showToast(e.message || '삭제 실패');
+    }
     openPointLog('log');
 }
 
@@ -4760,6 +4770,9 @@ async function saveAbsenceReason() {
     } else {
         showToast(`${name} (${date}) 결석사유 등록 완료되었습니다.`);
     }
+    // 다음 학생 등록 시 직전 학생이 남아 중복 등록되는 것 방지 → 선택칸 초기화
+    const sel = document.getElementById('absence-student-select');
+    if (sel) sel.value = '';
     loadAbsenceList();
 }
 
@@ -4834,7 +4847,8 @@ async function openMarket(tab) {
     } else if (activeTab === 'sell') {
         // 장원/교사: 판매 처리 (여러 상품 한 번에)
         const memberSheet = await callApi('getAllMemberPoints');
-        const students = memberSheet.filter(m => m.name !== '교사');
+        const students = memberSheet.filter(m => m.name !== '교사')
+            .sort((a, b) => String(a.name).localeCompare(String(b.name), 'ko'));   // 가나다순
         const stock    = (items||[]).filter(i => i.qty > 0);
         content.innerHTML = `
             <div class="card">
@@ -4893,7 +4907,7 @@ async function openMarket(tab) {
                         ${isCancelled
                             ? '<span style="color:#C62828;font-size:0.85rem;">취소됨</span>'
                             : (isTeacher || isWonwon
-                                ? `<button onclick="cancelMarketLog(${log.row})"
+                                ? `<button onclick="cancelMarketLog(${log.row},'${log.name}')"
                                            style="background:#546E7A;color:white;border:none;border-radius:4px;padding:5px 8px;cursor:pointer;font-size:0.82rem;">
                                        취소</button>`
                                 : '')}
@@ -5044,10 +5058,10 @@ async function deleteMarketItem(row) {
     openMarket('inventory');
 }
 
-async function cancelMarketLog(row) {
+async function cancelMarketLog(row, name) {
     if (!confirm('해당 거래를 취소하시겠습니까? 엽전과 재고가 복원됩니다.')) return;
     try {
-        await callApi('cancelMarketLog', { row });
+        await callApi('cancelMarketLog', { row, expectName: name });
         AppCache.invalidate('getMarketInventory', {});
         AppCache.invalidate('getAllMemberPoints', {});
         AppCache.invalidate('getMarketLog', {});
