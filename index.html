@@ -6,15 +6,23 @@
     <script>
         // iOS Safari에서 100vh = 주소창 포함 높이 문제 해결
         // 실제 화면 높이를 --vh 변수로 주입
+        // ★ 하단 탭바 사라짐 버그 수정: innerHeight는 iOS에서 키보드/주소창 변화 시
+        //   갱신 누락(=--vh가 과대하게 남아 앱 하단이 잘림)이 잦으므로,
+        //   실제 보이는 영역인 visualViewport.height를 우선 사용하고
+        //   visualViewport 이벤트(resize/scroll)에도 반응한다.
         function setVH() {
-            var vh = window.innerHeight * 0.01;
-            document.documentElement.style.setProperty('--vh', vh + 'px');
+            var h = (window.visualViewport && window.visualViewport.height) || window.innerHeight;
+            document.documentElement.style.setProperty('--vh', (h * 0.01) + 'px');
         }
         setVH();
         window.addEventListener('resize', setVH);
         window.addEventListener('orientationchange', function() {
             setTimeout(setVH, 100);
         });
+        if (window.visualViewport) {
+            window.visualViewport.addEventListener('resize', setVH);
+            window.visualViewport.addEventListener('scroll', setVH);
+        }
     </script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>장원급제반</title>
@@ -402,14 +410,6 @@ input::placeholder, textarea::placeholder { color: #C4BDB6; }
     color: var(--gold);
     line-height: 1;
 }
-.amnesty-val {
-    font-family: 'Nanum Myeongjo', serif;
-    font-size: 1.5rem;
-    font-weight: 700;
-    color: rgba(255,255,255,0.8);
-    text-align: right;
-}
-
 /* ── 홈 메뉴 그리드 ── */
 .menu-grid {
     display: grid;
@@ -619,13 +619,7 @@ input::placeholder, textarea::placeholder { color: #C4BDB6; }
             <div class="cg-row" style="display:flex; justify-content:space-between; gap:10px; background:#fff; border:1px solid #F3E3E3; border-radius:9px; padding:9px 12px;">
                 <span style="color:#333; font-size:0.9rem;">저잣거리 구매</span><b style="color:#C62828; white-space:nowrap;">−상품가격</b></div>
             <div class="cg-row" style="display:flex; justify-content:space-between; gap:10px; background:#fff; border:1px solid #F3E3E3; border-radius:9px; padding:9px 12px;">
-                <span style="color:#333; font-size:0.9rem;">사면장 구매</span><b style="color:#C62828; white-space:nowrap;">−30냥</b></div>
-            <div class="cg-row" style="display:flex; justify-content:space-between; gap:10px; background:#fff; border:1px solid #F3E3E3; border-radius:9px; padding:9px 12px;">
                 <span style="color:#333; font-size:0.9rem;">선생님 벌점</span><b style="color:#C62828; white-space:nowrap;">−α냥</b></div>
-        </div>
-
-        <div style="background:rgba(201,166,107,0.13); border:1px solid var(--gold); border-radius:9px; padding:11px 12px; font-size:0.84rem; color:#5D4037; line-height:1.6;">
-            🎟️ <b>사면장</b>: 30냥에 구매해 두면, 지각한 날 사용해 그날 지각 차감(−1냥)을 취소할 수 있어요.
         </div>
     </div>
 </div>
@@ -985,7 +979,6 @@ input::placeholder, textarea::placeholder { color: #C4BDB6; }
                         <div id="my-coins"
                              style="font-family:'Nanum Myeongjo',serif; font-size:2rem;
                                     font-weight:800; color:var(--ink); line-height:1;">0냥</div>
-                        <div id="amnesty-btn-area" style="margin-top:10px; width:100%;"></div>
                     </div>
                     <!-- QR 카드 -->
                     <div style="background:rgba(248,245,240,0.18); border:1px solid rgba(233,230,225,0.35);
@@ -2352,19 +2345,27 @@ function showSection(id) {
     document.getElementById(id).classList.remove('hidden');
 
     // 로그인 화면 전환 시 #app 높이 재고정 (배경 늘어남 방지)
+    const app = document.getElementById('app');
     if (id === 'sec-login') {
         const vh = window.innerHeight;
-        const app = document.getElementById('app');
         if (app) {
             app.style.height    = vh + 'px';
             app.style.maxHeight = vh + 'px';
         }
         document.documentElement.style.setProperty('--vh', (vh * 0.01) + 'px');
+    } else if (app) {
+        // ★ 로그인 때 박아둔 인라인 픽셀 높이를 제거 → CSS calc(--vh*100)가 다시 지배
+        //   (안 지우면 로그인 시점의 높이가 고정돼 탭바가 잘려 사라질 수 있음)
+        app.style.height    = '';
+        app.style.maxHeight = '';
     }
 
     // 홈 화면일 때만 탭바 표시
     const tabBar = document.getElementById('home-tab-bar');
     if (tabBar) tabBar.style.display = id === 'sec-home' ? 'flex' : 'none';
+
+    // ★ 화면 전환 시 뷰포트 높이 재보정 (스테일 --vh로 탭바가 잘려 사라지는 것 방지)
+    if (typeof setVH === 'function') setVH();
 }
 
 function scrollToTop() {
@@ -2385,7 +2386,7 @@ async function loadWeeklyStatus() {
     while (dates.length < 5) {
         const day = d.getDay();
         if (day !== 0 && day !== 6) {
-            dates.unshift(d.toISOString().slice(0, 10));
+            dates.unshift(toDateStr(d));   // 로컬(한국)시간 기준 — UTC 날짜밀림 방지
         }
         d.setDate(d.getDate() - 1);
     }
@@ -3188,37 +3189,18 @@ function logout() {
 let _watchedMemberId    = null;   // 현재 구독 중인 학번
 let _selfCoinChangeUntil = 0;     // 본인 행동으로 인한 변동 — 이 시각까지는 변동 토스트 억제
 
-/** 본인 행동(사면장/지각/플래너100%)으로 엽전이 바뀔 때 호출 → 실시간 리스너의 중복 토스트 억제 */
+/** 본인 행동(지각/플래너100%)으로 엽전이 바뀔 때 호출 → 실시간 리스너의 중복 토스트 억제 */
 function markSelfCoinChange() { _selfCoinChangeUntil = Date.now() + 4000; }
 
-/** 학생 홈의 엽전·사면장 표시 렌더 (loadHome + 실시간 리스너가 공용) */
+/** 학생 홈의 엽전 표시 렌더 (loadHome + 실시간 리스너가 공용) */
 function renderMyCoins() {
     if (!currentUser) return;
     const coins   = currentUser.coins   ?? 0;
-    const amnesty = currentUser.amnesty ?? 0;
     const coinsEl = document.getElementById('my-coins');
     if (coinsEl) {
         coinsEl.textContent = `${coins}냥`;
         coinsEl.style.color = 'var(--ink)';
     }
-    const btnArea   = document.getElementById('amnesty-btn-area');
-    const todayLate = currentUser.checkedIn === '지각';
-    let btns = '';
-    if (coins >= 30) {
-        btns += `<button onclick="buyAmnesty()"
-            style="background:var(--gold);color:white;border:none;border-radius:7px;
-                   padding:7px 12px;cursor:pointer;font-family:inherit;
-                   font-size:0.78rem;font-weight:700;width:100%;margin-top:2px;">
-            사면장 구매 (30냥)</button>`;
-    }
-    if (amnesty > 0 && todayLate) {
-        btns += `<button onclick="useAmnesty()"
-            style="background:var(--stone);color:var(--ink);border:none;border-radius:7px;
-                   padding:7px 12px;cursor:pointer;font-family:inherit;
-                   font-size:0.78rem;width:100%;margin-top:4px;">
-            사면장 사용</button>`;
-    }
-    if (btnArea) btnArea.innerHTML = btns;
 }
 
 /** 내 members/{학번} 문서를 실시간 구독 — 엽전 변동 시 화면 즉시 갱신 + 알림 */
@@ -3234,7 +3216,6 @@ function startMyCoinWatch() {
 
         // 상태 갱신 + 저장
         currentUser.coins   = d.coins;
-        currentUser.amnesty = d.amnesty;
         currentUser.role    = d.role;
         currentUser.alert   = d.alert;
         try { localStorage.setItem(STORAGE_KEY, JSON.stringify(currentUser)); } catch(e) {}
@@ -3309,7 +3290,7 @@ function loadHome() {
         if (nameEl) nameEl.textContent = currentUser.name;
         if (roleEl) roleEl.textContent = currentUser.role || '관원';
 
-        // 엽전·사면장 표시 (실시간 갱신을 위해 함수로 분리)
+        // 엽전 표시 (실시간 갱신을 위해 함수로 분리)
         renderMyCoins();
         // 내 엽전 실시간 구독 시작 (상점/벌점/저잣거리 변동 즉시 반영)
         startMyCoinWatch();
@@ -3319,9 +3300,9 @@ function loadHome() {
         const roleBtn = document.getElementById('btn-role-page');
         if (roleBtn && roleBtn.querySelector('span')) roleBtn.querySelector('span').textContent = '관원 전용';        document.getElementById('admin-btn-area').innerHTML = '';
         document.getElementById('btn-global-refresh').classList.add('hidden');
-        // 최근 5일 카드 숨기기 (교사는 불필요)
+        // 학생에게는 최근 5일 출결/플래너 카드 표시
         const weeklyCard = document.getElementById('card-weekly-status');
-        if (weeklyCard) weeklyCard.style.display = 'none';
+        if (weeklyCard) weeklyCard.style.display = '';
 
         // 최근 5일 출결/플래너 현황 로드
         loadWeeklyStatus();
@@ -3535,8 +3516,6 @@ async function loadStudentQuickView() {
                 <div style="font-size:0.75rem; color:#888; margin-bottom:3px;">엽전</div>
                 <div style="font-size:0.9rem;">
                     <span style="font-weight:bold; color:${(memberInfo.coins??0)<0?'#C62828':'#2E7D32'};">🪙 ${memberInfo.coins??0}냥</span>
-                    <span style="color:#ccc; margin:0 3px;">|</span>
-                    <span style="font-weight:bold; color:#6D4C41;">🎟️ ${memberInfo.amnesty??0}매</span>
                 </div>
             </div>
             <div style="background:white; border-radius:8px; padding:9px 10px; text-align:center;">
@@ -4031,7 +4010,11 @@ function savePlannerData() {
         content:  content,
         progress: progress
     }, '플래너 저장').then(res => {
-        // 100% 달성 시 엽전 지급 알림 (callApiBg가 Promise를 반환하지 않으므로 별도 처리)
+        _clearPlannerSaveError();   // 저장 성공 → 실패 배너 제거
+    }).catch(err => {
+        // ★ 저장 실패: 사라지는 토스트 대신 재시도 배너를 띄움
+        // (미작성 차감은 새벽 5시 트리거 → 저장 실패가 곧 -1냥으로 이어질 수 있어 명확히 알림)
+        _showPlannerSaveError(content, progress);
     });
 
     // 100% 달성 & 이전 저장이 100%가 아닌 경우 → 프론트 알림
@@ -4042,6 +4025,40 @@ function savePlannerData() {
         currentUser.coins = (currentUser.coins ?? 0) + 2;
         localStorage.setItem(STORAGE_KEY, JSON.stringify(currentUser));
     }
+}
+
+/** 플래너 저장 실패 시 고정 배너 표시 (사라지지 않음 + 다시 저장 버튼) */
+function _showPlannerSaveError(content, progress) {
+    let el = document.getElementById('planner-save-error');
+    if (!el) {
+        el = document.createElement('div');
+        el.id = 'planner-save-error';
+        el.style.cssText = `position:fixed; left:12px; right:12px; bottom:16px; z-index:9999;
+            background:#C62828; color:#fff; border-radius:12px; padding:13px 15px;
+            box-shadow:0 6px 20px rgba(0,0,0,0.25); display:flex; align-items:center; gap:10px;
+            font-size:0.88rem; line-height:1.45;`;
+        document.body.appendChild(el);
+    }
+    el.innerHTML = `
+        <div style="flex:1;">⚠️ 플래너가 <b>저장되지 않았어요.</b><br>
+            <span style="font-size:0.8rem;opacity:0.9;">이대로 두면 미작성으로 −1냥이 될 수 있어요. 다시 저장해 주세요.</span>
+        </div>
+        <button id="planner-save-retry"
+            style="flex-shrink:0; background:#fff; color:#C62828; border:none; border-radius:8px;
+                   padding:9px 13px; font-family:inherit; font-weight:700; font-size:0.85rem; cursor:pointer;">
+            다시 저장</button>`;
+    el.querySelector('#planner-save-retry').onclick = function() {
+        this.disabled = true; this.textContent = '저장 중...';
+        callApiBg('savePlanner', { name: currentUser.name, content, progress }, '플래너 저장')
+            .then(() => { _clearPlannerSaveError(); showToast('✅ 플래너가 저장되었어요.'); })
+            .catch(() => { _showPlannerSaveError(content, progress); });   // 실패 시 배너 유지
+    };
+}
+
+/** 플래너 저장 실패 배너 제거 */
+function _clearPlannerSaveError() {
+    const el = document.getElementById('planner-save-error');
+    if (el) el.remove();
 }
 
 /**
@@ -4270,7 +4287,6 @@ async function openPointLog(tab) {
                     </div>
                     <div style="font-size:0.9rem;font-weight:bold;color:${coins<0?'#C62828':coins>=30?'#1B5E20':'#333'};">
                         🪙 ${coins}냥
-                        <span style="font-size:0.8rem;color:#888;margin-left:4px;">🎟️${info.amnesty??0}</span>
                     </div>
                 </div>`;
             }).join('');
@@ -4323,7 +4339,6 @@ async function openPointLog(tab) {
                     </div>
                     <div style="text-align:right;font-size:0.95rem;font-weight:bold;color:${coins<0?'#C62828':coins>=30?'#1B5E20':'#333'};">
                         🪙 ${coins}냥
-                        <span style="font-size:0.8rem;color:#888;margin-left:4px;">🎟️${m.amnesty??0}</span>
                     </div>`;
                 listDiv.appendChild(div);
             });
@@ -4366,11 +4381,65 @@ async function openPointLog(tab) {
         // 학생: 내 엽전 내역
         tabsDiv.innerHTML = '';
         listDiv.innerHTML = '<p style="text-align:center;color:#999;">불러오는 중...</p>';
-        const logs = await callApi('getMyPointLog', { name: currentUser.name });
+        // 내역 + 내 수정요청을 함께 조회 (수정요청 조회는 백엔드 미배포 시 빈 배열로 우회)
+        const [logs, myReqs] = await Promise.all([
+            callApi('getMyPointLog',     { name: currentUser.name }),
+            callApi('getMyEditRequests', { name: currentUser.name }).catch(() => [])
+        ]);
         window._myPointLogs = logs || [];
         listDiv.innerHTML = '';
+
+        // ── 요약 카드: 현재 잔액 + 이번 달 획득/차감 (등수는 표시하지 않음) ──
+        const ym = toDateStr().slice(0, 7);   // 이번 달 yyyy-mm
+        let monthGain = 0, monthLoss = 0;
+        (logs || []).forEach(l => {
+            if (l.status === '대기') return;
+            if (!String(l.date || '').startsWith(ym)) return;
+            const d = Number(l.delta) || 0;
+            if (d >= 0) monthGain += d; else monthLoss += -d;
+        });
+        const bal = currentUser.coins ?? 0;
+        listDiv.insertAdjacentHTML('beforeend', `
+            <div class="card" style="display:flex;align-items:center;justify-content:space-between;gap:10px;
+                        background:rgba(201,166,107,0.12);border:1px solid var(--gold);">
+                <div>
+                    <div style="font-size:0.72rem;color:var(--muted);letter-spacing:0.5px;">내 엽전</div>
+                    <div style="font-family:'Nanum Myeongjo',serif;font-size:1.7rem;font-weight:800;
+                                color:${bal<0?'#C62828':'var(--ink)'};line-height:1.1;">${bal}냥</div>
+                </div>
+                <div style="text-align:right;font-size:0.82rem;line-height:1.6;">
+                    <div style="color:#888;">이번 달</div>
+                    <div><span style="color:#2E7D32;font-weight:700;">+${monthGain}</span>
+                         <span style="color:#ccc;margin:0 2px;">/</span>
+                         <span style="color:#C62828;font-weight:700;">−${monthLoss}</span> 냥</div>
+                </div>
+            </div>`);
+
+        // ── 내 수정요청 진행 상태 (대기/승인/반려) ──
+        if (myReqs && myReqs.length > 0) {
+            const badge = (s) => s === '승인' ? '<span style="color:#2E7D32;font-weight:700;">✅ 승인됨</span>'
+                              : s === '반려' ? '<span style="color:#C62828;font-weight:700;">❌ 반려됨</span>'
+                              : '<span style="color:#E65100;font-weight:700;">⏳ 대기 중</span>';
+            let reqHtml = '<div class="card" style="margin-bottom:6px;"><div style="font-weight:bold;margin-bottom:6px;">📨 내 수정요청</div>';
+            myReqs.forEach(r => {
+                const want = r.type === 'delete'
+                    ? '취소(삭제) 요청'
+                    : `${(r.newDelta>=0?'+':'')}${r.newDelta}냥으로 수정 요청`;
+                reqHtml += `
+                    <div style="border-top:1px solid #eee;padding:7px 0;font-size:0.84rem;">
+                        <div style="display:flex;justify-content:space-between;gap:8px;">
+                            <span style="color:#555;">${r.origDate} · ${r.origReason} (${(r.origDelta>=0?'+':'')}${r.origDelta}냥)</span>
+                            ${badge(r.status)}
+                        </div>
+                        <div style="color:#777;margin-top:2px;">→ ${want}</div>
+                    </div>`;
+            });
+            reqHtml += '</div>';
+            listDiv.insertAdjacentHTML('beforeend', reqHtml);
+        }
+
         if (!logs || logs.length === 0) {
-            listDiv.innerHTML = '<p style="text-align:center;color:#999;">기록이 없습니다.</p>';
+            listDiv.insertAdjacentHTML('beforeend', '<p style="text-align:center;color:#999;">기록이 없습니다.</p>');
             return;
         }
         listDiv.insertAdjacentHTML('beforeend',
@@ -4449,7 +4518,9 @@ async function submitEditRequest() {
     closeEditRequest();
     try {
         await callApi('requestPointEdit', payload);
+        AppCache.invalidate('getMyEditRequests', { name: currentUser.name });
         showToast('📨 수정요청을 보냈어요. 선생님 승인을 기다려주세요.');
+        openPointLog();   // 내 화면에 "대기 중" 요청 즉시 반영
     } catch(e) { showToast('요청 실패: ' + (e.message || '')); }
 }
 
@@ -4578,34 +4649,6 @@ async function grantPoint() {
 
 
 /* =========================================================
-   10-2. 사면장 구매/사용
-   ========================================================= */
-async function buyAmnesty() {
-    if (!confirm('엽전 30냥을 소모하여 사면장을 구매하시겠소?')) return;
-    markSelfCoinChange();   // 본인 행동 → 실시간 리스너 중복 토스트 억제
-    const res = await callApi('buyAmnesty', { name: currentUser.name });
-    currentUser.coins   = res.coins;
-    currentUser.amnesty = res.amnesty;
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(currentUser));
-    AppCache.invalidate('getAllMemberPoints', {});
-    showToast(`🎟️ 사면장 구매 완료! (잔액: ${res.coins}냥, 보유: ${res.amnesty}매)`);
-    loadHome();
-}
-
-async function useAmnesty() {
-    if (!confirm('사면장을 사용하여 오늘 지각을 취소하시겠소?')) return;
-    markSelfCoinChange();   // 본인 행동 → 실시간 리스너 중복 토스트 억제
-    const res = await callApi('useAmnesty', { name: currentUser.name });
-    currentUser.coins   = res.coins;
-    currentUser.amnesty = res.amnesty;
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(currentUser));
-    AppCache.invalidate('getAllMemberPoints', {});
-    showToast(`✅ 사면장 사용 완료! 지각 차감이 취소되었소. (잔액: ${res.coins}냥)`);
-    loadHome();
-}
-
-
-/* =========================================================
    10-3. 결석사유 관리 (교사 전용)
    ========================================================= */
 async function openAbsence() {
@@ -4711,7 +4754,6 @@ async function openMarket(tab) {
                 <p style="margin:0;font-size:0.88rem;color:#5D4037;">
                     🏪 장원에게 구매 의사를 말씀해주세요. 장원이 처리해 드립니다.<br>
                     현재 보유 엽전: <b style="color:#1B5E20;">🪙 ${currentUser.coins??0}냥</b>
-                    / 사면장: <b style="color:#6D4C41;">🎟️ ${currentUser.amnesty??0}매</b>
                 </p>
             </div>` +
             items.map(item => {
@@ -5110,7 +5152,6 @@ async function renderRoleUI(role) {
                 </div>
                 <div style="font-weight:bold;color:${coins<0?'#C62828':coins>=30?'#1B5E20':'#333'};">
                     🪙 ${coins}냥
-                    <span style="font-size:0.8rem;color:#888;margin-left:4px;">🎟️${m.amnesty??0}</span>
                 </div>
             `;
             target.appendChild(div);
