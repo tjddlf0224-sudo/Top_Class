@@ -4,15 +4,15 @@
     <meta charset="UTF-8">
     <style>html{height:100%;overflow:hidden;}</style>
     <script>
-        // iOS Safari에서 100vh = 주소창 포함 높이 문제 해결
-        // 실제 화면 높이를 --vh 변수로 주입
-        // ★ 하단 탭바 사라짐 버그 수정: innerHeight는 iOS에서 키보드/주소창 변화 시
-        //   갱신 누락(=--vh가 과대하게 남아 앱 하단이 잘림)이 잦으므로,
-        //   실제 보이는 영역인 visualViewport.height를 우선 사용하고
-        //   visualViewport 이벤트(resize/scroll)에도 반응한다.
+        // 실제 화면 높이를 --vh 변수로 주입 (100vh 문제 해결)
+        // ★ 하단 탭바: 홈화면 추가(standalone) 앱에선 innerHeight가 전체 화면 높이라
+        //   이를 기준으로 한다. (visualViewport.height는 이 환경에서 화면보다 작게 잡혀
+        //   앱이 짧아지고 탭바 아래에 공백이 생겼음 → innerHeight로 환원)
+        //   대신 화면전환·회전·visualViewport 변화 때마다 다시 계산해 스테일(=탭바 잘림)을 막는다.
         function setVH() {
-            var h = (window.visualViewport && window.visualViewport.height) || window.innerHeight;
-            document.documentElement.style.setProperty('--vh', (h * 0.01) + 'px');
+            var h = window.innerHeight ||
+                    (window.visualViewport && window.visualViewport.height) || 0;
+            if (h > 0) document.documentElement.style.setProperty('--vh', (h * 0.01) + 'px');
         }
         setVH();
         window.addEventListener('resize', setVH);
@@ -21,7 +21,6 @@
         });
         if (window.visualViewport) {
             window.visualViewport.addEventListener('resize', setVH);
-            window.visualViewport.addEventListener('scroll', setVH);
         }
     </script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
