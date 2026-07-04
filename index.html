@@ -967,6 +967,12 @@ input::placeholder, textarea::placeholder { color: #C4BDB6; }
                 <span style="font-size:0.8rem; color:#8B6914; font-weight:700; white-space:nowrap;">켜기 →</span>
             </div>
 
+            <!-- 시험 D-day 배너 (교사가 집무실에서 등록, JS가 채움) -->
+            <div id="dday-banner" style="display:none; margin-bottom:12px;"></div>
+
+            <!-- 오늘 방과후 카드 (Firestore 방과후 데이터에서 JS가 채움) -->
+            <div id="today-afterschool-card" style="display:none; margin-bottom:12px;"></div>
+
             <!-- 학생: 현황 카드 2개 -->
             <div class="student-only" id="card-my-status">
                 <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; min-width:0;">
@@ -1282,7 +1288,7 @@ input::placeholder, textarea::placeholder { color: #C4BDB6; }
             <div id="plan-list"></div>
 
             <!-- 새 항목 추가 입력 (한 칸) -->
-            <div style="display:flex; gap:8px; margin-top:4px;">
+            <div id="plan-add-row" style="display:flex; gap:8px; margin-top:4px;">
                 <input type="text" id="plan-input"
                        placeholder="할 일을 입력하세요"
                        style="flex:1; background:rgba(255,255,255,0.4);
@@ -1296,7 +1302,7 @@ input::placeholder, textarea::placeholder { color: #C4BDB6; }
             </div>
 
             <!-- 저장 버튼 (하단 1개만) -->
-            <button class="btn" onclick="savePlannerData()"
+            <button class="btn" id="plan-save-btn" onclick="savePlannerData()"
                     style="background:rgba(44,44,44,0.82); backdrop-filter:blur(6px); margin-top:8px;">
                 플래너 저장하기
             </button>
@@ -1346,6 +1352,8 @@ input::placeholder, textarea::placeholder { color: #C4BDB6; }
                 <button class="btn" style="background:var(--ink); margin:0;" onclick="openAssignRoleModal()">🏅 관직 제수</button>
                 <button class="btn" style="background:#5D6D7E; margin:0;" onclick="openTriggerPause()">⏸️ 트리거 일시정지</button>
                 <button class="btn" style="background:#5D6D7E; margin:0;" onclick="openDormModal()">🏠 기숙사생 관리</button>
+                <button class="btn" style="background:#00695C; margin:0;" onclick="openDdayManager()">🗓️ 시험 D-day</button>
+                <button class="btn" style="background:#4527A0; margin:0;" onclick="openWeeklyReport()">📊 주간 리포트</button>
             </div>
 
             <hr>
@@ -2208,6 +2216,7 @@ async function prefetchAll() {
         fetchToCache('getAdminData',       {}),
         fetchToCache('getAllMemberPoints',  {}),
         fetchToCache('getClassStats',       {}),
+        fetchToCache('getExamDdays',        {}),
     ];
 
     // 교사 전용: 오늘 + 최근 7일치 출결·플래너·상담 + 전체 학생 성적 미리 캐시
@@ -2224,14 +2233,14 @@ async function prefetchAll() {
             );
         }).catch(() => {});
 
+        // ★ 날짜별 21건 개별 호출 대신 범위 API 3건으로 축소 (구버전 백엔드면 자동 무시)
         teacherFetches = [
             examScoreFetches,
-            fetchToCache('getLegacyStats', {}),
-            ...days.flatMap(d => [
-                fetchToCache('getAdminAttendance',  { date: d }),
-                fetchToCache('getAdminPlanner',     { date: d }),
-                fetchToCache('getCounselingByDate', { date: d }),
-            ]),
+            fetchToCache('getCoinPresets', {}),
+            fetchToCache('getBankAll',     {}),
+            primeDailyCache('getAdminAttendance',  'getAdminAttendanceRange', days),
+            primeDailyCache('getAdminPlanner',     'getAdminPlannerRange',    days),
+            primeDailyCache('getCounselingByDate', 'getCounselingRange',      days),
         ];
     }
 
@@ -2240,6 +2249,7 @@ async function prefetchAll() {
         fetchToCache('getMyHistory',    { name }),
         fetchToCache('getMyPointLog',   { name }),
         fetchToCache('getMyExamScores', { name }),
+        fetchToCache('getBank',         { name }),
     ] : [];
 
     // 모두 병렬 실행 (실패해도 조용히 무시)
@@ -2297,19 +2307,32 @@ async function globalRefresh() {
     showToast('새로고침 완료');
 }
 
-/** 서버에서 가져와 캐시에 저장 (로딩 오버레이 없음) */
+/** 서버에서 가져와 캐시에 저장 (로딩 오버레이 없음, 대기열 뒤쪽=낮은 우선순위) */
 async function fetchToCache(action, params = {}) {
     try {
-        const res  = await fetch(GOOGLE_SCRIPT_URL, {
-            method: 'POST', mode: 'cors',
-            body: JSON.stringify({ action, ...params })
-        });
-        const json = await res.json();
+        const json = await gasRequest(action, params, false);
         if (json.status !== 'error') {
             AppCache.set(action, params, json.data);
         }
         return json.data;
     } catch(e) { /* 프리페치 실패 무시 */ }
+}
+
+/**
+ * [범위 조회로 일별 캐시 채우기]
+ * 날짜별 API(getAdminAttendance 등)를 30번 쏘는 대신,
+ * ○○Range API 1번으로 받아 일별 캐시에 나눠 담는다.
+ * 구버전 백엔드(Range 미지원)면 조용히 실패 → 기존 일별 호출이 그대로 동작.
+ */
+async function primeDailyCache(action, rangeAction, dates) {
+    const missing = (dates || []).filter(d => AppCache.get(action, { date: d }) === null);
+    if (missing.length <= 1) return;   // 1건 이하면 개별 호출이 더 쌈
+    const sorted = [...missing].sort();
+    const byDate = await fetchToCache(rangeAction, { start: sorted[0], end: sorted[sorted.length - 1] });
+    if (!byDate) return;
+    missing.forEach(d => {
+        if (byDate[d] !== undefined) AppCache.set(action, { date: d }, byDate[d]);
+    });
 }
 
 
@@ -2390,6 +2413,11 @@ async function loadWeeklyStatus() {
         d.setDate(d.getDate() - 1);
     }
 
+    // ★ 범위 API 2건으로 캐시를 먼저 채움 → 아래 일별 조회는 캐시에서 즉시 반환
+    await Promise.all([
+        primeDailyCache('getAdminAttendance', 'getAdminAttendanceRange', dates),
+        primeDailyCache('getAdminPlanner',    'getAdminPlannerRange',    dates)
+    ]);
     const [attResults, planResults] = await Promise.all([
         Promise.all(dates.map(date => callApi('getAdminAttendance', { date }).catch(() => []))),
         Promise.all(dates.map(date => callApi('getAdminPlanner',    { date }).catch(() => [])))
@@ -2446,21 +2474,65 @@ async function loadWeeklyStatus() {
  * ★ 읽기 전용 요청에만 사용 (로그인, 데이터 조회)
  *   쓰기 요청은 callApiBg()를 사용할 것
  */
+/* =========================================================
+   [요청 대기열] GAS 동시 요청 제한 + 동일 요청 중복 제거
+   - GAS 웹앱은 동시 실행 제한(약 30개)이 있어, 프리페치·달력 조회가
+     수십 개를 한꺼번에 쏘면 전체 응답이 밀려 앱이 내내 느려짐
+   - front=true(사용자 조작)는 대기열 맨 앞, false(백그라운드 프리페치)는 맨 뒤
+   - 같은 action+params 요청이 이미 진행 중이면 그 결과를 공유 (중복 발사 방지)
+   ========================================================= */
+const _gasInflight = {};
+const _gasQueue    = [];
+let   _gasActive   = 0;
+const GAS_MAX_CONCURRENT = 8;
+
+function _gasNext() {
+    while (_gasActive < GAS_MAX_CONCURRENT && _gasQueue.length > 0) {
+        const run = _gasQueue.shift();
+        _gasActive++;
+        run();
+    }
+}
+
+function gasRequest(action, params, front) {
+    const key = AppCache.key(action, params);
+    if (_gasInflight[key]) return _gasInflight[key];
+    const promise = new Promise((resolve, reject) => {
+        const run = () => {
+            fetch(GOOGLE_SCRIPT_URL, {
+                method: 'POST', mode: 'cors',
+                body: JSON.stringify({ action, ...params })
+            })
+            .then(res => res.json())
+            .then(resolve, reject)
+            .finally(() => {
+                _gasActive--;
+                delete _gasInflight[key];
+                _gasNext();
+            });
+        };
+        if (front) _gasQueue.unshift(run); else _gasQueue.push(run);
+        _gasNext();
+    });
+    _gasInflight[key] = promise;
+    return promise;
+}
+
 async function callApi(action, params = {}) {
-    // ★ 캐시 히트 → 즉시 반환 (로딩 없음)
-    const cached = AppCache.get(action, params);
-    if (cached !== null) return cached;
+    // ★ 조회(get*)만 캐시 사용 — 쓰기 요청을 캐시하면 같은 파라미터의
+    //   두 번째 쓰기가 서버에 안 가고 조용히 무시되는 버그가 생김
+    const cacheable = action.startsWith('get');
+    if (cacheable) {
+        const cached = AppCache.get(action, params);
+        if (cached !== null) return cached;
+    }
 
     // 캐시 미스 → 서버 호출 (로딩 오버레이 표시)
     document.getElementById('loading').classList.remove('hidden');
     try {
-        const res  = await fetch(GOOGLE_SCRIPT_URL, {
-            method: 'POST', mode: 'cors',
-            body: JSON.stringify({ action, ...params })
-        });
-        const json = await res.json();
+        const json = await gasRequest(action, params, true);
         if (json.status === 'error') throw new Error(json.message);
-        AppCache.set(action, params, json.data);   // 결과를 캐시에 저장
+        if (cacheable) AppCache.set(action, params, json.data);
         return json.data;
     } catch(err) {
         showToast("오류: " + err.message);
@@ -2483,11 +2555,7 @@ async function callApi(action, params = {}) {
 async function callApiBg(action, params = {}, label = '저장') {
     setBgStatus('saving', `⏳ ${label} 중...`);
     try {
-        const res  = await fetch(GOOGLE_SCRIPT_URL, {
-            method: 'POST', mode: 'cors',
-            body: JSON.stringify({ action, ...params })
-        });
-        const json = await res.json();
+        const json = await gasRequest(action, params, true);
         if (json.status === 'error') throw new Error(json.message);
         setBgStatus('saved', `✅ ${label} 완료`);
         return json.data;
@@ -2710,6 +2778,10 @@ let asFormMode = 'date', asFormId = null;
 
 function asPad2(n) { return String(n).padStart(2, '0'); }
 
+/** 방과후 데이터 로드 성공 여부 — 실패 상태에서 저장하면 시간표 전체가
+ *  빈 데이터로 덮어써지므로(유일본이 Firestore) 저장을 차단하는 데 사용 */
+let _asLoadOk = false;
+
 async function openAfterSchool() {
     showSection('sec-afterschool');
     const isT = currentUser && currentUser.role === 'teacher';
@@ -2717,13 +2789,17 @@ async function openAfterSchool() {
     const t = new Date(); asYear = t.getFullYear(); asMonth = t.getMonth();
     // 1) Firestore에서 직접 로드 (GAS 안 거침)
     if (typeof window.fsReadAfterSchool === 'function') {
-        asData = (await window.fsReadAfterSchool()) || { weekly: [], exceptions: [] };
-    } else { asData = { weekly: [], exceptions: [] }; }
+        const fresh = await window.fsReadAfterSchool();   // null = 읽기 실패
+        _asLoadOk = fresh !== null;
+        asData = fresh || { weekly: [], exceptions: [] };
+        if (!_asLoadOk) showToast('시간표를 불러오지 못했어요. 네트워크 확인 후 다시 열어주세요.', 3000);
+    } else { asData = { weekly: [], exceptions: [] }; _asLoadOk = false; }
     renderMonth();
     // 2) 실시간 구독 — 교사가 수정하면 강사·학생 화면에 즉시 반영
     if (typeof window.fsWatchAfterSchool === 'function') {
         window.fsWatchAfterSchool(function(d) {
             asData = d || { weekly: [], exceptions: [] };
+            _asLoadOk = true;   // 실시간 수신 성공 = 최신 데이터 확보
             const sec = document.getElementById('sec-afterschool');
             if (sec && !sec.classList.contains('hidden')) renderMonth();
         });
@@ -2733,6 +2809,14 @@ async function openAfterSchool() {
 /** 현재 asData를 Firestore에 통째 저장 (모든 수정의 영속화 경로) */
 function asPersist() {
     if (typeof window.fsSaveAfterSchool !== 'function') return;
+    _homeAsCache = null;   // 홈 '오늘 방과후' 카드 캐시 무효화 (다음 홈 진입 시 재조회)
+    // ★ 안전장치: 초기 로드에 실패한 상태로 저장하면 빈 asData가 전체 문서를
+    //   덮어써 시간표가 통째로 유실됨 (방과후는 Firestore가 유일본) → 저장 차단
+    if (!_asLoadOk) {
+        showToast('⚠️ 시간표 원본을 불러오지 못해 저장할 수 없어요. 새로고침 후 다시 시도해주세요.', 3500);
+        asReload(asSelectedDate);   // 최신값 재조회 시도 (성공하면 다시 저장 가능)
+        return;
+    }
     window.fsSaveAfterSchool(asData.weekly, asData.exceptions).catch(async () => {
         // 실패 → Firestore 최신값으로 되돌림
         if (typeof window.fsReadAfterSchool === 'function') {
@@ -2889,7 +2973,9 @@ function asRerender(reopenDate) {
 /** (오류 시) Firestore에서 최신 데이터 재조회 → 낙관적 변경 되돌리기 */
 async function asReload(reopenDate) {
     if (typeof window.fsReadAfterSchool === 'function') {
-        asData = (await window.fsReadAfterSchool()) || { weekly: [], exceptions: [] };
+        const fresh = await window.fsReadAfterSchool();   // null = 읽기 실패
+        if (fresh !== null) _asLoadOk = true;             // 재조회 성공 → 저장 다시 허용
+        asData = fresh || { weekly: [], exceptions: [] };
     }
     renderMonth();
     if (reopenDate) { const p = reopenDate.split('-').map(Number); asOpenDay(p[0], p[1] - 1, p[2]); }
@@ -3239,6 +3325,7 @@ function startMyCoinWatch() {
 function loadHome() {
     showSection('sec-home');
     refreshPushBanner();   // 알림 권한 없으면 배너 노출
+    renderHomeExtras();    // 시험 D-day 배너 + 오늘 방과후 카드 (백그라운드)
 
     // ★ 이름 + 직위 항상 표시 (교사/학생 공통)
     const roleLabel = currentUser.role === 'teacher' ? '이조판서' : (currentUser.role || '관원');
@@ -3412,6 +3499,13 @@ async function loadStudentQuickView() {
             dates.push(y+'-'+m+'-'+dd);
         }
         const ym = dates[0].slice(0,7);  // 이번 달 YYYY-MM
+
+        // ★ 범위 API로 일별 캐시를 먼저 채움 (7일치를 각 1건으로)
+        await Promise.all([
+            primeDailyCache('getAdminAttendance',  'getAdminAttendanceRange', dates),
+            primeDailyCache('getAdminPlanner',     'getAdminPlannerRange',    dates),
+            primeDailyCache('getCounselingByDate', 'getCounselingRange',      dates)
+        ]);
 
         // 병렬 데이터 요청 (캐시 히트 → 즉시 반환)
         const [attRows, planRows, counselRows, memberSheet, examData] = await Promise.all([
@@ -3783,6 +3877,7 @@ async function doCheckIn() {
 async function openPlanner() {
     showSection('sec-planner');
     plannerBaseDate = new Date(); // 항상 오늘부터 시작
+    plannerViewDate = toDateStr();
 
     // 날짜 레이블 설정
     updatePlannerDateLabel();
@@ -3800,6 +3895,8 @@ async function openPlanner() {
 
 // 플래너 현재 기준 날짜 (오늘 포함 주 표시용)
 let plannerBaseDate = new Date();
+// 현재 화면에 표시 중인 플래너 날짜 (오늘이 아니면 조회 전용)
+let plannerViewDate = toDateStr();
 
 // 플래너 열 때 초기화
 function updatePlannerDateLabel() {
@@ -3873,6 +3970,7 @@ async function selectPlannerDate(d) {
     renderPlannerWeek();
     // 선택 날짜 플래너 로드
     const dateStr = toDateStr2(d);
+    plannerViewDate = dateStr;   // ★ 오늘이 아니면 renderPlans가 조회 전용으로 표시
     const data = await callApi('getPlanner', { name: currentUser.name, date: dateStr }).catch(() => ({ content: '', progress: 0 }));
     currentPlans = data.content ? safeParseArray(data.content) : [];
     renderPlans();
@@ -3880,7 +3978,9 @@ async function selectPlannerDate(d) {
 
 function movePlannerWeek(delta) {
     plannerBaseDate.setDate(plannerBaseDate.getDate() + delta * 7);
-    renderPlannerWeek();
+    // ★ 버그 수정: 주 이동 시 날짜 헤더만 바뀌고 목록은 이전 날짜 것이 남았음
+    //   → 이동한 주의 선택 날짜 데이터를 실제로 로드
+    selectPlannerDate(new Date(plannerBaseDate));
 }
 
 // 구버전 호환
@@ -3908,6 +4008,14 @@ function renderPlans() {
     if (!list) return;
     list.innerHTML = '';
 
+    // ★ 오늘이 아닌 날짜는 조회 전용 (서버 저장은 항상 '오늘' 기준이라
+    //   다른 날짜에서 저장하면 오늘 플래너를 덮어쓰는 사고 방지)
+    const isTodayView = plannerViewDate === toDateStr();
+    const addRow  = document.getElementById('plan-add-row');
+    const saveBtn = document.getElementById('plan-save-btn');
+    if (addRow)  addRow.style.display  = isTodayView ? 'flex' : 'none';
+    if (saveBtn) saveBtn.style.display = isTodayView ? '' : 'none';
+
     // 진행도 업데이트
     const total    = currentPlans.length;
     const done     = currentPlans.filter(p => p.status === 3).length;
@@ -3917,8 +4025,12 @@ function renderPlans() {
     if (bar) bar.style.width = progress + '%';
     if (txt) txt.textContent = `${done} / ${total} 완료`;
 
+    if (!isTodayView) {
+        list.innerHTML = '<div style="text-align:center; color:var(--muted); font-size:0.78rem; padding:4px 0 8px;">📖 다른 날짜의 기록은 조회만 가능해요. (수정은 오늘만)</div>';
+    }
+
     if (currentPlans.length === 0) {
-        list.innerHTML = '<div style="text-align:center; color:var(--muted); padding:20px 0; font-size:0.88rem;">계획을 추가해주세요.</div>';
+        list.innerHTML += `<div style="text-align:center; color:var(--muted); padding:20px 0; font-size:0.88rem;">${isTodayView ? '계획을 추가해주세요.' : '이 날짜의 기록이 없습니다.'}</div>`;
         return;
     }
 
@@ -3939,17 +4051,18 @@ function renderPlans() {
             border:1px solid rgba(233,230,225,0.4); margin-bottom:6px;
             backdrop-filter:blur(4px);
         `;
+        const isTodayRow = plannerViewDate === toDateStr();
         row.innerHTML = `
             <div style="font-size:0.92rem; color:var(--ink); word-break:break-all;">${plan.text}</div>
             <div style="display:flex; align-items:center; justify-content:center; gap:4px;">
                 <div style="width:26px; height:26px; border-radius:50%;
                              background:${statusColors[plan.status]||statusColors[0]};
-                             cursor:pointer; border:1px solid rgba(255,255,255,0.5); flex-shrink:0;"
-                     onclick="toggleLight(${idx})"></div>
-                <button onclick="deletePlan(${idx})"
+                             cursor:${isTodayRow ? 'pointer' : 'default'}; border:1px solid rgba(255,255,255,0.5); flex-shrink:0;"
+                     ${isTodayRow ? `onclick="toggleLight(${idx})"` : ''}></div>
+                ${isTodayRow ? `<button onclick="deletePlan(${idx})"
                         style="background:none; border:none; color:var(--muted);
                                cursor:pointer; font-size:1.1rem; padding:0 4px; line-height:1;
-                               margin-left:4px;">✕</button>
+                               margin-left:4px;">✕</button>` : ''}
             </div>
         `;
         list.appendChild(row);
@@ -3979,10 +4092,18 @@ function deletePlan(idx) {
  *   또한 currentUser.todayPlanner 갱신 → 플래너 다시 열 때 최신 반영
  */
 function savePlannerData() {
+    // ★ 오늘이 아닌 날짜를 보는 중이면 저장 금지 (서버는 항상 오늘에 저장하므로 덮어쓰기 사고 방지)
+    if (plannerViewDate !== toDateStr()) {
+        return showToast('오늘 플래너만 저장할 수 있어요.');
+    }
     const total    = currentPlans.length;
     const done     = currentPlans.filter(p => p.status === 3).length;
     const progress = total === 0 ? 0 : Math.round((done / total) * 100);
     const content  = JSON.stringify(currentPlans);
+
+    // ★ 버그 수정: 이전 진행률은 todayPlanner를 덮어쓰기 '전에' 캡처해야 함
+    //   (기존 코드는 덮어쓴 후 비교해서 100% 달성 알림이 절대 안 떴음)
+    const prevProgress = Number(currentUser.todayPlanner?.progress) || 0;
 
     // ★ STEP 1: 화면 즉시 전환
     currentUser.todayPlanner = { content, progress };
@@ -3997,7 +4118,7 @@ function savePlannerData() {
     // ★ STEP 2: 백그라운드 저장 (await 없이 호출)
     // 플래너 저장 → 관련 캐시 즉시 무효화 + 백그라운드 재페치
     const _today = toDateStr();
-    AppCache.invalidate('getPlanner',      { name: currentUser.name });
+    AppCache.invalidatePrefix('getPlanner');   // 날짜 파라미터 포함 키까지 전부 무효화
     AppCache.invalidate('getMyHistory',    { name: currentUser.name });
     AppCache.invalidate('getAdminPlanner', { date: _today });
     // 백그라운드 재페치 (다음 조회 시 캐시에서 즉시 반환됨)
@@ -4017,7 +4138,6 @@ function savePlannerData() {
     });
 
     // 100% 달성 & 이전 저장이 100%가 아닌 경우 → 프론트 알림
-    const prevProgress = currentUser.todayPlanner?.progress ?? 0;
     if (progress === 100 && prevProgress < 100) {
         markSelfCoinChange();   // 본인 행동 → 실시간 리스너 중복 토스트 억제
         setTimeout(() => showToast('🪙 +2냥! 플래너 100% 달성 엽전이 지급되었소.'), 1200);
@@ -4187,6 +4307,7 @@ async function openPointLog(tab) {
         tabsDiv.innerHTML = `
             <button onclick="openPointLog('log')"      style="${tabStyle('log',      activeTab)}">📋 기록</button>
             <button onclick="openPointLog('grant')"    style="${tabStyle('grant',    activeTab)}">✏️ 엽전<br>부여</button>
+            <button onclick="openPointLog('pending')"  style="${tabStyle('pending',  activeTab)}">🔔 승인<br>대기</button>
             <button onclick="openPointLog('requests')" style="${tabStyle('requests', activeTab)}">📨 수정<br>요청</button>
             <button onclick="openPointLog('status')"   style="${tabStyle('status',   activeTab)}">🪙 현황</button>
             <button onclick="openAbsence()"            style="${tabStyle('absence',  activeTab)}">📋 결석<br>사유</button>`;
@@ -4200,6 +4321,7 @@ async function openPointLog(tab) {
                 return;
             }
             const sorted = [...data].reverse();
+            window._adminPointLogs = sorted;   // 수정/삭제 버튼이 인덱스로 참조 (따옴표 깨짐 방지)
 
             // 상단 일괄 삭제 툴바
             const toolbar = document.createElement('div');
@@ -4219,7 +4341,7 @@ async function openPointLog(tab) {
                 </button>`;
             listDiv.appendChild(toolbar);
 
-            sorted.forEach(log => {
+            sorted.forEach((log, logIdx) => {
                 const delta     = Number(log.delta) || 0;
                 const isPlus    = delta >= 0;
                 const isPending = log.status === '대기';
@@ -4253,11 +4375,11 @@ async function openPointLog(tab) {
                                 </div>
                             </div>
                             <div style="display:flex;gap:6px;margin-top:8px;">
-                                <button onclick="editPointLog(${log.row},'${log.name}',${delta},'${log.reason}')"
+                                <button onclick="editPointLog(${logIdx})"
                                         style="flex:1;background:rgba(44,44,44,0.08);border:1px solid var(--stone);
                                                color:var(--ink);border-radius:7px;padding:6px;cursor:pointer;
                                                font-family:inherit;font-size:0.82rem;">수정</button>
-                                <button onclick="deletePointLog(${log.row},'${log.name}','${log.date}',${delta})"
+                                <button onclick="deletePointLog(${logIdx})"
                                         style="flex:1;background:rgba(198,40,40,0.08);border:1px solid rgba(198,40,40,0.3);
                                                color:#C62828;border-radius:7px;padding:6px;cursor:pointer;
                                                font-family:inherit;font-size:0.82rem;">삭제</button>
@@ -4268,10 +4390,12 @@ async function openPointLog(tab) {
             });
 
         } else if (activeTab === 'grant') {
-            const [adminData, memberSheet] = await Promise.all([
+            const [adminData, memberSheet, presets] = await Promise.all([
                 callApi('getAdminData'),
-                callApi('getAllMemberPoints')
+                callApi('getAllMemberPoints'),
+                callApi('getCoinPresets', {}).catch(() => [])   // 구버전 백엔드면 빈 목록
             ]);
+            window._coinPresets = presets || [];
             const pointMap = {};
             if (memberSheet) memberSheet.forEach(m => { pointMap[m.name] = m; });
             // 가나다순 정렬
@@ -4292,9 +4416,26 @@ async function openPointLog(tab) {
                 </label>`;
             }).join('');
 
+            // ★ 자주 쓰는 사유 프리셋 칩 (원터치로 부호·수량·사유 채움)
+            const presetChips = (window._coinPresets || []).map((p, i) => {
+                const pos = (Number(p.amount) || 0) >= 0;
+                return `<button onclick="applyGrantPreset(${i})"
+                    style="border:1px solid ${pos ? '#A5D6A7' : '#FFCDD2'};
+                           background:${pos ? 'rgba(46,125,50,0.07)' : 'rgba(198,40,40,0.06)'};
+                           color:${pos ? '#2E7D32' : '#C62828'};
+                           border-radius:16px;padding:5px 11px;font-size:0.78rem;cursor:pointer;font-family:inherit;">
+                    ${String(p.label).replace(/</g,'&lt;')} ${p.amount > 0 ? '+' : ''}${p.amount}</button>`;
+            }).join('');
+
             listDiv.innerHTML = `
                 <div class="card">
                     <div style="font-weight:bold;margin-bottom:8px;">✏️ 엽전 부여/차감 <span style="font-size:0.78rem;color:#999;font-weight:normal;">(여러 명 동시 가능)</span></div>
+                    <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;align-items:center;">
+                        ${presetChips}
+                        <button onclick="openPresetManager()"
+                                style="border:1px dashed #bbb;background:#fafafa;color:#777;border-radius:16px;
+                                       padding:5px 11px;font-size:0.78rem;cursor:pointer;font-family:inherit;">⚙️ 프리셋 관리</button>
+                    </div>
                     <div style="display:flex;gap:8px;margin-bottom:8px;">
                         <select id="grant-sign-select" style="width:90px;padding:8px;border:1px solid #ccc;border-radius:4px;font-family:inherit;">
                             <option value="+">+ 지급</option>
@@ -4322,16 +4463,22 @@ async function openPointLog(tab) {
             updateGrantCount();
 
         } else if (activeTab === 'status') {
-            const memberSheet = await callApi('getAllMemberPoints');
+            const [memberSheet, bankAll] = await Promise.all([
+                callApi('getAllMemberPoints'),
+                callApi('getBankAll', {}).catch(() => [])   // 구버전 백엔드면 은행 표시 생략
+            ]);
             listDiv.innerHTML = '';
             if (!memberSheet || memberSheet.length === 0) {
                 listDiv.innerHTML = '<p style="text-align:center;color:#999;">관원이 없습니다.</p>';
                 return;
             }
+            const bankMap = {};
+            (bankAll || []).forEach(b => { bankMap[b.name] = b.balance; });
             // 엽전 내림차순 정렬
             const sorted = [...memberSheet].sort((a,b) => (b.coins??0) - (a.coins??0));
             sorted.forEach((m, idx) => {
                 const coins = m.coins ?? 0;
+                const saved = bankMap[m.name] || 0;
                 const div = document.createElement('div');
                 div.className = 'card';
                 div.style.cssText = 'display:flex;justify-content:space-between;align-items:center;';
@@ -4343,6 +4490,43 @@ async function openPointLog(tab) {
                     </div>
                     <div style="text-align:right;font-size:0.95rem;font-weight:bold;color:${coins<0?'#C62828':coins>=30?'#1B5E20':'#333'};">
                         🪙 ${coins}냥
+                        ${saved > 0 ? `<div style="font-size:0.76rem;font-weight:600;color:#1565C0;">🏦 저축 ${saved}냥</div>` : ''}
+                    </div>`;
+                listDiv.appendChild(div);
+            });
+
+        } else if (activeTab === 'pending') {
+            // ★ 버그 수정: 집무실 '승인 대기' 버튼이 openPointLog('pending')을 부르는데
+            //   이 탭 처리가 없어 화면이 "불러오는 중..."에 영원히 멈췄음
+            AppCache.invalidate('getAdminData', {});
+            const data = await callApi('getAdminData');
+            const pend = (data.pendingLogs || []);
+            listDiv.innerHTML = '';
+            if (!pend.length) {
+                listDiv.innerHTML = '<p style="text-align:center;color:#999;">대기 중인 차감 요청이 없습니다.</p>';
+                return;
+            }
+            // pendingLogs는 PointLog 원본 행 [날짜, 이름, 변동량, 사유, 요청자, '대기']
+            window._pendingLogs = pend.map(r => {
+                let dateStr = String(r[0] || '');
+                dateStr = dateStr.includes('T') ? toDateStr(new Date(dateStr)) : dateStr.slice(0, 10);
+                return { date: dateStr, name: String(r[1] || ''), delta: Number(r[2]) || 0,
+                         reason: String(r[3] || ''), actor: String(r[4] || '') };
+            });
+            window._pendingLogs.forEach((log, idx) => {
+                const div = document.createElement('div');
+                div.className = 'card';
+                div.style.marginBottom = '8px';
+                div.innerHTML = `
+                    <div style="font-size:0.78rem;color:var(--muted);">${log.date} · 요청자 ${log.actor || '-'}</div>
+                    <div style="margin-top:4px;"><b>${log.name}</b>
+                        <span style="font-weight:800;color:#C62828;margin-left:6px;">${log.delta > 0 ? '+' : ''}${log.delta}냥</span></div>
+                    <div style="font-size:0.88rem;color:var(--muted);margin-top:2px;">${log.reason}</div>
+                    <div style="display:flex;gap:6px;margin-top:10px;">
+                        <button onclick="resolvePendingLog(${idx}, true)"
+                                style="flex:1;background:#2E7D32;color:white;border:none;border-radius:7px;padding:8px;cursor:pointer;font-family:inherit;font-weight:700;font-size:0.85rem;">승인(차감)</button>
+                        <button onclick="resolvePendingLog(${idx}, false)"
+                                style="flex:1;background:rgba(198,40,40,0.08);color:#C62828;border:1px solid rgba(198,40,40,0.3);border-radius:7px;padding:8px;cursor:pointer;font-family:inherit;font-weight:700;font-size:0.85rem;">미승인</button>
                     </div>`;
                 listDiv.appendChild(div);
             });
@@ -4385,11 +4569,13 @@ async function openPointLog(tab) {
         // 학생: 내 엽전 내역
         tabsDiv.innerHTML = '';
         listDiv.innerHTML = '<p style="text-align:center;color:#999;">불러오는 중...</p>';
-        // 내역 + 내 수정요청을 함께 조회 (수정요청 조회는 백엔드 미배포 시 빈 배열로 우회)
-        const [logs, myReqs] = await Promise.all([
+        // 내역 + 내 수정요청 + 은행 잔액을 함께 조회 (미배포 백엔드는 빈 값으로 우회)
+        const [logs, myReqs, bank] = await Promise.all([
             callApi('getMyPointLog',     { name: currentUser.name }),
-            callApi('getMyEditRequests', { name: currentUser.name }).catch(() => [])
+            callApi('getMyEditRequests', { name: currentUser.name }).catch(() => []),
+            callApi('getBank',           { name: currentUser.name }).catch(() => null)
         ]);
+        window._bankInfo = bank;
         window._myPointLogs = logs || [];
         listDiv.innerHTML = '';
 
@@ -4418,6 +4604,28 @@ async function openPointLog(tab) {
                          <span style="color:#C62828;font-weight:700;">−${monthLoss}</span> 냥</div>
                 </div>
             </div>`);
+
+        // ── 🏦 엽전 은행 카드 (백엔드 미배포 시 bank=null → 표시 안 함) ──
+        if (bank) {
+            listDiv.insertAdjacentHTML('beforeend', `
+            <div class="card" style="display:flex;align-items:center;justify-content:space-between;gap:10px;
+                        background:rgba(21,101,192,0.06);border:1px solid rgba(21,101,192,0.25);">
+                <div>
+                    <div style="font-size:0.72rem;color:var(--muted);letter-spacing:0.5px;">🏦 엽전 은행
+                        <span style="color:#1565C0;">· 매주 월요일 저축액의 ${bank.rate}% 이자</span></div>
+                    <div style="font-family:'Nanum Myeongjo',serif;font-size:1.35rem;font-weight:800;
+                                color:#0D47A1;line-height:1.2;">저축 ${bank.balance}냥</div>
+                </div>
+                <div style="display:flex;gap:6px;flex-shrink:0;">
+                    <button onclick="bankDepositPrompt()"
+                            style="background:#1565C0;color:white;border:none;border-radius:8px;padding:9px 13px;
+                                   cursor:pointer;font-family:inherit;font-weight:700;font-size:0.85rem;">입금</button>
+                    <button onclick="bankWithdrawPrompt()"
+                            style="background:rgba(21,101,192,0.08);color:#1565C0;border:1px solid rgba(21,101,192,0.35);
+                                   border-radius:8px;padding:9px 13px;cursor:pointer;font-family:inherit;font-weight:700;font-size:0.85rem;">출금</button>
+                </div>
+            </div>`);
+        }
 
         // ── 내 수정요청 진행 상태 (대기/승인/반려) ──
         if (myReqs && myReqs.length > 0) {
@@ -4582,12 +4790,17 @@ async function bulkDeletePointLogs() {
     openPointLog('log');
 }
 
-/* PointLog 수정 — 모달로 엽전 변동량 + 사유 함께 편집 */
+/* PointLog 수정 — 모달로 엽전 변동량 + 사유 함께 편집
+   ★ 인덱스로 목록에서 직접 읽음 (onclick 문자열 파라미터의 따옴표 깨짐 방지) */
 let _editingPoint = null;
-function editPointLog(row, name, currentDelta, currentReason) {
-    _editingPoint = { row, name };
+function editPointLog(idx) {
+    const log = (window._adminPointLogs || [])[idx];
+    if (!log) return;
+    const currentDelta  = Number(log.delta) || 0;
+    const currentReason = log.reason || '';
+    _editingPoint = { row: log.row, name: log.name };
     document.getElementById('pointedit-target').textContent =
-        `${name} · 현재 ${currentDelta >= 0 ? '+' : ''}${currentDelta}냥`;
+        `${log.name} · 현재 ${currentDelta >= 0 ? '+' : ''}${currentDelta}냥`;
     document.getElementById('pointedit-delta').value  = currentDelta;
     document.getElementById('pointedit-reason').value = currentReason;
     document.getElementById('pointedit-overlay').classList.remove('hidden');
@@ -4626,8 +4839,12 @@ async function resolveEditRequest(row, approve) {
     }
 }
 
-/* PointLog 삭제 */
-async function deletePointLog(row, name, date, delta) {
+/* PointLog 삭제 (★ 인덱스로 목록에서 직접 읽음 — 따옴표 깨짐 방지) */
+async function deletePointLog(idx) {
+    const log = (window._adminPointLogs || [])[idx];
+    if (!log) return;
+    const { row, name, date } = log;
+    const delta = Number(log.delta) || 0;
     if (!confirm(`이 기록을 삭제하시겠습니까?\n삭제 시 엽전 변동량도 복원됩니다.`)) return;
     try {
         // expect* = 안전장치(행 밀림 시 오삭제 방지)
@@ -5468,6 +5685,14 @@ async function renderDormList() {
     dormList.innerHTML = html;
 }
 
+/** 승인 대기 목록의 버튼 → 인덱스로 안전하게 처리 (사유에 따옴표가 있어도 안전) */
+function resolvePendingLog(idx, approve) {
+    const log = (window._pendingLogs || [])[idx];
+    if (!log) return;
+    if (approve) approvePenalty(log.name, log.reason);
+    else         rejectPenalty(log.name, log.reason);
+}
+
 async function approvePenalty(name, reason) {
     if (!confirm(`${name} 관원의 엽전 차감을 승인하시겠소?`)) return;
     await callApi('adminAction', { type: 'approvePenalty', targetName: name, reason: reason });
@@ -5720,21 +5945,27 @@ let examViewingName  = null;  // 교사가 현재 조회 중인 학생 이름
 let examViewingTrack = null;  // 교사가 현재 조회 중인 학생 track ('공무원'/'공기업')
 
 /** 홈에서 모의고사 성적 버튼 클릭 */
-/* ─── Firestore 우선 조회 헬퍼 ─── */
+/* ─── Firestore 우선 조회 헬퍼 (실패 시 GAS로 폴백) ───
+   ★ 버그 수정: 기존 코드는 Firestore가 실패하면 자기 자신을 무한 재귀 호출해
+     성적 화면이 영원히 "불러오는 중..."에 멈췄음 → GAS 폴백으로 교체 */
 async function getMyExamScoresFast(name) {
     if (typeof window.fsGetMyExamScores === 'function') {
-        const result = await window.fsGetMyExamScores(name);
-        if (result) return result;
+        try {
+            const result = await window.fsGetMyExamScores(name);
+            if (result) return result;
+        } catch(e) { /* Firestore 실패 → GAS 폴백 */ }
     }
-    return await getMyExamScoresFast(name);
+    return await callApi('getMyExamScores', { name });
 }
 
 async function getLegacyStatsFast(track) {
     if (typeof window.fsGetLegacyStats === 'function') {
-        const result = await window.fsGetLegacyStats(track);
-        if (result) return result;
+        try {
+            const result = await window.fsGetLegacyStats(track);
+            if (result) return result;
+        } catch(e) { /* Firestore 실패 → GAS 폴백 */ }
     }
-    return await getLegacyStatsFast(track);
+    return await callApi('getLegacyStats', { track });
 }
 
 async function openExam() {
@@ -5745,21 +5976,17 @@ async function openExam() {
 
     showSection('sec-exam');
 
-    if (false) {
-        // (teacher 분기 제거됨)
-    } else {
-        // 학생: 본인 성적 조회
-        examViewingName = currentUser.name;
-        document.getElementById('exam-student-picker').style.display = 'none';
-        switchExamTab('scores');
+    // 학생: 본인 성적 조회
+    examViewingName = currentUser.name;
+    document.getElementById('exam-student-picker').style.display = 'none';
+    switchExamTab('scores');
 
-        if (!myExamData) {
-            document.getElementById('exam-scores-list').innerHTML =
-                '<p style="text-align:center;color:#999;">성적을 불러오는 중...</p>';
-            myExamData = await getMyExamScoresFast(currentUser.name);
-        }
-        renderExamScoresList();
+    if (!myExamData) {
+        document.getElementById('exam-scores-list').innerHTML =
+            '<p style="text-align:center;color:#999;">성적을 불러오는 중...</p>';
+        myExamData = await getMyExamScoresFast(currentUser.name);
     }
+    renderExamScoresList();
 }
 
 /** 교사용: 학생 선택 드롭다운 초기화 및 표시 */
@@ -7141,6 +7368,9 @@ async function loadCounselingByDate() {
     // 미완료 → 완료 순 정렬
     const sorted = [...data].sort((a, b) => a.done - b.done);
     const doneCount = sorted.filter(d => d.done).length;
+    // ★ 수정 버튼이 인덱스로 참조 (메모에 따옴표·백틱이 있어도 안전)
+    window._counselDaily     = sorted;
+    window._counselDailyDate = date;
 
     listDiv.innerHTML = `
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
@@ -7151,7 +7381,7 @@ async function loadCounselingByDate() {
             </span>
         </div>`;
 
-    sorted.forEach(item => {
+    sorted.forEach((item, itemIdx) => {
         const card = document.createElement('div');
         card.className = 'card';
         card.style.marginBottom = '8px';
@@ -7163,7 +7393,7 @@ async function loadCounselingByDate() {
                         ? '<span class="counsel-done-badge">✅ 상담완료</span>'
                         : '<span class="counsel-pending-badge">대기</span>'}
                 </div>
-                <button onclick="openCounselEdit('${item.name}', '${date}', ${item.done}, \`${(item.memo||'').replace(/`/g,"'")}\`)"
+                <button onclick="openCounselEditIdx(${itemIdx})"
                         style="background:var(--primary); color:white; border:none; border-radius:6px;
                                padding:6px 12px; cursor:pointer; font-size:0.85rem;">
                     ✏️ ${item.done ? '수정' : '상담입력'}
@@ -7173,6 +7403,13 @@ async function loadCounselingByDate() {
         `;
         listDiv.appendChild(card);
     });
+}
+
+/** 일별 목록에서 인덱스로 모달 열기 (메모 특수문자 안전) */
+function openCounselEditIdx(idx) {
+    const item = (window._counselDaily || [])[idx];
+    if (!item) return;
+    openCounselEdit(item.name, window._counselDailyDate, item.done, item.memo || '');
 }
 
 /** 상담 입력/수정 모달 (prompt 대신 인라인 폼) */
@@ -7198,7 +7435,7 @@ function openCounselEdit(name, date, currentDone, currentMemo) {
             <label style="font-size:0.85rem; color:#666; margin-bottom:5px; display:block;">상담 메모</label>
             <textarea id="counsel-memo-input" rows="4"
                       style="width:calc(100% - 16px); font-size:0.9rem; resize:vertical;"
-                      placeholder="간단한 상담 내용을 입력해주세요...">${currentMemo || ''}</textarea>
+                      placeholder="간단한 상담 내용을 입력해주세요...">${String(currentMemo || '').replace(/</g,'&lt;')}</textarea>
             <div style="display:flex; gap:8px; margin-top:12px;">
                 <button onclick="saveCounselEntry('${name}', '${date}')"
                         class="btn" style="flex:1; margin:0;">저장</button>
@@ -7374,8 +7611,9 @@ async function loadCounselingCalendar() {
             if (dateStr <= today) datesToCheck.push(dateStr);
         }
         // 한 번에 조회 가능한 getAdminAttendance 사용 (날짜별로 해당 학생 필터)
-        // 서버 부하를 줄이기 위해 이달 첫날부터 오늘까지 요청
+        // ★ 범위 API 1건으로 일별 캐시를 먼저 채움 (기존: 최대 31건 동시 발사)
         if (datesToCheck.length > 0) {
+            await primeDailyCache('getAdminAttendance', 'getAdminAttendanceRange', datesToCheck);
             const attResults = await Promise.all(
                 datesToCheck.map(dateStr =>
                     callApi('getAdminAttendance', { date: dateStr })
@@ -7412,13 +7650,16 @@ function renderCounselingCalendar(studentName, ym) {
     const firstDay  = new Date(counselCalYear, counselCalMonth, 1).getDay();
     const lastDate  = new Date(counselCalYear, counselCalMonth + 1, 0).getDate();
 
-    // 상담 기록 맵
+    // 상담 기록 맵 (★ 날짜 클릭 핸들러가 전역에서 읽음 — 메모 특수문자 안전)
     const doneMap = {};
     const memoMap = {};
     counselCalData.forEach(r => {
         doneMap[r.date] = r.done;
         memoMap[r.date] = r.memo;
     });
+    window._ccalName = studentName;
+    window._ccalDone = doneMap;
+    window._ccalMemo = memoMap;
 
     const dayNames = ['일','월','화','수','목','금','토'];
     let html = '<div class="counsel-cal-grid">';
@@ -7456,7 +7697,7 @@ function renderCounselingCalendar(studentName, ym) {
 
         html += `<div class="counsel-cal-day${isDone ? ' done' : ''}${hasMemo ? ' has-memo' : ''}${isToday ? ' today' : ''}${isLate ? ' late-day' : ''}${isAbsent ? ' absent-day' : ''}"
                      style="${textColor}${lateStyle} flex-direction:column; gap:1px;"
-                     onclick="onCalDayClick('${studentName}', '${dateStr}', ${isDone}, \`${(memoMap[dateStr]||'').replace(/`/g,"'")}\`, '${attStatus||''}')">
+                     onclick="onCalDayClick('${dateStr}')">
                     <span>${d}</span>
                     ${attBadge}
                  </div>`;
@@ -7489,7 +7730,6 @@ async function loadCounselingCalendarAll() {
     // 이달 전체 상담 데이터 수집 (날짜별)
     const lastDate = new Date(counselCalYear, counselCalMonth + 1, 0).getDate();
     const today    = toDateStr();
-    const allCounselData = await callApi('getCounselingByDate', { date: ym }).catch(() => []);
 
     // 날짜별 날짜 포맷으로 조회 (getCounselingByDate는 하루치라 전체 월 병렬 조회)
     const datesToCheck = [];
@@ -7497,6 +7737,8 @@ async function loadCounselingCalendarAll() {
         const ds = `${ym}-${String(d).padStart(2,'0')}`;
         if (ds <= today) datesToCheck.push(ds);
     }
+    // ★ 범위 API 1건으로 일별 캐시를 먼저 채움 (기존: 최대 31건 동시 발사)
+    await primeDailyCache('getCounselingByDate', 'getCounselingRange', datesToCheck);
     const allResults = await Promise.all(
         datesToCheck.map(date =>
             callApi('getCounselingByDate', { date }).catch(() => [])
@@ -7581,7 +7823,10 @@ async function onCalDayClickAll(date) {
         return;
     }
 
-    const cards = done.map(r => `
+    // ★ 수정 버튼이 인덱스로 참조 (메모 특수문자 안전)
+    window._counselDayAll     = done;
+    window._counselDayAllDate = date;
+    const cards = done.map((r, rIdx) => `
         <div style="background:#f9f9f9; border-radius:8px; padding:10px 12px; margin-bottom:8px;
                     border-left:3px solid var(--primary);">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
@@ -7589,9 +7834,9 @@ async function onCalDayClickAll(date) {
                 <span class="counsel-done-badge">✅ 상담완료</span>
             </div>
             ${r.memo
-                ? `<div style="color:#555; font-size:0.88rem; white-space:pre-wrap; line-height:1.6;">📝 ${r.memo}</div>`
+                ? `<div style="color:#555; font-size:0.88rem; white-space:pre-wrap; line-height:1.6;">📝 ${String(r.memo).replace(/</g,'&lt;')}</div>`
                 : `<div style="color:#bbb; font-size:0.85rem;">메모 없음</div>`}
-            <button onclick="openCounselEdit('${r.name}','${date}',true,\`${(r.memo||'').replace(/`/g,"'")}\`)"
+            <button onclick="openCounselEditFromAll(${rIdx})"
                     style="margin-top:8px; background:var(--primary); color:white; border:none;
                            border-radius:5px; padding:5px 12px; cursor:pointer; font-size:0.82rem;">
                 ✏️ 수정
@@ -7605,8 +7850,19 @@ async function onCalDayClickAll(date) {
         ${cards}`;
 }
 
-/** 달력 날짜 클릭 */
-function onCalDayClick(name, date, isDone, memo, attStatus) {
+/** 전체 달력 상세에서 모달 열기 (인덱스 기반 — 메모 특수문자 안전) */
+function openCounselEditFromAll(idx) {
+    const r = (window._counselDayAll || [])[idx];
+    if (!r) return;
+    openCounselEdit(r.name, window._counselDayAllDate, true, r.memo || '');
+}
+
+/** 달력 날짜 클릭 (★ 데이터는 전역 맵에서 읽음 — 메모 특수문자로 인한 스크립트 깨짐 방지) */
+function onCalDayClick(date) {
+    const name      = window._ccalName || '';
+    const isDone    = !!(window._ccalDone || {})[date];
+    const memo      = String((window._ccalMemo || {})[date] || '');
+    const attStatus = counselCalAttMap[date] || '';
     const memoDiv = document.getElementById('counsel-cal-memo');
     memoDiv.style.display = 'block';
 
@@ -7623,11 +7879,18 @@ function onCalDayClick(name, date, isDone, memo, attStatus) {
                 ${isDone ? '<span class="counsel-done-badge">✅ 상담완료</span>' : '<span class="counsel-pending-badge">미완료</span>'}
             </div>
         </div>
-        ${memo ? `<div style="color:#555; margin-bottom:8px; white-space:pre-wrap; line-height:1.6;">📝 ${memo}</div>` : '<div style="color:#bbb; margin-bottom:8px;">메모 없음</div>'}
-        <button onclick="openCounselEdit('${name}', '${date}', ${isDone}, \`${memo.replace(/`/g,"'")}\`)"
+        ${memo ? `<div style="color:#555; margin-bottom:8px; white-space:pre-wrap; line-height:1.6;">📝 ${memo.replace(/</g,'&lt;')}</div>` : '<div style="color:#bbb; margin-bottom:8px;">메모 없음</div>'}
+        <button onclick="openCounselEditFromCal('${date}')"
                 style="background:var(--primary); color:white; border:none; border-radius:6px; padding:6px 14px; cursor:pointer; font-size:0.85rem;">
             ✏️ ${isDone ? '수정' : '상담 입력'}
         </button>`;
+}
+
+/** 달력 상세에서 모달 열기 (전역 맵 기반) */
+function openCounselEditFromCal(date) {
+    openCounselEdit(window._ccalName || '', date,
+        !!(window._ccalDone || {})[date],
+        String((window._ccalMemo || {})[date] || ''));
 }
 
 /* ─── 통계 탭 ─── */
@@ -7674,6 +7937,11 @@ async function loadCounselStats() {
             return day !== 0 && day !== 6;
         }));
 
+        // ★ 범위 API 2건으로 일별 캐시를 먼저 채움 (기존: 28건 동시 발사)
+        await Promise.all([
+            primeDailyCache('getAdminAttendance', 'getAdminAttendanceRange', recentDates),
+            primeDailyCache('getAdminPlanner',    'getAdminPlannerRange',    recentDates)
+        ]);
         const [attRows, planRows] = await Promise.all([
             Promise.all(recentDates.map(date =>
                 callApi('getAdminAttendance', { date }).catch(() => [])
@@ -7755,7 +8023,7 @@ function renderCounselStats() {
 
     const total        = yData.length;
     const studentSet   = new Set(yData.map(c => c.name).filter(Boolean));
-    const thisMonth    = new Date().toISOString().slice(0,7);
+    const thisMonth    = toDateStr().slice(0,7);   // ★ 로컬(한국) 기준 — UTC 월밀림 방지
     const thisMonthCnt = yData.filter(c => (c.date||'').startsWith(thisMonth)).length;
 
     const monthly = Array.from({length:12}, (_,i) => {
@@ -8912,18 +9180,361 @@ function printAllQR() {
     win.document.close();
 }
 /* =========================================================
+   공용 간이 모달 (프리셋/D-day/주간리포트 관리용)
+   ========================================================= */
+function _openSimpleModal(id, innerHtml) {
+    const old = document.getElementById(id);
+    if (old) old.remove();
+    const modal = document.createElement('div');
+    modal.id = id;
+    modal.style.cssText = 'position:fixed; inset:0; background:rgba(0,0,0,0.5); display:flex; align-items:center; justify-content:center; z-index:9999; padding:20px;';
+    modal.innerHTML = `<div style="background:white; border-radius:12px; padding:20px; width:100%; max-width:430px; max-height:82vh; overflow-y:auto;" onclick="event.stopPropagation()">${innerHtml}</div>`;
+    modal.onclick = () => modal.remove();
+    document.body.appendChild(modal);
+}
+
+/* =========================================================
+   홈 부가 요소: 시험 D-day 배너 + 오늘 방과후 카드
+   ========================================================= */
+let _homeAsCache = null;   // { data, ts } — 방과후 데이터 5분 메모리 캐시
+
+function renderHomeExtras() {
+    renderDdayBanner();
+    renderTodayAfterSchool();
+}
+
+/** 시험 D-day 배너 (교사: 전체 / 학생: 공통 + 내 반 시험만) */
+async function renderDdayBanner() {
+    const el = document.getElementById('dday-banner');
+    if (!el || !currentUser) return;
+    let list = AppCache.get('getExamDdays', {});
+    if (list === null) list = await fetchToCache('getExamDdays', {}) || [];   // 조용히 로드 (오버레이 없음)
+    const today     = toDateStr();
+    const isTeacher = currentUser.role === 'teacher';
+    const myTrack   = currentUser.track || '공무원';
+    const upcoming = (list || [])
+        .filter(d => d.date >= today)
+        .filter(d => isTeacher || !d.track || d.track === '공통' || d.track === myTrack)
+        .sort((a, b) => a.date.localeCompare(b.date))
+        .slice(0, 2);
+    if (!upcoming.length) { el.style.display = 'none'; return; }
+
+    const rows = upcoming.map(d => {
+        const diff = Math.round((new Date(d.date + 'T00:00:00') - new Date(today + 'T00:00:00')) / 86400000);
+        const dtxt = diff === 0 ? 'D-DAY' : 'D-' + diff;
+        const p    = d.date.split('-');
+        const trTag = (d.track && d.track !== '공통')
+            ? `<span style="font-size:0.66rem;background:rgba(201,166,107,0.2);color:#8B6914;border-radius:4px;padding:1px 5px;margin-left:5px;">${d.track}</span>` : '';
+        return `<div style="display:flex;justify-content:space-between;align-items:center;padding:3px 0;">
+            <span style="font-size:0.88rem;font-weight:600;color:var(--ink);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${String(d.name).replace(/</g,'&lt;')}${trTag}</span>
+            <span style="flex-shrink:0;margin-left:8px;">
+                <b style="font-family:'Nanum Myeongjo',serif;font-size:1.15rem;color:${diff <= 7 ? '#C62828' : 'var(--ink)'};">${dtxt}</b>
+                <span style="font-size:0.74rem;color:var(--muted);margin-left:4px;">${p[1] * 1}/${p[2] * 1}</span>
+            </span>
+        </div>`;
+    }).join('');
+
+    el.innerHTML = `
+        <div style="background:rgba(248,245,240,0.35);border:1px solid rgba(201,166,107,0.5);border-radius:14px;
+                    padding:12px 16px;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);">
+            <div style="font-size:0.7rem;color:var(--muted);letter-spacing:1px;margin-bottom:4px;">🗓️ 시험까지</div>
+            ${rows}
+        </div>`;
+    el.style.display = 'block';
+}
+
+/** 특정 날짜의 방과후 수업 목록 (주간 반복 − 휴강 + 특강) — 홈 카드용 독립 계산기 */
+function _asItemsForDate(data, dateObj) {
+    const wd = AS_WEEKDAYS[dateObj.getDay()];
+    const ds = toDateStr(dateObj);
+    const cancels = (data.exceptions || []).filter(e => e.date === ds && e.type === '휴강');
+    const items = (data.weekly || [])
+        .filter(c => c.day === wd)
+        .filter(c => !cancels.find(x => x.subject === c.subject && (!x.start || x.start === c.start)));
+    (data.exceptions || []).filter(e => e.date === ds && e.type === '특강').forEach(e => items.push(e));
+    items.sort((a, b) => (a.start || '').localeCompare(b.start || ''));
+    return items;
+}
+
+/** 오늘 방과후 카드 (학생: 공통 + 내 반 수업만 / 교사: 전체) */
+async function renderTodayAfterSchool() {
+    const el = document.getElementById('today-afterschool-card');
+    if (!el || !currentUser) return;
+    if (typeof window.fsReadAfterSchool !== 'function') { el.style.display = 'none'; return; }
+    let data;
+    if (_homeAsCache && Date.now() - _homeAsCache.ts < 5 * 60 * 1000) {
+        data = _homeAsCache.data;
+    } else {
+        data = await window.fsReadAfterSchool();
+        if (data) _homeAsCache = { data, ts: Date.now() };
+    }
+    if (!data) { el.style.display = 'none'; return; }
+
+    let items = _asItemsForDate(data, new Date());
+    if (currentUser.role !== 'teacher') {
+        const myTrack = currentUser.track || '공무원';
+        items = items.filter(it => !it.track || it.track === '공통' || it.track === myTrack);
+    }
+    if (!items.length) { el.style.display = 'none'; return; }
+
+    const rows = items.map(it => {
+        const time  = asTimeRange(it.start, it.end) || '시간 미정';
+        const place = asCleanPlace(it.place);
+        const tr    = (it.track === '공무원' || it.track === '공기업')
+            ? `<span style="font-size:0.66rem;background:rgba(201,166,107,0.2);color:#8B6914;border-radius:4px;padding:1px 5px;margin-left:4px;">${it.track}</span>` : '';
+        return `<div style="display:flex;align-items:center;gap:8px;padding:3px 0;">
+            <span style="font-size:0.78rem;color:#1565C0;font-weight:700;flex-shrink:0;">${time}</span>
+            <span style="font-size:0.88rem;font-weight:600;color:var(--ink);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${String(it.subject || '').replace(/</g,'&lt;')}${tr}</span>
+            ${place ? `<span style="font-size:0.74rem;color:var(--muted);flex-shrink:0;">${place}</span>` : ''}
+        </div>`;
+    }).join('');
+
+    el.innerHTML = `
+        <div onclick="openAfterSchool()"
+             style="background:rgba(248,245,240,0.35);border:1px solid rgba(233,230,225,0.6);border-radius:14px;
+                    padding:12px 16px;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);cursor:pointer;">
+            <div style="font-size:0.7rem;color:var(--muted);letter-spacing:1px;margin-bottom:4px;">🏫 오늘 방과후 <span style="float:right;color:#8B6914;">전체 보기 →</span></div>
+            ${rows}
+        </div>`;
+    el.style.display = 'block';
+}
+
+/* =========================================================
+   엽전 부여 사유 프리셋 (교사)
+   ========================================================= */
+function applyGrantPreset(i) {
+    const p = (window._coinPresets || [])[i];
+    if (!p) return;
+    const amt = Number(p.amount) || 0;
+    document.getElementById('grant-sign-select').value  = amt >= 0 ? '+' : '-';
+    document.getElementById('grant-amount-input').value = Math.abs(amt);
+    document.getElementById('grant-reason-input').value = p.label;
+}
+
+function openPresetManager() {
+    window._presetDraft = [...(window._coinPresets || [])];
+    _renderPresetManager();
+}
+
+function _renderPresetManager() {
+    const rows = (window._presetDraft || []).map((p, i) => `
+        <div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid #eee;">
+            <span style="flex:1;font-size:0.9rem;min-width:0;">${String(p.label).replace(/</g,'&lt;')}</span>
+            <b style="color:${p.amount >= 0 ? '#2E7D32' : '#C62828'};flex-shrink:0;">${p.amount > 0 ? '+' : ''}${p.amount}냥</b>
+            <button onclick="presetRemove(${i})" style="background:none;border:none;color:#C62828;font-size:1.2rem;cursor:pointer;padding:0 4px;">×</button>
+        </div>`).join('') || '<p style="color:#999;text-align:center;padding:8px 0;">프리셋이 없습니다.</p>';
+    _openSimpleModal('preset-modal', `
+        <h3 style="margin:0 0 12px;">⚙️ 엽전 사유 프리셋</h3>
+        <p style="font-size:0.8rem;color:#888;margin:0 0 10px;">자주 쓰는 사유를 등록해두면 엽전 부여 시 원터치로 채워져요.</p>
+        <div>${rows}</div>
+        <div style="display:flex;gap:6px;margin-top:12px;">
+            <input id="preset-new-label" type="text" placeholder="사유 (예: 수업 태도 우수)"
+                   style="flex:1;min-width:0;padding:9px;border:1px solid #ccc;border-radius:6px;font-family:inherit;">
+            <input id="preset-new-amount" type="number" placeholder="±냥"
+                   style="width:64px;padding:9px 6px;border:1px solid #ccc;border-radius:6px;font-family:inherit;">
+            <button onclick="presetAdd()"
+                    style="background:var(--ink);color:white;border:none;border-radius:6px;padding:9px 12px;cursor:pointer;font-family:inherit;">추가</button>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:14px;">
+            <button onclick="presetSave()" class="btn" style="flex:1;margin:0;">저장</button>
+            <button onclick="document.getElementById('preset-modal').remove()" class="btn btn-outline" style="flex:1;margin:0;">취소</button>
+        </div>`);
+}
+
+function presetAdd() {
+    const label  = document.getElementById('preset-new-label').value.trim();
+    const amount = parseInt(document.getElementById('preset-new-amount').value, 10);
+    if (!label) return showToast('사유를 입력해주세요.');
+    if (isNaN(amount) || amount === 0) return showToast('엽전 변동량(±)을 입력해주세요.');
+    window._presetDraft.push({ label, amount });
+    _renderPresetManager();
+}
+function presetRemove(i) { window._presetDraft.splice(i, 1); _renderPresetManager(); }
+
+async function presetSave() {
+    try {
+        await callApi('saveCoinPresets', { presets: window._presetDraft || [] });
+        AppCache.invalidate('getCoinPresets', {});
+        const m = document.getElementById('preset-modal'); if (m) m.remove();
+        showToast('프리셋 저장 완료');
+        openPointLog('grant');
+    } catch(e) { /* callApi가 오류 토스트 표시 */ }
+}
+
+/* =========================================================
+   시험 D-day 관리 (교사)
+   ========================================================= */
+async function openDdayManager() {
+    _openSimpleModal('dday-modal', `
+        <h3 style="margin:0 0 12px;">🗓️ 시험 D-day 관리</h3>
+        <p style="font-size:0.8rem;color:#888;margin:0 0 10px;">등록하면 홈 화면 상단에 D-day 배너로 표시돼요. (반 지정 시 그 반 학생에게만)</p>
+        <div id="dday-list"><p style="text-align:center;color:#999;">불러오는 중...</p></div>
+        <div style="display:flex;flex-direction:column;gap:6px;margin-top:12px;border-top:2px solid #eee;padding-top:12px;">
+            <input id="dday-new-name" type="text" placeholder="시험 이름 (예: 국가직 9급)"
+                   style="padding:9px;border:1px solid #ccc;border-radius:6px;font-family:inherit;">
+            <div style="display:flex;gap:6px;">
+                <input id="dday-new-date" type="date"
+                       style="flex:1;min-width:0;padding:8px;border:1px solid #ccc;border-radius:6px;font-family:inherit;">
+                <select id="dday-new-track"
+                        style="width:96px;padding:8px 4px;border:1px solid #ccc;border-radius:6px;font-family:inherit;font-size:0.85rem;">
+                    <option value="공통">전체</option><option value="공무원">공무원</option><option value="공기업">공기업</option>
+                </select>
+                <button onclick="ddayAdd()"
+                        style="background:var(--ink);color:white;border:none;border-radius:6px;padding:9px 12px;cursor:pointer;font-family:inherit;">추가</button>
+            </div>
+        </div>
+        <button onclick="document.getElementById('dday-modal').remove()" class="btn btn-outline" style="width:100%;margin:14px 0 0;">닫기</button>`);
+    _renderDdayList();
+}
+
+async function _renderDdayList() {
+    const box = document.getElementById('dday-list');
+    if (!box) return;
+    AppCache.invalidate('getExamDdays', {});
+    let list = [];
+    try { list = await callApi('getExamDdays') || []; } catch(e) {}
+    window._ddayList = list;
+    if (!list.length) { box.innerHTML = '<p style="text-align:center;color:#999;padding:6px 0;">등록된 시험이 없습니다.</p>'; return; }
+    const today = toDateStr();
+    box.innerHTML = list.map((d, i) => {
+        const past = d.date < today;
+        const diff = Math.round((new Date(d.date + 'T00:00:00') - new Date(today + 'T00:00:00')) / 86400000);
+        return `
+        <div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid #eee;${past ? 'opacity:0.45;' : ''}">
+            <div style="flex:1;min-width:0;">
+                <div style="font-size:0.9rem;font-weight:600;">${String(d.name).replace(/</g,'&lt;')}
+                    <span style="font-size:0.72rem;color:#8B6914;">${d.track && d.track !== '공통' ? d.track : ''}</span></div>
+                <div style="font-size:0.78rem;color:#888;">${d.date} ${past ? '(지남)' : diff === 0 ? '· D-DAY' : '· D-' + diff}</div>
+            </div>
+            <button onclick="ddayDelete(${i})" style="background:none;border:none;color:#C62828;font-size:1.2rem;cursor:pointer;padding:0 4px;">×</button>
+        </div>`;
+    }).join('');
+}
+
+async function ddayAdd() {
+    const name  = document.getElementById('dday-new-name').value.trim();
+    const date  = document.getElementById('dday-new-date').value;
+    const track = document.getElementById('dday-new-track').value;
+    if (!name) return showToast('시험 이름을 입력해주세요.');
+    if (!date) return showToast('날짜를 선택해주세요.');
+    try {
+        await callApi('saveExamDday', { name, date, track });
+        AppCache.invalidate('getExamDdays', {});
+        document.getElementById('dday-new-name').value = '';
+        showToast('시험 D-day 등록 완료');
+        _renderDdayList();
+        renderDdayBanner();   // 홈 배너 즉시 갱신
+    } catch(e) {}
+}
+
+async function ddayDelete(i) {
+    const d = (window._ddayList || [])[i];
+    if (!d) return;
+    if (!confirm(`'${d.name}' (${d.date}) 을(를) 삭제하시겠소?`)) return;
+    try {
+        await callApi('deleteExamDday', { id: d.id });
+        AppCache.invalidate('getExamDdays', {});
+        _renderDdayList();
+        renderDdayBanner();
+    } catch(e) {}
+}
+
+/* =========================================================
+   엽전 은행 입금/출금 (학생)
+   ========================================================= */
+async function bankDepositPrompt() {
+    const wallet = currentUser.coins ?? 0;
+    if (wallet <= 0) return showToast('지갑에 저축할 엽전이 없어요.');
+    const v = parseInt(prompt(`얼마를 저축할까요? (지갑 ${wallet}냥)`), 10);
+    if (isNaN(v) || v <= 0) return;
+    if (v > wallet) return showToast(`지갑 엽전이 부족해요. (보유 ${wallet}냥)`);
+    try {
+        const res = await callApi('bankDeposit', { name: currentUser.name, amount: v });
+        markSelfCoinChange();
+        currentUser.coins = res.walletCoins;
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(currentUser));
+        AppCache.invalidate('getBank',            { name: currentUser.name });
+        AppCache.invalidate('getMyPointLog',      { name: currentUser.name });
+        AppCache.invalidate('getAllMemberPoints', {});
+        showToast(`🏦 ${v}냥 저축 완료! (저축 ${res.bankBalance}냥)`);
+        openPointLog();
+    } catch(e) {}
+}
+
+async function bankWithdrawPrompt() {
+    const saved = window._bankInfo ? window._bankInfo.balance : 0;
+    if (saved <= 0) return showToast('출금할 저축 엽전이 없어요.');
+    const v = parseInt(prompt(`얼마를 출금할까요? (저축 ${saved}냥)`), 10);
+    if (isNaN(v) || v <= 0) return;
+    if (v > saved) return showToast(`저축 잔액이 부족해요. (저축 ${saved}냥)`);
+    try {
+        const res = await callApi('bankWithdraw', { name: currentUser.name, amount: v });
+        markSelfCoinChange();
+        currentUser.coins = res.walletCoins;
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(currentUser));
+        AppCache.invalidate('getBank',            { name: currentUser.name });
+        AppCache.invalidate('getMyPointLog',      { name: currentUser.name });
+        AppCache.invalidate('getAllMemberPoints', {});
+        showToast(`🏦 ${v}냥 출금 완료! (저축 ${res.bankBalance}냥)`);
+        openPointLog();
+    } catch(e) {}
+}
+
+/* =========================================================
+   주간 리포트 (교사)
+   ========================================================= */
+async function openWeeklyReport() {
+    _openSimpleModal('wreport-modal', `
+        <h3 style="margin:0 0 12px;">📊 주간 리포트</h3>
+        <p style="font-size:0.8rem;color:#888;margin:0 0 10px;">
+            지난주(월~금) 출결·플래너·엽전·상담 요약이에요.<br>
+            매주 월요일 자동 생성 트리거(weeklyTeacherReport)를 등록하면 알아서 쌓여요.</p>
+        <button id="wreport-gen-btn" onclick="generateWeeklyReport()" class="btn" style="width:100%;margin:0 0 12px;">
+            지난주 리포트 지금 생성</button>
+        <div id="wreport-list"><p style="text-align:center;color:#999;">불러오는 중...</p></div>
+        <button onclick="document.getElementById('wreport-modal').remove()" class="btn btn-outline" style="width:100%;margin:14px 0 0;">닫기</button>`);
+    _renderWeeklyReportList();
+}
+
+async function _renderWeeklyReportList() {
+    const box = document.getElementById('wreport-list');
+    if (!box) return;
+    AppCache.invalidate('getWeeklyReports', {});
+    let list = [];
+    try { list = await callApi('getWeeklyReports') || []; } catch(e) {}
+    if (!list.length) { box.innerHTML = '<p style="text-align:center;color:#999;padding:6px 0;">아직 생성된 리포트가 없습니다.</p>'; return; }
+    box.innerHTML = list.map(r => `
+        <div style="background:#f9f7f4;border:1px solid var(--stone);border-radius:9px;padding:11px 13px;margin-bottom:8px;">
+            <div style="font-size:0.76rem;color:var(--muted);margin-bottom:5px;">${r.weekStart} 주 · 생성 ${r.at}</div>
+            <div style="white-space:pre-wrap;font-size:0.86rem;line-height:1.65;color:var(--ink);">${String(r.text).replace(/</g,'&lt;')}</div>
+        </div>`).join('');
+}
+
+async function generateWeeklyReport() {
+    const btn = document.getElementById('wreport-gen-btn');
+    if (btn) { btn.disabled = true; btn.textContent = '생성 중...'; }
+    try {
+        await callApi('runWeeklyReport', {});
+        showToast('주간 리포트 생성 완료');
+        _renderWeeklyReportList();
+    } catch(e) {
+    } finally {
+        if (btn) { btn.disabled = false; btn.textContent = '지난주 리포트 지금 생성'; }
+    }
+}
+
+/* =========================================================
    트리거 일시정지 기능
    ========================================================= */
 
 async function openTriggerPause() {
     showSection('sec-trigger-pause');
 
-    // 오늘 날짜 기본값
+    // 오늘 날짜 기본값 (★ toISOString은 UTC라 오전 9시 이전에 하루 밀림 → 로컬 기준으로)
     const today = new Date();
-    const fmt   = d => d.toISOString().slice(0,10);
-    document.getElementById('pause-start-date').value = fmt(today);
+    document.getElementById('pause-start-date').value = toDateStr(today);
     const nextWeek = new Date(today); nextWeek.setDate(today.getDate() + 6);
-    document.getElementById('pause-end-date').value   = fmt(nextWeek);
+    document.getElementById('pause-end-date').value   = toDateStr(nextWeek);
 
     loadPauseList();
 
@@ -8986,7 +9597,7 @@ async function updateTriggerPauseBadge() {
     if (!statusDiv) return;
     try {
         const data  = await callApi('getTriggerPauses', {});
-        const today = new Date().toISOString().slice(0,10);
+        const today = toDateStr();   // ★ 로컬(한국) 기준 — UTC 날짜밀림 방지
         const active = (data || []).find(p => p.start <= today && today <= p.end);
         if (active) {
             statusDiv.innerHTML = `<div style="background:#FFF3E0; border:1px solid #F9A825; border-radius:6px;
