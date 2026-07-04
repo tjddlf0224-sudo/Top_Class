@@ -41,35 +41,32 @@
 @import url('https://fonts.googleapis.com/css2?family=Nanum+Myeongjo:wght@400;700;800&family=Noto+Sans+KR:wght@300;400;500;700&display=swap');
 
 :root {
-    --ink:      #2C2C2C;
-    --gold:     #C9A66B;
-    --gold-lt:  #E8D5B0;
-    --hanji:    #F8F5F0;
-    --stone:    #E9E6E1;
-    --muted:    #9A9087;
+    /* ── 한지 모던 팔레트 ──
+       배경 사진·유리효과를 걷어내고 단색 한지 + 먹 + 황동 + 낙관 레드로 정돈 */
+    --ink:      #33291C;   /* 먹 (따뜻한 다크브라운) */
+    --gold:     #BA7517;   /* 황동 (진한 금) */
+    --gold-lt:  #E4CFA4;
+    --hanji:    #F6F1E7;   /* 한지 바탕 */
+    --stone:    #E8DFC9;   /* 경계선 */
+    --muted:    #8A7D65;   /* 보조 텍스트 */
     --white:    #FFFFFF;
+    --paper:    #FFFDF8;   /* 카드 표면 */
+    --seal:     #B33B2E;   /* 낙관 (포인트 레드) */
     --red:      #C62828;
     --green:    #2E7D32;
     --orange:   #E65100;
     /* 하위 호환 */
-    --primary:  #2C2C2C;
-    --secondary:#E9E6E1;
-    --accent:   #C9A66B;
-    --bg:       #F8F5F0;
-    --paper:    #FFFFFF;
-    /* 배경 이미지 경로 */
-    --bg-login:   url('./bg_login.png');
-    --bg-home:    url('./bg_home.png');
-    --bg-planner: url('./bg_planner.png');
-    --bg-exam:    url('./bg_exam.png');
-    --bg-market:  url('./bg_market.png');
+    --primary:  #33291C;
+    --secondary:#EFE8D8;
+    --accent:   #BA7517;
+    --bg:       #F6F1E7;
 }
 
 * { box-sizing: border-box; }
 
 body {
     font-family: 'Noto Sans KR', 'Nanum Myeongjo', sans-serif;
-    background: #F0EAE0;
+    background: #EDE6D6;
     color: var(--ink);
     margin: 0; padding: 0;
     display: flex;
@@ -153,10 +150,8 @@ section {
     align-items: center;
     justify-content: center;
     padding: 16px 20px;
-    background: rgba(255,252,248,0.55);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    border-bottom: 1px solid rgba(233,230,225,0.4);
+    background: var(--hanji);
+    border-bottom: 1px solid var(--stone);
     position: relative;
     flex-shrink: 0;
     z-index: 10;
@@ -194,37 +189,13 @@ section {
     word-break: break-word;
 }
 
-/* ── 히어로 배경 영역 ── */
-.hero-bg {
-    width: 100%;
-    height: 200px;
-    background-size: cover;
-    background-position: center top;
-    background-repeat: no-repeat;
-    flex-shrink: 0;
-    position: relative;
-}
-.hero-bg::after {
-    content: '';
-    position: absolute;
-    bottom: 0; left: 0; right: 0;
-    height: 80px;
-    background: linear-gradient(to bottom, transparent, var(--hanji));
-}
-.hero-home    { background-image: var(--bg-home); }
-.hero-planner { background-image: var(--bg-planner); }
-.hero-exam    { background-image: var(--bg-exam); }
-.hero-market  { background-image: var(--bg-market); }
-
 /* ── 카드 ── */
 .card {
-    background: rgba(255,252,248,0.45);
+    background: var(--paper);
     padding: 16px;
     border-radius: 14px;
-    border: 1px solid rgba(233,230,225,0.45);
+    border: 1px solid var(--stone);
     margin-bottom: 10px;
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
     word-break: break-word;
     overflow-x: hidden;
 }
@@ -263,25 +234,23 @@ input, select, textarea {
     width: 100%;
     padding: 13px 14px;
     margin: 5px 0;
-    border: 1.5px solid rgba(233, 230, 225, 0.9);
+    border: 1.5px solid #DCD2BB;
     border-radius: 10px;
     font-family: 'Noto Sans KR', sans-serif;
     font-size: 0.95rem;
-    background: rgba(255, 255, 255, 0.8);
+    background: var(--paper);
     color: var(--ink);
     transition: border-color 0.2s;
     outline: none;
     -webkit-appearance: none;
 }
-input:focus, select:focus, textarea:focus { border-color: var(--gold); background: rgba(255,255,255,0.95); }
-input::placeholder, textarea::placeholder { color: #C4BDB6; }
+input:focus, select:focus, textarea:focus { border-color: var(--gold); background: #FFFFFF; }
+input::placeholder, textarea::placeholder { color: #BDB19A; }
 
 /* ── 하단 탭바 ── */
 .tab-bar {
     display: flex;
-    background: rgba(255,252,248,0.45);
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
+    background: var(--paper);
     border-top: 1px solid var(--stone);
     padding: 8px max(12px, env(safe-area-inset-right)) calc(2px + env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
     flex-shrink: 0;
@@ -310,7 +279,7 @@ input::placeholder, textarea::placeholder { color: #C4BDB6; }
     font-size: 0.62rem;
     font-weight: 500;
     letter-spacing: 0.3px;
-    color: #8A8078;
+    color: #A79B84;
     font-family: 'Noto Sans KR', sans-serif;
 }
 .tab-dot {
@@ -320,7 +289,7 @@ input::placeholder, textarea::placeholder { color: #C4BDB6; }
 }
 .tab-item.active .tab-label { color: var(--ink); font-weight: 800; }
 .tab-item.active .tab-icon svg { stroke: var(--ink); }
-.tab-item:not(.active) .tab-icon svg { stroke: #8A8078; }
+.tab-item:not(.active) .tab-icon svg { stroke: #A79B84; }
 
 /* ── 로그인 화면 ── */
 #sec-login {
@@ -335,7 +304,7 @@ input::placeholder, textarea::placeholder { color: #C4BDB6; }
 .login-bg {
     position: absolute;
     inset: 0;
-    background-image: var(--bg-login);
+    background-image: url('./bg_login.png');
     background-size: cover;
     background-position: center 20%;
     z-index: 0;
@@ -564,7 +533,7 @@ input::placeholder, textarea::placeholder { color: #C4BDB6; }
 .top-row { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--stone); }
 .top-row:last-child { border-bottom: none; }
 .top-rank { font-size: 0.75rem; font-weight: 700; color: var(--muted); width: 20px; text-align: center; flex-shrink: 0; }
-.top-rank.gold { color: #C9A66B; } .top-rank.silver { color: #94a3b8; } .top-rank.bronze { color: #cd7c4e; }
+.top-rank.gold { color: var(--gold); } .top-rank.silver { color: #94a3b8; } .top-rank.bronze { color: #cd7c4e; }
 .top-bar-wrap { flex: 1; }
 .top-bar-name { font-size: 0.82rem; font-weight: 700; color: var(--ink); margin-bottom: 4px; }
 .top-bar-bg { background: var(--stone); border-radius: 4px; height: 5px; overflow: hidden; }
@@ -888,7 +857,7 @@ input::placeholder, textarea::placeholder { color: #C4BDB6; }
             <!-- 방과후 강사 로그인 -->
             <div id="instructor-login-wrap" style="margin-top:18px;">
                 <button id="instructor-login-toggle" onclick="toggleInstructorLogin()"
-                        style="width:100%; background:rgba(255,252,246,0.7); border:1.5px solid var(--gold);
+                        style="width:100%; background:rgba(255,252,246,0.7); border:1.5px solid #C9A66B;
                                border-radius:12px; padding:13px; cursor:pointer; font-family:'Nanum Myeongjo',serif;
                                font-size:0.95rem; font-weight:700; color:var(--ink);">
                     👩‍🏫 방과후 강사 로그인
@@ -909,13 +878,6 @@ input::placeholder, textarea::placeholder { color: #C4BDB6; }
     ====================================================== -->
     <section id="sec-home" class="hidden" style="display:flex; flex-direction:column; height:calc(var(--vh, 1vh) * 100); position:relative; background:var(--hanji);">
 
-        <!-- 배경 이미지 (하단 소나무 보이도록 아래쪽 정렬) -->
-        <div style="position:absolute; inset:0; z-index:0;
-                    background-image:var(--bg-home);
-                    background-size:cover;
-                    background-position:center bottom;
-                    opacity:0.6; pointer-events:none;"></div>
-
         <!-- 상단 프로필 바 -->
         <div style="position:relative; z-index:1; display:flex; align-items:center;
                     justify-content:space-between; padding:calc(env(safe-area-inset-top) + 16px) 20px 10px;">
@@ -923,8 +885,14 @@ input::placeholder, textarea::placeholder { color: #C4BDB6; }
                 <div id="home-user-name"
                      style="font-family:'Nanum Myeongjo',serif; font-size:1.55rem;
                             font-weight:800; color:var(--ink); letter-spacing:1px; line-height:1.2;"></div>
-                <div id="home-user-role"
-                     style="font-size:0.78rem; color:var(--muted); margin-top:2px; letter-spacing:0.5px;"></div>
+                <div style="display:flex; align-items:center; gap:8px; margin-top:3px;">
+                    <div id="home-user-role"
+                         style="font-size:0.78rem; color:var(--muted); letter-spacing:0.5px;"></div>
+                    <div id="streak-badge"
+                         style="display:none; align-items:center; gap:3px; background:rgba(179,59,46,0.09);
+                                border:1px solid rgba(179,59,46,0.25); border-radius:12px; padding:2px 9px;
+                                font-size:0.72rem; font-weight:700; color:var(--seal);"></div>
+                </div>
             </div>
             <div style="display:flex; align-items:center; gap:12px;">
                 <!-- 수정요청 바로가기 (교사 전용) -->
@@ -961,7 +929,7 @@ input::placeholder, textarea::placeholder { color: #C4BDB6; }
             <!-- 푸시 알림 켜기 배너 (권한 없을 때만) -->
             <div id="push-enable-banner" onclick="enablePush()"
                  style="display:none; align-items:center; justify-content:space-between; gap:10px;
-                        background:rgba(201,166,107,0.16); border:1px solid var(--gold); border-radius:12px;
+                        background:rgba(186,117,23,0.16); border:1px solid var(--gold); border-radius:12px;
                         padding:11px 14px; margin-bottom:12px; cursor:pointer;">
                 <span style="font-size:0.86rem; color:var(--ink); font-weight:600;">🔔 알림 켜고 등교·방과후 소식 받기</span>
                 <span style="font-size:0.8rem; color:#8B6914; font-weight:700; white-space:nowrap;">켜기 →</span>
@@ -977,18 +945,16 @@ input::placeholder, textarea::placeholder { color: #C4BDB6; }
             <div class="student-only" id="card-my-status">
                 <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; min-width:0;">
                     <!-- 엽전 카드 -->
-                    <div style="background:rgba(248,245,240,0.18); border:1px solid rgba(233,230,225,0.35);
-                                border-radius:14px; padding:16px; backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px);
-                                display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center;">
+                    <div style="background:var(--paper); border:1px solid var(--stone);
+                                border-radius:14px; padding:16px;                                display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center;">
                         <div style="font-size:0.7rem; color:rgba(44,44,44,0.6); letter-spacing:1px; margin-bottom:4px;">엽전</div>
                         <div id="my-coins"
                              style="font-family:'Nanum Myeongjo',serif; font-size:2rem;
                                     font-weight:800; color:var(--ink); line-height:1;">0냥</div>
                     </div>
                     <!-- QR 카드 -->
-                    <div style="background:rgba(248,245,240,0.18); border:1px solid rgba(233,230,225,0.35);
-                                border-radius:14px; padding:16px; backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px);
-                                display:flex; flex-direction:column; align-items:center;
+                    <div style="background:var(--paper); border:1px solid var(--stone);
+                                border-radius:14px; padding:16px;                                display:flex; flex-direction:column; align-items:center;
                                 justify-content:center; cursor:pointer; gap:6px;"
                          onclick="openMyQR()">
                         <svg width="36" height="36" viewBox="0 0 24 24" fill="none"
@@ -1006,21 +972,19 @@ input::placeholder, textarea::placeholder { color: #C4BDB6; }
             <!-- 빠른 메뉴: 엽전 안내 · 방과후 시간표 (네모 카드, 학생·교사 공통) -->
             <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:12px;">
                 <button onclick="showCoinGuide()"
-                        style="background:rgba(248,245,240,0.18); border:1px solid rgba(233,230,225,0.35);
-                               border-radius:14px; padding:15px 8px; backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px);
-                               cursor:pointer; font-family:inherit; color:var(--ink);
+                        style="background:var(--paper); border:1px solid var(--stone);
+                               border-radius:14px; padding:15px 8px;                               cursor:pointer; font-family:inherit; color:var(--ink);
                                display:flex; flex-direction:column; align-items:center; gap:6px;">
-                    <div style="width:36px; height:36px; border-radius:50%; background:rgba(201,166,107,0.18);
+                    <div style="width:36px; height:36px; border-radius:50%; background:rgba(186,117,23,0.18);
                                 display:flex; align-items:center; justify-content:center; font-size:18px;">🪙</div>
                     <div style="font-size:0.86rem; font-weight:700;">엽전 안내</div>
                     <div style="font-size:0.7rem; color:var(--muted);">받는 법 · 차감</div>
                 </button>
                 <button onclick="openAfterSchool()"
-                        style="background:rgba(248,245,240,0.18); border:1px solid rgba(233,230,225,0.35);
-                               border-radius:14px; padding:15px 8px; backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px);
-                               cursor:pointer; font-family:inherit; color:var(--ink);
+                        style="background:var(--paper); border:1px solid var(--stone);
+                               border-radius:14px; padding:15px 8px;                               cursor:pointer; font-family:inherit; color:var(--ink);
                                display:flex; flex-direction:column; align-items:center; gap:6px;">
-                    <div style="width:36px; height:36px; border-radius:50%; background:rgba(201,166,107,0.18);
+                    <div style="width:36px; height:36px; border-radius:50%; background:rgba(186,117,23,0.18);
                                 display:flex; align-items:center; justify-content:center; font-size:18px;">📅</div>
                     <div style="font-size:0.86rem; font-weight:700;">방과후 시간표</div>
                     <div style="font-size:0.7rem; color:var(--muted);">이번 달 일정</div>
@@ -1029,8 +993,8 @@ input::placeholder, textarea::placeholder { color: #C4BDB6; }
 
             <!-- 교사: 학생 빠른 조회 -->
             <div id="card-student-quick" class="teacher-only"
-                 style="display:none; background:rgba(248,245,240,0.18); border:1px solid rgba(233,230,225,0.35);
-                        border-radius:14px; padding:16px; backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px); overflow:hidden;">
+                 style="display:none; background:var(--paper); border:1px solid var(--stone);
+                        border-radius:14px; padding:16px; overflow:hidden;">
                 <div style="font-size:0.78rem; font-weight:700; color:var(--muted);
                      letter-spacing:1px; margin-bottom:10px;">학생 현황 <span id="quick-track-count" style="font-weight:500;"></span></div>
                 <select id="quick-student-select" style="margin:0 0 10px;"
@@ -1042,14 +1006,14 @@ input::placeholder, textarea::placeholder { color: #C4BDB6; }
 
             <!-- 오늘 할 일 카드 (학생) -->
             <div class="student-only" id="card-today-tasks"
-                 style="background:rgba(248,245,240,0.18); border:1px solid rgba(233,230,225,0.35);
+                 style="background:var(--paper); border:1px solid var(--stone);
                         border-radius:14px; padding:18px; backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px);">
                 <div style="font-size:1rem; font-weight:800; color:var(--ink);
                             margin-bottom:14px; letter-spacing:0.5px;">오늘 할 일</div>
                 <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; min-width:0;">
                     <!-- 플래너 작성 -->
                     <div id="task-planner"
-                         style="background:rgba(255,255,255,0.5); border:1.5px solid rgba(233,230,225,0.8);
+                         style="background:#FFFFFF; border:1.5px solid var(--stone);
                                 border-radius:12px; padding:14px 12px; cursor:pointer;
                                 display:flex; flex-direction:column; gap:8px;"
                          onclick="openPlanner()">
@@ -1061,11 +1025,17 @@ input::placeholder, textarea::placeholder { color: #C4BDB6; }
                                 <line x1="16" y1="13" x2="8" y2="13"/>
                                 <line x1="16" y1="17" x2="8" y2="17"/>
                             </svg>
-                            <div id="task-planner-check"
-                                 style="width:20px; height:20px; border-radius:50%;
-                                        border:1.5px solid var(--stone); background:rgba(255,255,255,0.7);
-                                        display:flex; align-items:center; justify-content:center; flex-shrink:0;">
-                            </div>
+                            <!-- 진행 링: loadHome이 달성률만큼 채움 -->
+                            <svg id="task-planner-ring" width="28" height="28" viewBox="0 0 28 28" style="flex-shrink:0;">
+                                <circle cx="14" cy="14" r="11" fill="none" stroke="var(--stone)" stroke-width="3.5"/>
+                                <circle id="task-planner-ring-fg" cx="14" cy="14" r="11" fill="none"
+                                        stroke="var(--gold)" stroke-width="3.5" stroke-linecap="round"
+                                        stroke-dasharray="0 69.1" transform="rotate(-90 14 14)"/>
+                                <g id="task-planner-ring-check" style="display:none;">
+                                    <polyline points="9.5 14.5 12.5 17.5 18.5 10.5" fill="none"
+                                              stroke="var(--green)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+                                </g>
+                            </svg>
                         </div>
                         <div style="font-size:1.05rem; font-weight:700; color:var(--ink);">플래너 작성</div>
                         <div id="task-planner-desc"
@@ -1073,7 +1043,7 @@ input::placeholder, textarea::placeholder { color: #C4BDB6; }
                     </div>
                     <!-- 등교 인증 -->
                     <div id="btn-checkin-wrap"
-                         style="background:rgba(255,255,255,0.5); border:1.5px solid rgba(233,230,225,0.8);
+                         style="background:#FFFFFF; border:1.5px solid var(--stone);
                                 border-radius:12px; padding:14px 12px; cursor:pointer;
                                 display:flex; flex-direction:column; gap:8px;"
                          onclick="doCheckIn()">
@@ -1187,10 +1157,6 @@ input::placeholder, textarea::placeholder { color: #C4BDB6; }
          [화면 3] 상벌점 내역 (#sec-point-log)
     ====================================================== -->
     <section id="sec-point-log" class="hidden" style="position:relative; background:var(--hanji); height:calc(var(--vh, 1vh) * 100); display:flex; flex-direction:column;">
-        <div style="position:absolute; inset:0; z-index:0;
-                    background-image:var(--bg-market);
-                    background-size:cover; background-position:center bottom;
-                    opacity:0.5; pointer-events:none;"></div>
         <div style="position:relative; z-index:1; display:flex; align-items:center;
                     justify-content:center; padding:calc(env(safe-area-inset-top) + 14px) 20px 8px; flex-shrink:0;">
             <button onclick="showSection('sec-home')"
@@ -1221,13 +1187,6 @@ input::placeholder, textarea::placeholder { color: #C4BDB6; }
     <section id="sec-planner" class="hidden"
              style="display:flex; flex-direction:column; height:calc(var(--vh, 1vh) * 100);
                     position:relative; background:var(--hanji);">
-
-        <!-- 배경 이미지 하단 소나무 -->
-        <div style="position:absolute; inset:0; z-index:0;
-                    background-image:var(--bg-planner);
-                    background-size:cover;
-                    background-position:center bottom;
-                    opacity:0.5; pointer-events:none;"></div>
 
         <!-- 헤더 바 (뒤로가기 + 타이틀) -->
         <div style="position:relative; z-index:1; display:flex; align-items:center;
@@ -1291,19 +1250,17 @@ input::placeholder, textarea::placeholder { color: #C4BDB6; }
             <div id="plan-add-row" style="display:flex; gap:8px; margin-top:4px;">
                 <input type="text" id="plan-input"
                        placeholder="할 일을 입력하세요"
-                       style="flex:1; background:rgba(255,255,255,0.4);
-                              border:1px solid rgba(233,230,225,0.5); margin:0; padding:12px 14px;"
+                       style="flex:1; margin:0; padding:12px 14px;"
                        onkeydown="if(event.key==='Enter') addPlanItem()">
                 <button onclick="addPlanItem()"
-                        style="background:rgba(44,44,44,0.75); color:white; border:none;
+                        style="background:var(--ink); color:white; border:none;
                                border-radius:10px; width:46px; height:46px;
-                               cursor:pointer; font-size:1.3rem; flex-shrink:0;
-                               backdrop-filter:blur(4px);">+</button>
+                               cursor:pointer; font-size:1.3rem; flex-shrink:0;">+</button>
             </div>
 
             <!-- 저장 버튼 (하단 1개만) -->
             <button class="btn" id="plan-save-btn" onclick="savePlannerData()"
-                    style="background:rgba(44,44,44,0.82); backdrop-filter:blur(6px); margin-top:8px;">
+                    style="background:var(--ink); margin-top:8px;">
                 플래너 저장하기
             </button>
 
@@ -2250,6 +2207,7 @@ async function prefetchAll() {
         fetchToCache('getMyPointLog',   { name }),
         fetchToCache('getMyExamScores', { name }),
         fetchToCache('getBank',         { name }),
+        fetchToCache('getMyStreak',     { name }),
     ] : [];
 
     // 모두 병렬 실행 (실패해도 조용히 무시)
@@ -2431,21 +2389,21 @@ async function loadWeeklyStatus() {
 
     function attInfo(rows) {
         const r = (rows||[]).find(r => r.name === name);
-        if (!r) return { text: '—', color: 'rgba(233,230,225,0.5)', textColor: 'var(--muted)' };
+        if (!r) return { text: '—', color: '#EFE8D8', textColor: 'var(--muted)' };
         if (r.status === '출석') return { text: '출석', color: 'rgba(46,125,50,0.15)', textColor: '#2E7D32' };
         if (r.status === '지각') return { text: '지각', color: 'rgba(230,81,0,0.12)', textColor: '#E65100' };
         if (r.status === '결석') return { text: '결석', color: 'rgba(198,40,40,0.12)', textColor: '#C62828' };
-        return { text: '—', color: 'rgba(233,230,225,0.5)', textColor: 'var(--muted)' };
+        return { text: '—', color: '#EFE8D8', textColor: 'var(--muted)' };
     }
 
     function planInfo(rows) {
         const r = (rows||[]).find(r => r.name === name);
-        if (!r) return { text: '—', color: 'rgba(233,230,225,0.5)', textColor: 'var(--muted)' };
+        if (!r) return { text: '—', color: '#EFE8D8', textColor: 'var(--muted)' };
         const p = Number(r.progress);
         if (p >= 100) return { text: '100%', color: 'rgba(46,125,50,0.15)', textColor: '#2E7D32' };
-        if (p >= 50)  return { text: p + '%', color: 'rgba(201,166,107,0.2)', textColor: '#8B6914' };
+        if (p >= 50)  return { text: p + '%', color: 'rgba(186,117,23,0.2)', textColor: '#8B6914' };
         if (p > 0)    return { text: p + '%', color: 'rgba(230,81,0,0.1)',   textColor: '#E65100' };
-        return { text: '미작성', color: 'rgba(233,230,225,0.5)', textColor: 'var(--muted)' };
+        return { text: '미작성', color: '#EFE8D8', textColor: 'var(--muted)' };
     }
 
     const colStyle = `flex:1; min-width:0; display:flex; flex-direction:column; align-items:center; gap:6px;`;
@@ -2884,7 +2842,7 @@ function renderMonth() {
         if (r.items.length > 3) chips += `<div style="font-size:0.58rem;color:#999;">+${r.items.length - 3}</div>`;
         html += `<div onclick="asOpenDay(${asYear},${asMonth},${d})"
             style="border:1px solid ${isToday ? 'var(--gold)' : 'rgba(233,230,225,0.6)'};border-radius:6px;padding:3px 4px;
-                   background:${isToday ? 'rgba(201,166,107,0.12)' : 'rgba(255,255,255,0.4)'};cursor:pointer;overflow:hidden;min-width:0;">
+                   background:${isToday ? 'rgba(186,117,23,0.1)' : 'var(--paper)'};cursor:pointer;overflow:hidden;min-width:0;">
             <div style="font-size:0.72rem;font-weight:700;color:${numColor};">${d}</div>${chips}</div>`;
     }
     grid.innerHTML = html;
@@ -2905,7 +2863,7 @@ function asOpenDay(y, m, d) {
             const place = asCleanPlace(it.place);
             const meta  = (it.teacher || '') + (place ? ' · ' + place : '');
             const tr    = (it.track === '공무원' || it.track === '공기업') ? it.track + '반' : '';
-            const trTag = tr ? `<span style="font-size:0.68rem;background:rgba(201,166,107,0.2);color:#8B6914;border-radius:4px;padding:1px 5px;margin-left:5px;">${tr}</span>` : '';
+            const trTag = tr ? `<span style="font-size:0.68rem;background:rgba(186,117,23,0.2);color:#8B6914;border-radius:4px;padding:1px 5px;margin-left:5px;">${tr}</span>` : '';
             const tag   = (it.kind === 'date' ? '<span style="font-size:0.68rem;background:#E3F2FD;color:#1565C0;border-radius:4px;padding:1px 5px;margin-left:5px;">이날만</span>' : '') + trTag;
             const timeLine = time
                 ? time
@@ -3393,27 +3351,24 @@ function loadHome() {
         // 최근 5일 출결/플래너 현황 로드
         loadWeeklyStatus();
 
-        // 플래너 체크 표시
-        const planCheck  = document.getElementById('task-planner-check');
-        const planDesc   = document.getElementById('task-planner-desc');
-        const hasPlan    = currentUser.todayPlanner && currentUser.todayPlanner.progress > 0;
-        const planDone   = currentUser.todayPlanner && Number(currentUser.todayPlanner.progress) === 100;
-        if (planCheck) {
-            if (planDone) {
-                planCheck.style.background = 'var(--green)';
-                planCheck.style.borderColor = 'var(--green)';
-                planCheck.innerHTML = '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>';
-                document.getElementById('task-planner').style.borderColor = 'var(--green)';
-            } else if (hasPlan) {
-                planCheck.style.background = 'var(--gold)';
-                planCheck.style.borderColor = 'var(--gold)';
-                planCheck.innerHTML = '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>';
-                document.getElementById('task-planner').style.borderColor = 'var(--gold)';
-            }
+        // 플래너 진행 링 (0%=회색 링, 진행=금색, 100%=초록+체크)
+        const planDesc  = document.getElementById('task-planner-desc');
+        const planPct   = Math.max(0, Math.min(100, Number(currentUser.todayPlanner?.progress) || 0));
+        const planDone  = planPct === 100;
+        const hasPlan   = planPct > 0;
+        const ringFg    = document.getElementById('task-planner-ring-fg');
+        const ringCheck = document.getElementById('task-planner-ring-check');
+        if (ringFg) {
+            const C = 69.1;   // 반지름 11 원둘레
+            ringFg.setAttribute('stroke-dasharray', `${(planPct * C / 100).toFixed(1)} ${C}`);
+            ringFg.setAttribute('stroke', planDone ? 'var(--green)' : 'var(--gold)');
         }
+        if (ringCheck) ringCheck.style.display = planDone ? '' : 'none';
+        const planCard = document.getElementById('task-planner');
+        if (planCard) planCard.style.borderColor = planDone ? 'var(--green)' : hasPlan ? 'var(--gold)' : '';
         const planContent = currentUser.todayPlanner && currentUser.todayPlanner.content;
-    const hasContent = planContent && safeParseArray(planContent).length > 0;
-    if (planDesc) planDesc.textContent = planDone ? '100% 달성!' : hasPlan ? `${currentUser.todayPlanner.progress}% 진행 중` : hasContent ? '등록됨' : '오늘 계획 미등록';
+        const hasContent = planContent && safeParseArray(planContent).length > 0;
+        if (planDesc) planDesc.textContent = planDone ? '100% 달성!' : hasPlan ? `${planPct}% 진행 중` : hasContent ? '등록됨' : '오늘 계획 미등록';
     }
 
     // ★ ② 오늘 출석 여부에 따라 등교 인증 버튼 즉시 설정 (API 호출 없음)
@@ -3662,6 +3617,15 @@ async function loadTeacherTodayDashboard(isManualRefresh = false) {
     try {
         const today = toDateStr();
 
+        // 주말에는 출결/플래너 집계가 의미 없음 (전원 '결석'으로 보이는 오해 방지)
+        const todayDow = new Date(today + 'T00:00:00').getDay();
+        if (todayDow === 0 || todayDow === 6) {
+            dashArea.innerHTML = `<div style="background:var(--paper); border:1px solid var(--stone); border-radius:12px;
+                padding:16px; text-align:center; color:var(--muted); font-size:0.86rem;">
+                🍵 주말입니다. 출결·플래너 현황은 평일에 표시됩니다.</div>`;
+            return;
+        }
+
         // 수동 새로고침 시 관련 캐시 강제 무효화
         if (isManualRefresh) {
             AppCache.invalidate('getAdminData',        {});
@@ -3694,9 +3658,8 @@ async function loadTeacherTodayDashboard(isManualRefresh = false) {
 
         // ── 출결 현황 카드 ──
         const hasAttIssue = lateStudents.length > 0 || absentStudents.length > 0;
-        html += `<div style="background:rgba(255,252,248,0.55); border-radius:12px; padding:14px 16px;
-                              margin-bottom:10px; border:1px solid rgba(233,230,225,0.6);
-                              backdrop-filter:blur(8px);">
+        html += `<div style="background:var(--paper); border-radius:12px; padding:14px 16px;
+                              margin-bottom:10px; border:1px solid var(--stone);">
             <div style="display:flex; align-items:baseline; gap:8px; margin-bottom:10px;">
                 <span style="font-family:'Nanum Myeongjo',serif; font-size:0.88rem;
                              font-weight:800; color:var(--ink); letter-spacing:0.5px;">출결 현황</span>
@@ -3737,9 +3700,8 @@ async function loadTeacherTodayDashboard(isManualRefresh = false) {
         html += `</div>`;
 
         // ── 플래너 현황 카드 ──
-        html += `<div style="background:rgba(255,252,248,0.55); border-radius:12px; padding:14px 16px;
-                              border:1px solid rgba(233,230,225,0.6);
-                              backdrop-filter:blur(8px);">
+        html += `<div style="background:var(--paper); border-radius:12px; padding:14px 16px;
+                              border:1px solid var(--stone);">
             <div style="display:flex; align-items:baseline; gap:8px; margin-bottom:${noPlanner.length > 0 ? '10px' : '0'};">
                 <span style="font-family:'Nanum Myeongjo',serif; font-size:0.88rem;
                              font-weight:800; color:var(--ink); letter-spacing:0.5px;">플래너 현황</span>
@@ -3840,6 +3802,7 @@ async function doCheckIn() {
         // 성공 후 캐시 무효화 및 갱신
         AppCache.invalidate('getAdminAttendance', { date: toDateStr() });
         AppCache.invalidate('getAdminData', {});
+        AppCache.invalidate('getMyStreak', { name: currentUser.name });   // 스트릭 갱신
         fetchToCache('getAdminAttendance', { date: toDateStr() });
 
         currentUser.checkedIn  = res.status;
@@ -4038,7 +4001,7 @@ function renderPlans() {
     const statusColors = [
         'rgba(233,230,225,0.6)',  // 0: 미시작 (회색)
         'rgba(198,40,40,0.7)',    // 1: 실패 (빨강)
-        'rgba(201,166,107,0.7)',  // 2: 진행중 (금색)
+        'rgba(186,117,23,0.7)',  // 2: 진행중 (금색)
         'rgba(46,125,50,0.7)',    // 3: 완료 (초록)
     ];
 
@@ -4047,9 +4010,8 @@ function renderPlans() {
         row.style.cssText = `
             display:grid; grid-template-columns:1fr 52px;
             gap:8px; align-items:center; padding:11px 14px;
-            background:rgba(255,255,255,0.35); border-radius:10px;
-            border:1px solid rgba(233,230,225,0.4); margin-bottom:6px;
-            backdrop-filter:blur(4px);
+            background:var(--paper); border-radius:10px;
+            border:1px solid var(--stone); margin-bottom:6px;
         `;
         const isTodayRow = plannerViewDate === toDateStr();
         row.innerHTML = `
@@ -4326,11 +4288,11 @@ async function openPointLog(tab) {
             // 상단 일괄 삭제 툴바
             const toolbar = document.createElement('div');
             toolbar.id = 'pointlog-toolbar';
-            toolbar.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:rgba(248,245,240,0.7);border-radius:12px;margin-bottom:10px;border:1px solid rgba(233,230,225,0.6);';
+            toolbar.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:var(--secondary);border-radius:12px;margin-bottom:10px;border:1px solid var(--stone);';
             toolbar.innerHTML = `
                 <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:0.88rem;color:var(--ink);">
                     <input type="checkbox" id="pointlog-check-all" onclick="toggleAllPointLogs(this.checked)"
-                           style="width:20px;height:20px;cursor:pointer;accent-color:#C9A66B;">
+                           style="width:20px;height:20px;cursor:pointer;accent-color:var(--gold);">
                     전체 선택
                 </label>
                 <button id="pointlog-bulk-delete-btn" onclick="bulkDeletePointLogs()"
@@ -4355,7 +4317,7 @@ async function openPointLog(tab) {
                         <input type="checkbox" class="pointlog-cb" data-row="${log.row}" data-name="${log.name}" data-delta="${delta}"
                                onclick="event.stopPropagation();updatePointLogSelection()"
                                style="width:20px;height:20px;margin-top:2px;flex-shrink:0;cursor:pointer;
-                                      accent-color:#C9A66B;-webkit-appearance:checkbox;">
+                                      accent-color:var(--gold);-webkit-appearance:checkbox;">
                         <div style="flex:1;min-width:0;">
                             <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
                                 <div style="flex:1;min-width:0;">
@@ -4552,7 +4514,7 @@ async function openPointLog(tab) {
                         원기록: <span style="color:#555;">${req.origDate} · ${req.origReason} · ${origStr}</span>
                     </div>
                     <div style="margin-top:3px;font-size:0.9rem;">${wantStr}</div>
-                    <div style="margin-top:6px;background:rgba(201,166,107,0.12);border-radius:7px;padding:8px 10px;font-size:0.86rem;color:#5D4037;">
+                    <div style="margin-top:6px;background:rgba(186,117,23,0.12);border-radius:7px;padding:8px 10px;font-size:0.86rem;color:#5D4037;">
                         “${req.note}”
                     </div>
                     <div style="display:flex;gap:6px;margin-top:10px;">
@@ -4591,7 +4553,7 @@ async function openPointLog(tab) {
         const bal = currentUser.coins ?? 0;
         listDiv.insertAdjacentHTML('beforeend', `
             <div class="card" style="display:flex;align-items:center;justify-content:space-between;gap:10px;
-                        background:rgba(201,166,107,0.12);border:1px solid var(--gold);">
+                        background:rgba(186,117,23,0.12);border:1px solid var(--gold);">
                 <div>
                     <div style="font-size:0.72rem;color:var(--muted);letter-spacing:0.5px;">내 엽전</div>
                     <div style="font-family:'Nanum Myeongjo',serif;font-size:1.7rem;font-weight:800;
@@ -9201,6 +9163,23 @@ let _homeAsCache = null;   // { data, ts } — 방과후 데이터 5분 메모�
 function renderHomeExtras() {
     renderDdayBanner();
     renderTodayAfterSchool();
+    renderStreakBadge();
+}
+
+/** 🔥 연속 등교 스트릭 배지 (학생 전용, 백엔드 미배포 시 자동 숨김) */
+async function renderStreakBadge() {
+    const el = document.getElementById('streak-badge');
+    if (!el || !currentUser) return;
+    if (currentUser.role === 'teacher') { el.style.display = 'none'; return; }
+    let data = AppCache.get('getMyStreak', { name: currentUser.name });
+    if (data === null) data = await fetchToCache('getMyStreak', { name: currentUser.name });
+    const n = data && Number(data.streak) || 0;
+    if (n >= 1) {
+        el.innerHTML = `🔥 ${n}일 연속 등교`;
+        el.style.display = 'inline-flex';
+    } else {
+        el.style.display = 'none';
+    }
 }
 
 /** 시험 D-day 배너 (교사: 전체 / 학생: 공통 + 내 반 시험만) */
@@ -9224,7 +9203,7 @@ async function renderDdayBanner() {
         const dtxt = diff === 0 ? 'D-DAY' : 'D-' + diff;
         const p    = d.date.split('-');
         const trTag = (d.track && d.track !== '공통')
-            ? `<span style="font-size:0.66rem;background:rgba(201,166,107,0.2);color:#8B6914;border-radius:4px;padding:1px 5px;margin-left:5px;">${d.track}</span>` : '';
+            ? `<span style="font-size:0.66rem;background:rgba(186,117,23,0.2);color:#8B6914;border-radius:4px;padding:1px 5px;margin-left:5px;">${d.track}</span>` : '';
         return `<div style="display:flex;justify-content:space-between;align-items:center;padding:3px 0;">
             <span style="font-size:0.88rem;font-weight:600;color:var(--ink);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${String(d.name).replace(/</g,'&lt;')}${trTag}</span>
             <span style="flex-shrink:0;margin-left:8px;">
@@ -9235,8 +9214,8 @@ async function renderDdayBanner() {
     }).join('');
 
     el.innerHTML = `
-        <div style="background:rgba(248,245,240,0.35);border:1px solid rgba(201,166,107,0.5);border-radius:14px;
-                    padding:12px 16px;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);">
+        <div style="background:var(--paper);border:1px solid rgba(186,117,23,0.45);border-radius:14px;
+                    padding:12px 16px;">
             <div style="font-size:0.7rem;color:var(--muted);letter-spacing:1px;margin-bottom:4px;">🗓️ 시험까지</div>
             ${rows}
         </div>`;
@@ -9281,7 +9260,7 @@ async function renderTodayAfterSchool() {
         const time  = asTimeRange(it.start, it.end) || '시간 미정';
         const place = asCleanPlace(it.place);
         const tr    = (it.track === '공무원' || it.track === '공기업')
-            ? `<span style="font-size:0.66rem;background:rgba(201,166,107,0.2);color:#8B6914;border-radius:4px;padding:1px 5px;margin-left:4px;">${it.track}</span>` : '';
+            ? `<span style="font-size:0.66rem;background:rgba(186,117,23,0.2);color:#8B6914;border-radius:4px;padding:1px 5px;margin-left:4px;">${it.track}</span>` : '';
         return `<div style="display:flex;align-items:center;gap:8px;padding:3px 0;">
             <span style="font-size:0.78rem;color:#1565C0;font-weight:700;flex-shrink:0;">${time}</span>
             <span style="font-size:0.88rem;font-weight:600;color:var(--ink);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${String(it.subject || '').replace(/</g,'&lt;')}${tr}</span>
@@ -9291,8 +9270,8 @@ async function renderTodayAfterSchool() {
 
     el.innerHTML = `
         <div onclick="openAfterSchool()"
-             style="background:rgba(248,245,240,0.35);border:1px solid rgba(233,230,225,0.6);border-radius:14px;
-                    padding:12px 16px;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);cursor:pointer;">
+             style="background:var(--paper);border:1px solid var(--stone);border-radius:14px;
+                    padding:12px 16px;cursor:pointer;">
             <div style="font-size:0.7rem;color:var(--muted);letter-spacing:1px;margin-bottom:4px;">🏫 오늘 방과후 <span style="float:right;color:#8B6914;">전체 보기 →</span></div>
             ${rows}
         </div>`;
