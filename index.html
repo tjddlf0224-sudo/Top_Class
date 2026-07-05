@@ -64,9 +64,11 @@
 
 * { box-sizing: border-box; }
 
+html { background: var(--hanji); }
 body {
     font-family: 'Noto Sans KR', 'Nanum Myeongjo', sans-serif;
-    background: #EDE6D6;
+    /* 하단 여백까지 화면 배경(한지)과 통일 — 뷰포트보다 짧아도 색 차이 없음 */
+    background: var(--hanji);
     color: var(--ink);
     margin: 0; padding: 0;
     display: flex;
@@ -1414,13 +1416,6 @@ input::placeholder, textarea::placeholder { color: #BDB19A; }
              style="display:flex; flex-direction:column; height:calc(var(--vh, 1vh) * 100);
                     position:relative; background:var(--hanji);">
 
-        <!-- 배경 이미지 하단 소나무 -->
-        <div style="position:absolute; inset:0; z-index:0;
-                    background-image:var(--bg-exam);
-                    background-size:cover;
-                    background-position:center bottom;
-                    opacity:0.5; pointer-events:none;"></div>
-
         <!-- 상단 바 -->
         <div style="position:relative; z-index:1; display:flex; align-items:center;
                     justify-content:space-between; padding:calc(env(safe-area-inset-top) + 16px) 20px 8px;">
@@ -1565,7 +1560,6 @@ input::placeholder, textarea::placeholder { color: #BDB19A; }
          [화면 8] 이조판서: 모의고사 성적 입력 (#sec-exam-admin)
     ====================================================== -->
     <section id="sec-exam-admin" class="hidden" style="position:relative; background:var(--hanji); height:calc(var(--vh, 1vh) * 100); max-height:calc(var(--vh, 1vh) * 100); display:flex; flex-direction:column;">
-        <div style="position:absolute; inset:0; z-index:0; background-image:var(--bg-exam); background-size:cover; background-position:center bottom; opacity:0.5; pointer-events:none;"></div>
         <div style="position:relative; z-index:1; display:flex; align-items:center;
                     justify-content:center; padding:calc(env(safe-area-inset-top) + 14px) 20px 8px; flex-shrink:0;">
             <button onclick="showSection('sec-home')"
@@ -1824,7 +1818,6 @@ input::placeholder, textarea::placeholder { color: #BDB19A; }
          [화면] 저잣거리 (#sec-market)
     ====================================================== -->
     <section id="sec-market" class="hidden" style="position:relative; background:var(--hanji); height:calc(var(--vh, 1vh) * 100); display:flex; flex-direction:column;">
-        <div style="position:absolute; inset:0; z-index:0; background-image:var(--bg-market); background-size:cover; background-position:center bottom; opacity:0.5; pointer-events:none;"></div>
         <div style="position:relative; z-index:1; display:flex; align-items:center;
                     justify-content:center; padding:calc(env(safe-area-inset-top) + 14px) 20px 8px; flex-shrink:0;">
             <button onclick="showSection('sec-home')"
@@ -1893,10 +1886,6 @@ input::placeholder, textarea::placeholder { color: #BDB19A; }
     <!-- 학생: 내 QR 코드 -->
     <section id="sec-my-qr" class="hidden"
              style="position:relative; background:var(--hanji); height:calc(var(--vh, 1vh) * 100);">
-        <div style="position:absolute; inset:0; z-index:0;
-                    background-image:var(--bg-exam);
-                    background-size:cover; background-position:center bottom;
-                    opacity:0.5; pointer-events:none;"></div>
         <div style="position:relative; z-index:1; display:flex; align-items:center;
                     justify-content:center; padding:calc(env(safe-area-inset-top) + 14px) 20px 8px; flex-shrink:0;">
             <button onclick="showSection('sec-home')"
