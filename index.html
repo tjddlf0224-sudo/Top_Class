@@ -4929,6 +4929,7 @@ async function saveAbsenceReason() {
     if (!date || !name) return showToast('날짜와 학생을 선택해주세요.');
     const res = await callApi('saveAbsenceReason', { date, name, reason, actor: '교사' });
     // 환불/출결 변경 반영 → 관련 캐시 무효화
+    AppCache.invalidate('getAbsenceReasons', {});   // ★ 방금 등록한 사유가 목록에 즉시 보이도록
     AppCache.invalidate('getAllMemberPoints', {});
     AppCache.invalidate('getAdminAttendance', { date });
     AppCache.invalidate('getMyPointLog', { name });
@@ -4946,6 +4947,7 @@ async function saveAbsenceReason() {
 async function deleteAbsenceReason(date, name) {
     if (!confirm(`${name} (${date}) 결석사유를 삭제하시겠소?`)) return;
     await callApi('deleteAbsenceReason', { date, name });
+    AppCache.invalidate('getAbsenceReasons', {});   // ★ 삭제한 사유가 목록에서 즉시 사라지도록
     showToast('삭제 완료되었습니다.');
     loadAbsenceList();
 }
