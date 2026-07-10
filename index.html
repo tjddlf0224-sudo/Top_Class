@@ -2084,8 +2084,15 @@ const AppCache = (() => {
         const k   = key(action, params);
         const hit = store[k];
         if (!hit) return null;
-        if (Date.now() - hit.ts > TTL) { delete store[k]; return null; }
+        // 만료돼도 항목은 남겨둠 → 네트워크 실패 시 getStale 폴백용
+        if (Date.now() - hit.ts > TTL) return null;
         return hit.data;
+    }
+
+    /** 만료 여부와 무관하게 마지막 데이터 반환 (로드 실패 시 폴백 전용) */
+    function getStale(action, params) {
+        const hit = store[key(action, params)];
+        return hit ? hit.data : null;
     }
 
     function set(action, params, data) {
@@ -2107,7 +2114,7 @@ const AppCache = (() => {
         Object.keys(store).forEach(k => delete store[k]);
     }
 
-    return { get, set, invalidate, invalidatePrefix, clear, key };
+    return { get, getStale, set, invalidate, invalidatePrefix, clear, key };
 })();
 
 /**
@@ -2170,18 +2177,12 @@ async function prefetchAll() {
     if (isTeacher) {
         const days = recentDates(7);
 
-        // 전체 학생 getMyExamScores 프리페치 (getAdminData 캐시 완료 후 병렬 실행)
-        const examScoreFetches = fetchToCache('getAdminData', {}).then(adminData => {
-            const students = (adminData?.members || [])
-                .filter(m => m.name !== '교사' && m.role !== 'teacher');
-            return Promise.allSettled(
-                students.map(s => fetchToCache('getMyExamScores', { name: s.name }))
-            );
-        }).catch(() => {});
+        // (제거) 전체 학생 getMyExamScores 프리페치 — 학생 수만큼 요청을 한꺼번에 쏴서
+        // GAS 동시실행 한도(전체 사용자 공유)를 스스로 소진, 아침 로그인 실패의 원인이었음.
+        // 성적은 성적 화면에서 학생별로 필요할 때 조회(5분 캐시)로 충분.
 
         // ★ 날짜별 21건 개별 호출 대신 범위 API 3건으로 축소 (구버전 백엔드면 자동 무시)
         teacherFetches = [
-            examScoreFetches,
             fetchToCache('getCoinPresets', {}),
             fetchToCache('getBankAll',     {}),
             primeDailyCache('getAdminAttendance',  'getAdminAttendanceRange', days),
@@ -2441,27 +2442,91 @@ function _gasNext() {
     }
 }
 
+// 타임아웃: 읽기는 짧게(슬롯 회전), 쓰기는 길게.
+// ★ 쓰기를 짧게 끊으면 안 되는 이유: GAS는 fetch를 중단해도 서버 처리를 끝까지 진행한다.
+//   짧은 타임아웃 + "다시 시도" 안내는 이미 성공한 지급을 또 하게 만드는 이중 지급 유도가 됨.
+const GAS_READ_TIMEOUT_MS  = 25000;
+const GAS_WRITE_TIMEOUT_MS = 90000;
+const GAS_TIMEOUT_OVERRIDES = { promoteSchoolYear: 300000 };   // 학년도 전환은 수 분 걸릴 수 있음
+
+/** 재시도해도 안전한(읽기 전용) 액션인지 — 쓰기를 재시도하면 엽전 이중 적용 위험 */
+function _gasRetriable(action) {
+    return action.startsWith('get') || action === 'login';
+}
+
+function _gasTimeoutFor(action) {
+    if (GAS_TIMEOUT_OVERRIDES[action]) return GAS_TIMEOUT_OVERRIDES[action];
+    return _gasRetriable(action) ? GAS_READ_TIMEOUT_MS : GAS_WRITE_TIMEOUT_MS;
+}
+
+/** fetch 1회 시도: 타임아웃 + HTTP 상태 + JSON 파싱 가드 */
+async function _gasFetchOnce(action, params) {
+    const ctrl  = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), _gasTimeoutFor(action));
+    try {
+        const res = await fetch(GOOGLE_SCRIPT_URL, {
+            method: 'POST', mode: 'cors',
+            body: JSON.stringify({ action, ...params }),
+            signal: ctrl.signal
+        });
+        if (!res.ok) throw new Error('서버 응답 오류(' + res.status + ') — 잠시 후 다시 시도해주세요.');
+        try {
+            return await res.json();
+        } catch(e) {
+            throw new Error('서버 응답을 읽지 못했습니다 — 잠시 후 다시 시도해주세요.');
+        }
+    } catch(err) {
+        if (err && err.name === 'AbortError') {
+            // ★ 쓰기 시간초과는 서버에서 이미 처리됐을 수 있음 — 맹목적 재시도를 유도하지 않는 문구
+            throw new Error(_gasRetriable(action)
+                ? '서버 응답 시간 초과 — 네트워크를 확인해주세요.'
+                : '응답 시간이 초과됐지만 서버에서 처리가 완료됐을 수 있습니다. 내역을 먼저 확인한 뒤 다시 시도해주세요.');
+        }
+        throw err;
+    } finally {
+        clearTimeout(timer);
+    }
+}
+
 function gasRequest(action, params, front) {
     const key = AppCache.key(action, params);
-    if (_gasInflight[key]) return _gasInflight[key];
+    // ★ 진행 중 요청 합류(dedup)는 읽기(get*)에만 적용.
+    //   쓰기까지 dedup하면 같은 조건의 연속 지급/구매가 서버로 전송되지 않은 채
+    //   '성공'으로 표시되는 금전 버그가 생김.
+    const dedupable = action.startsWith('get');
+    if (dedupable && _gasInflight[key]) return _gasInflight[key];
+
+    const maxTry = _gasRetriable(action) ? 3 : 1;
+
     const promise = new Promise((resolve, reject) => {
-        const run = () => {
-            fetch(GOOGLE_SCRIPT_URL, {
-                method: 'POST', mode: 'cors',
-                body: JSON.stringify({ action, ...params })
-            })
-            .then(res => res.json())
-            .then(resolve, reject)
-            .finally(() => {
-                _gasActive--;
-                delete _gasInflight[key];
-                _gasNext();
-            });
+        const enqueue = (fn) => {
+            if (front) _gasQueue.unshift(fn); else _gasQueue.push(fn);
+            _gasNext();
         };
-        if (front) _gasQueue.unshift(run); else _gasQueue.push(run);
-        _gasNext();
+        // ★ 재시도는 슬롯을 반납한 뒤 다시 줄을 선다 — 재시도가 8개 슬롯을 계속
+        //   붙들고 있으면 정작 사용자 조작(front)이 굶는 역효과가 생김
+        const makeAttempt = (attempt) => async () => {
+            let settled = false;
+            try {
+                const json = await _gasFetchOnce(action, params);
+                settled = true;
+                resolve(json);
+            } catch(err) {
+                if (attempt >= maxTry) {
+                    settled = true;
+                    reject(err);
+                } else {
+                    setTimeout(() => enqueue(makeAttempt(attempt + 1)), attempt * 700);
+                }
+            } finally {
+                _gasActive--;
+                if (settled && dedupable) delete _gasInflight[key];
+                _gasNext();
+            }
+        };
+        enqueue(makeAttempt(1));
     });
-    _gasInflight[key] = promise;
+    if (dedupable) _gasInflight[key] = promise;
     return promise;
 }
 
@@ -2478,10 +2543,24 @@ async function callApi(action, params = {}) {
     document.getElementById('loading').classList.remove('hidden');
     try {
         const json = await gasRequest(action, params, true);
-        if (json.status === 'error') throw new Error(json.message);
+        if (json.status === 'error') {
+            const e = new Error(json.message);
+            e._fromServer = true;   // 서버가 명시적으로 거부 → 캐시 폴백 대상 아님
+            throw e;
+        }
         if (cacheable) AppCache.set(action, params, json.data);
         return json.data;
     } catch(err) {
+        // ★ 읽기 실패 시 만료된 캐시라도 있으면 그걸 보여줌 (빈 화면·오류보다 낫다)
+        //   단, 서버가 명시적으로 거부한 요청(백엔드 throw)은 폴백하지 않고 그대로 알림
+        if (cacheable && !(err && err._fromServer)) {
+            const stale = AppCache.getStale(action, params);
+            if (stale !== null) {
+                showToast('⚠️ 서버 연결이 원활하지 않아 이전 데이터를 표시합니다.');
+                return stale;
+            }
+        }
+        err._toasted = true;
         showToast("오류: " + err.message);
         throw err;
     } finally {
@@ -2508,9 +2587,46 @@ async function callApiBg(action, params = {}, label = '저장') {
         return json.data;
     } catch(err) {
         setBgStatus('error', `⚠️ ${label} 실패`);
+        err._toasted = true;
         showToast(`${label} 실패: ${err.message} — 다시 시도해주세요.`);
         throw err;
     }
+}
+
+/* =========================================================
+   전역 안전망: 어디선가 놓친 비동기 오류로 앱이 조용히 굳는 것 방지
+   - 로딩 오버레이가 걸려 있으면 내려주고
+   - callApi/callApiBg가 이미 토스트를 띄운 오류는 중복 알림 생략
+   ========================================================= */
+window.addEventListener('unhandledrejection', function(e) {
+    try {
+        const loadingEl = document.getElementById('loading');
+        if (loadingEl) loadingEl.classList.add('hidden');
+        const reason = e.reason;
+        if (reason && reason._toasted) return;
+        const msg = (reason && reason.message) ? reason.message : '네트워크 오류';
+        showToast('⚠️ 작업이 완료되지 않았습니다: ' + msg);
+    } catch(_) {}
+});
+
+/* =========================================================
+   날짜 변경 감지: 홈 화면에 추가한 앱(PWA)은 다음날 다시 열어도
+   window.onload가 다시 돌지 않아 어제의 등교 인증 상태가 남는다.
+   화면 복귀 시 날짜가 바뀌었으면 새로고침해 오늘 상태로 초기화.
+   ========================================================= */
+let _appDayStamp = toDateStr();
+document.addEventListener('visibilitychange', function() {
+    if (document.visibilityState !== 'visible') return;
+    if (toDateStr() !== _appDayStamp) location.reload();
+});
+
+/** 목록 영역 로드 실패 표시 + 다시 시도 버튼 ("불러오는 중..." 무한 고착 방지) */
+function renderLoadError(el, retryJs, msg) {
+    if (!el) return;
+    el.innerHTML = '<div style="text-align:center;color:#999;padding:14px 0;">'
+        + '<div style="margin-bottom:8px;">⚠️ ' + (msg || '불러오지 못했습니다.') + '</div>'
+        + '<button onclick="' + retryJs + '" style="padding:6px 16px;border:1px solid #ccc;'
+        + 'border-radius:6px;background:#fff;cursor:pointer;">다시 시도</button></div>';
 }
 
 /**
@@ -2588,9 +2704,14 @@ async function openTeacherLog() {
 }
 function closeTeacherLog() { document.getElementById('teacherlog-overlay').classList.add('hidden'); }
 async function renderTeacherLog() {
-    let logs = [];
-    try { logs = await callApi('getTeacherLog', {}); } catch(e) {}
     const el = document.getElementById('tlog-list');
+    let logs = [];
+    try {
+        logs = await callApi('getTeacherLog', {});
+    } catch(e) {
+        // ★ 로드 실패를 '기록 없음'으로 위장하지 않음 — 빈 상태로 오인해 중복 기록하는 사고 방지
+        return renderLoadError(el, 'renderTeacherLog()');
+    }
     if (!logs || !logs.length) { el.innerHTML = '<p style="text-align:center;color:#999;padding:8px 0;">기록이 없습니다.</p>'; return; }
     el.innerHTML = logs.map(l => `
         <div style="background:#fff;border:1px solid var(--stone);border-radius:9px;padding:10px 12px;margin-bottom:6px;">
@@ -2626,7 +2747,12 @@ async function openPromote() {
     document.getElementById('promote-roster').innerHTML = '<p style="text-align:center;color:#999;">불러오는 중...</p>';
     document.getElementById('promote-overlay').classList.remove('hidden');
     let members = [];
-    try { members = await callApi('getAllMemberPoints', {}); } catch(e) {}
+    try {
+        members = await callApi('getAllMemberPoints', {});
+    } catch(e) {
+        // ★ 로드 실패를 '명단 없음'으로 위장하지 않음 — 학년도 전환은 파괴적 작업이라 특히 위험
+        return renderLoadError(document.getElementById('promote-roster'), 'openPromote()');
+    }
     _promoteRoster = (members || []).filter(m => m.name !== '교사');
     const el = document.getElementById('promote-roster');
     if (!_promoteRoster.length) { el.innerHTML = '<p style="color:#999;">명단이 없습니다.</p>'; return; }
@@ -3127,7 +3253,11 @@ async function handleLogin() {
     // ① Firestore에서 먼저 확인 (학생 계정만)
     if (!isTeacher && typeof window.fsGetMember === 'function') {
         try {
-            const fsData = await window.fsGetMember(id, name);
+            // ★ 5초 타임아웃 — 네트워크 불량 시 로그인이 무한 대기하지 않고 GAS로 폴백
+            const fsData = await Promise.race([
+                window.fsGetMember(id, name),
+                new Promise((_, rej) => setTimeout(() => rej(new Error('Firestore 응답 지연')), 5000))
+            ]);
             if (fsData) {
                 // Firestore 데이터로 user 구성 (GAS login 응답 형태와 동일하게)
                 user = {
@@ -3424,10 +3554,12 @@ async function loadQuickStudentList() {
 }
 
 /** 학생 선택 시 7일 현황 로드 */
+let _quickViewSeq = 0;   // 학생을 빠르게 바꿀 때 이전 학생의 늦은 응답이 화면을 덮지 않도록
 async function loadStudentQuickView() {
     const name = document.getElementById('quick-student-select').value;
     const box  = document.getElementById('student-quick-content');
     if (!name) { box.innerHTML = ''; return; }
+    const seq = ++_quickViewSeq;
 
     box.innerHTML = '<p style="text-align:center;color:#999;font-size:0.85rem;">불러오는 중...</p>';
 
@@ -3586,10 +3718,13 @@ async function loadStudentQuickView() {
             <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#66BB6A;margin-right:3px;"></span>100%</span>
         </div>`;
 
+        if (seq !== _quickViewSeq) return;   // 그 사이 다른 학생 선택 → 이 응답은 폐기
         box.innerHTML = html;
 
     } catch(err) {
-        box.innerHTML = '<p style="color:#999;font-size:0.85rem;text-align:center;">조회 실패: '+err.message+'</p>';
+        if (seq !== _quickViewSeq) return;
+        box.innerHTML = '<p style="color:#999;font-size:0.85rem;text-align:center;">조회 실패: '+err.message+'</p>'
+            + '<p style="text-align:center;"><button onclick="loadStudentQuickView()" style="padding:6px 14px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;">다시 시도</button></p>';
     }
 }
 
@@ -3788,10 +3923,13 @@ async function doCheckIn() {
         // checkIn 먼저 실행
         const res = await callApi('checkIn', { name: currentUser.name });
 
-        // 성공 후 캐시 무효화 및 갱신
+        // 성공 후 캐시 무효화 및 갱신 (출석/지각은 엽전도 변동 → 엽전 캐시 포함)
         AppCache.invalidate('getAdminAttendance', { date: toDateStr() });
         AppCache.invalidate('getAdminData', {});
         AppCache.invalidate('getMyStreak', { name: currentUser.name });   // 스트릭 갱신
+        AppCache.invalidate('getMyPointLog', { name: currentUser.name });
+        AppCache.invalidate('getAllMemberPoints', {});
+        AppCache.invalidate('getAdminPointLog', {});
         fetchToCache('getAdminAttendance', { date: toDateStr() });
 
         currentUser.checkedIn  = res.status;
@@ -3917,13 +4055,28 @@ function toDateStr2(d) {
         String(d.getDate()).padStart(2,'0');
 }
 
+let _plannerLoadSeq = 0;   // 빠른 연속 클릭 시 늦게 도착한 이전 응답이 화면을 덮지 않도록
 async function selectPlannerDate(d) {
     plannerBaseDate = new Date(d);
     renderPlannerWeek();
     // 선택 날짜 플래너 로드
     const dateStr = toDateStr2(d);
+    const prevViewDate = plannerViewDate;
     plannerViewDate = dateStr;   // ★ 오늘이 아니면 renderPlans가 조회 전용으로 표시
-    const data = await callApi('getPlanner', { name: currentUser.name, date: dateStr }).catch(() => ({ content: '', progress: 0 }));
+    const seq = ++_plannerLoadSeq;
+    let data;
+    try {
+        data = await callApi('getPlanner', { name: currentUser.name, date: dateStr });
+    } catch(e) {
+        // ★ 실패를 빈 플래너로 위장하지 않음 — 빈 목록이 편집 화면에 뜨면
+        //   자동저장이 오늘 플래너를 빈 내용으로 덮어쓸 수 있음
+        if (seq === _plannerLoadSeq) {
+            plannerViewDate = prevViewDate;   // 화면에 남아있는 목록(이전 날짜)과 상태 일치 유지
+            showToast('플래너를 불러오지 못했습니다. 날짜를 다시 선택해주세요.');
+        }
+        return;
+    }
+    if (seq !== _plannerLoadSeq || plannerViewDate !== dateStr) return;   // 더 최근 선택이 있음
     currentPlans = data.content ? safeParseArray(data.content) : [];
     renderPlans();
 }
@@ -4072,9 +4225,6 @@ function savePlannerData() {
     AppCache.invalidatePrefix('getPlanner');   // 날짜 파라미터 포함 키까지 전부 무효화
     AppCache.invalidate('getMyHistory',    { name: currentUser.name });
     AppCache.invalidate('getAdminPlanner', { date: _today });
-    // 백그라운드 재페치 (다음 조회 시 캐시에서 즉시 반환됨)
-    fetchToCache('getAdminPlanner', { date: _today });
-    fetchToCache('getMyHistory',    { name: currentUser.name });
 
     callApiBg('savePlanner', {
         name:     currentUser.name,
@@ -4082,6 +4232,13 @@ function savePlannerData() {
         progress: progress
     }, '플래너 저장').then(res => {
         _clearPlannerSaveError();   // 저장 성공 → 실패 배너 제거
+        // ★ 재페치는 저장이 끝난 '뒤'에 — 저장 전에 재페치하면 옛 데이터가 5분간 재캐시됨
+        //   (저장 중 다른 화면이 재캐시했을 수 있는 getPlanner 키들도 다시 무효화)
+        AppCache.invalidatePrefix('getPlanner');
+        AppCache.invalidate('getAdminPlanner', { date: _today });
+        AppCache.invalidate('getMyHistory',    { name: currentUser.name });
+        fetchToCache('getAdminPlanner', { date: _today });
+        fetchToCache('getMyHistory',    { name: currentUser.name });
     }).catch(err => {
         // ★ 저장 실패: 사라지는 토스트 대신 재시도 배너를 띄움
         // (미작성 차감은 새벽 5시 트리거 → 저장 실패가 곧 -1냥으로 이어질 수 있어 명확히 알림)
@@ -4749,7 +4906,7 @@ function editPointLog(idx) {
     if (!log) return;
     const currentDelta  = Number(log.delta) || 0;
     const currentReason = log.reason || '';
-    _editingPoint = { row: log.row, name: log.name };
+    _editingPoint = { row: log.row, name: log.name, date: log.date, delta: currentDelta };
     document.getElementById('pointedit-target').textContent =
         `${log.name} · 현재 ${currentDelta >= 0 ? '+' : ''}${currentDelta}냥`;
     document.getElementById('pointedit-delta').value  = currentDelta;
@@ -4766,7 +4923,9 @@ async function savePointEdit() {
     const { row, name } = _editingPoint;
     if (!confirm(`${name}의 이 기록을 ${delta >= 0 ? '+' : ''}${delta}냥 (${reason})으로 수정하시겠소?\n잔액이 즉시 보정됩니다.`)) return;
     closePointEdit();
-    await callApi('editPointLog', { row, delta, reason, actor: currentUser.name });
+    // expect*: 목록이 낡아 행이 밀렸으면 서버가 거부 (엉뚱한 학생 기록 오염 방지)
+    await callApi('editPointLog', { row, delta, reason, actor: currentUser.name,
+        expectName: name, expectDate: _editingPoint.date, expectDelta: _editingPoint.delta });
     AppCache.invalidate('getAdminPointLog', {});
     AppCache.invalidate('getAllMemberPoints', {});
     AppCache.invalidate('getMyPointLog', { name });
@@ -4843,7 +5002,9 @@ function filterGrantStudents(q) {
 }
 
 /* 선택한 학생들에게 엽전 일괄 부여/차감 */
+let _grantBusy = false;   // 처리 중 재클릭 방어 (쓰기 dedup 제거 후 이중 지급 방지)
 async function grantPointBatchSubmit() {
+    if (_grantBusy) return showToast('⏳ 이전 부여를 처리 중입니다. 잠시만 기다려주세요.');
     const names  = [...document.querySelectorAll('.grant-cb:checked')].map(cb => cb.dataset.name);
     const sign   = document.getElementById('grant-sign-select').value;
     const amt    = parseInt(document.getElementById('grant-amount-input').value, 10);
@@ -4854,11 +5015,15 @@ async function grantPointBatchSubmit() {
     const amount = sign === '+' ? amt : -amt;
     const who = names.length === 1 ? `${names[0]} 관원에게` : `선택한 ${names.length}명에게`;
     if (!confirm(`${who} ${amount > 0 ? '+' : ''}${amount}냥을 부여하시겠소?\n사유: ${reason}`)) return;
+    _grantBusy = true;
+    const grantBtn = document.querySelector('button[onclick="grantPointBatchSubmit()"]');
+    if (grantBtn) { grantBtn.disabled = true; grantBtn.style.opacity = '0.5'; }
     try {
         // ★ 쓰기 작업이므로 callApiBg 사용 (callApi는 동일 파라미터를 캐시해 반복 부여가 무시될 수 있음)
         const res = await callApiBg('grantPointBatch', { names, amount, reason }, '엽전 일괄 부여');
         AppCache.invalidate('getAllMemberPoints', {});
         AppCache.invalidate('getAdminData', {});
+        AppCache.invalidate('getAdminPointLog', {});
         names.forEach(n => AppCache.invalidate('getMyPointLog', { name: n }));
         fetchToCache('getAllMemberPoints', {});
         fetchToCache('getAdminData', {});
@@ -4871,6 +5036,9 @@ async function grantPointBatchSubmit() {
         openPointLog('grant');
     } catch(e) {
         showToast('처리 실패: ' + (e.message || ''));
+    } finally {
+        _grantBusy = false;
+        if (grantBtn) { grantBtn.disabled = false; grantBtn.style.opacity = '1'; }
     }
 }
 
@@ -4933,6 +5101,7 @@ async function saveAbsenceReason() {
     AppCache.invalidate('getAllMemberPoints', {});
     AppCache.invalidate('getAdminAttendance', { date });
     AppCache.invalidate('getMyPointLog', { name });
+    AppCache.invalidate('getAdminPointLog', {});
     if (res && res.refunded) {
         showToast(`✅ ${name} 결석사유 등록 — 차감됐던 ${res.refund}냥을 자동 환불했어요 (잔액 ${res.newCoins}냥).`, 3200);
     } else {
@@ -4948,6 +5117,11 @@ async function deleteAbsenceReason(date, name) {
     if (!confirm(`${name} (${date}) 결석사유를 삭제하시겠소?`)) return;
     await callApi('deleteAbsenceReason', { date, name });
     AppCache.invalidate('getAbsenceReasons', {});   // ★ 삭제한 사유가 목록에서 즉시 사라지도록
+    // 백엔드가 환불 회수(-2)·출결 복귀를 했을 수 있으므로 엽전·출결 캐시도 무효화
+    AppCache.invalidate('getAllMemberPoints', {});
+    AppCache.invalidate('getMyPointLog', { name });
+    AppCache.invalidate('getAdminPointLog', {});
+    AppCache.invalidate('getAdminAttendance', { date });
     showToast('삭제 완료되었습니다.');
     loadAbsenceList();
 }
@@ -4982,7 +5156,12 @@ async function openMarket(tab) {
     tabsDiv.innerHTML = tabHtml;
 
     content.innerHTML = '<p style="text-align:center;color:#999;">불러오는 중...</p>';
-    const items = await callApi('getMarketInventory');
+    let items;
+    try {
+        items = await callApi('getMarketInventory');
+    } catch(e) {
+        return renderLoadError(content, `openMarket('${activeTab}')`);
+    }
 
     if (activeTab === 'buy') {
         // 학생/전체: 상품 목록 보기 (구매는 장원이 처리)
@@ -5015,7 +5194,12 @@ async function openMarket(tab) {
 
     } else if (activeTab === 'sell') {
         // 장원/교사: 판매 처리 (여러 상품 한 번에)
-        const memberSheet = await callApi('getAllMemberPoints');
+        let memberSheet;
+        try {
+            memberSheet = await callApi('getAllMemberPoints');
+        } catch(e) {
+            return renderLoadError(content, "openMarket('sell')");
+        }
         const students = memberSheet.filter(m => m.name !== '교사')
             .sort((a, b) => String(a.name).localeCompare(String(b.name), 'ko'));   // 가나다순
         const stock    = (items||[]).filter(i => i.qty > 0);
@@ -5058,7 +5242,12 @@ async function openMarket(tab) {
             </div>`;
 
     } else if (activeTab === 'log') {
-        const logs = await callApi('getMarketLog', {});
+        let logs;
+        try {
+            logs = await callApi('getMarketLog', {});
+        } catch(e) {
+            return renderLoadError(content, "openMarket('log')");
+        }
         if (!logs || logs.length === 0) {
             content.innerHTML = '<p style="text-align:center;color:#999;">거래 기록이 없습니다.</p>';
             return;
@@ -5107,17 +5296,20 @@ async function openMarket(tab) {
             </div>
             <div style="font-weight:bold;margin-bottom:8px;">📦 현재 재고</div>` +
             (items.length === 0 ? '<p style="text-align:center;color:#999;">상품이 없습니다.</p>' :
-            items.map(item => `
+            // ★ 인덱스 방식 (PointLog 버튼과 동일 패턴): 상품명·비고에 따옴표가 있어도
+            //   onclick이 깨지지 않도록 데이터는 window._marketItems에 두고 인덱스만 전달
+            (window._marketItems = items) &&
+            items.map((item, idx) => `
                 <div class="card" style="display:flex;justify-content:space-between;align-items:center;">
                     <div>
-                        <div style="font-weight:bold;">${item.name}</div>
+                        <div style="font-weight:bold;">${String(item.name).replace(/</g,'&lt;')}</div>
                         <div style="font-size:0.85rem;color:#888;">🪙${item.price}냥 | 재고:${item.qty}/${item.initQty}</div>
-                        <div style="font-size:0.82rem;color:#aaa;">${item.note||''}</div>
+                        <div style="font-size:0.82rem;color:#aaa;">${String(item.note||'').replace(/</g,'&lt;')}</div>
                     </div>
                     <div style="display:flex;gap:6px;">
-                        <button onclick="restockMarketItem(${item.row},'${item.name}',${item.price},${item.initQty},'${item.note||''}')"
+                        <button onclick="restockMarketItem(${idx})"
                                 style="background:#1565C0;color:white;border:none;border-radius:4px;padding:5px 8px;cursor:pointer;font-size:0.82rem;">재입고</button>
-                        <button onclick="deleteMarketItem(${item.row})"
+                        <button onclick="deleteMarketItem(${idx})"
                                 style="background:#C62828;color:white;border:none;border-radius:4px;padding:5px 8px;cursor:pointer;font-size:0.82rem;">삭제</button>
                     </div>
                 </div>`).join(''));
@@ -5184,6 +5376,8 @@ async function processSell() {
         AppCache.invalidate('getMarketInventory', {});
         AppCache.invalidate('getAllMemberPoints', {});
         AppCache.invalidate('getMarketLog', {});
+        AppCache.invalidate('getAdminPointLog', {});
+        AppCache.invalidate('getMyPointLog', { name });
 
         if (res && res.newCoins !== undefined) {
             showToast(`판매 완료! (${res.count}종 / ${res.totalCost}냥) — ${name} 잔액: ${res.newCoins}냥`);
@@ -5210,18 +5404,24 @@ async function addMarketItem() {
     openMarket('inventory');
 }
 
-async function restockMarketItem(row, name, price, initQty, note) {
-    const newQty = parseInt(prompt(`${name} 재입고 수량 입력:`, initQty), 10);
+async function restockMarketItem(idx) {
+    const item = (window._marketItems || [])[idx];
+    if (!item) return;
+    const newQty = parseInt(prompt(`${item.name} 재입고 수량 입력:`, item.initQty), 10);
     if (isNaN(newQty) || newQty < 0) return;
-    await callApi('saveMarketItem', { row, name, price, initQty: newQty, qty: newQty, note });
+    // expectName: 목록이 낡아 행이 밀렸으면 서버가 거부 (엉뚱한 상품 덮어쓰기 방지)
+    await callApi('saveMarketItem', { row: item.row, name: item.name, price: item.price,
+        initQty: newQty, qty: newQty, note: item.note || '', expectName: item.name });
     AppCache.invalidate('getMarketInventory', {});
     showToast('재입고 완료되었습니다.');
     openMarket('inventory');
 }
 
-async function deleteMarketItem(row) {
-    if (!confirm('해당 상품을 삭제하시겠소?')) return;
-    await callApi('deleteMarketItem', { row });
+async function deleteMarketItem(idx) {
+    const item = (window._marketItems || [])[idx];
+    if (!item) return;
+    if (!confirm(`'${item.name}' 상품을 삭제하시겠소?`)) return;
+    await callApi('deleteMarketItem', { row: item.row, expectName: item.name });
     AppCache.invalidate('getMarketInventory', {});
     showToast('삭제 완료되었습니다.');
     openMarket('inventory');
@@ -5234,10 +5434,12 @@ async function cancelMarketLog(row, name) {
         AppCache.invalidate('getMarketInventory', {});
         AppCache.invalidate('getAllMemberPoints', {});
         AppCache.invalidate('getMarketLog', {});
+        AppCache.invalidate('getAdminPointLog', {});
+        AppCache.invalidate('getMyPointLog', { name });
         showToast('거래가 취소되었습니다.');
         openMarket('log');
     } catch(e) {
-        showToast('취소 처리 중 오류가 발생했습니다.');
+        showToast('취소 처리 중 오류가 발생했습니다: ' + (e.message || ''));
     }
 }
 
@@ -5850,6 +6052,8 @@ async function correctAttendance(date, name, sel) {
         AppCache.invalidate('getAdminAttendance', { date });
         AppCache.invalidate('getAllMemberPoints', {});
         AppCache.invalidate('getMyPointLog', { name });
+        AppCache.invalidate('getAdminPointLog', {});
+        AppCache.invalidate('getAdminData', {});
         const dtxt = (res && res.delta) ? ` (엽전 ${res.delta > 0 ? '+' : ''}${res.delta}냥)` : '';
         showToast(`✅ ${name} 출결 정정: ${res.oldStatus}→${res.newStatus}${dtxt}`);
         viewAdminAttendance();   // 목록 새로고침
@@ -5937,7 +6141,12 @@ async function openExam() {
     if (!myExamData) {
         document.getElementById('exam-scores-list').innerHTML =
             '<p style="text-align:center;color:#999;">성적을 불러오는 중...</p>';
-        myExamData = await getMyExamScoresFast(currentUser.name);
+        try {
+            myExamData = await getMyExamScoresFast(currentUser.name);
+        } catch(e) {
+            myExamData = null;
+            return renderLoadError(document.getElementById('exam-scores-list'), 'openExam()');
+        }
     }
     renderExamScoresList();
 }
@@ -5997,7 +6206,12 @@ async function onTeacherStudentChange() {
     document.getElementById('exam-scores-list').innerHTML =
         '<p style="text-align:center;color:#999;">성적을 불러오는 중...</p>';
 
-    myExamData = await getMyExamScoresFast(name);
+    try {
+        myExamData = await getMyExamScoresFast(name);
+    } catch(e) {
+        myExamData = null;
+        return renderLoadError(document.getElementById('exam-scores-list'), 'onTeacherStudentChange()');
+    }
     switchExamTab('scores');
     renderExamScoresList();
 }
@@ -6765,7 +6979,12 @@ async function onExamAdminStudentChange() {
     if (member) examViewingTrack = member.track || '공무원';
 
     switchAnalysisTab('scores');
-    adminExamData = await getMyExamScoresFast(name);
+    try {
+        adminExamData = await getMyExamScoresFast(name);
+    } catch(e) {
+        adminExamData = null;
+        return renderLoadError(document.getElementById('admin-exam-scores-list'), 'onExamAdminStudentChange()');
+    }
     renderAdminExamScoresList();
 }
 
@@ -6823,7 +7042,9 @@ function renderAdminGrowthChart() {
     const exams     = (adminExamData && adminExamData.exams) ? adminExamData.exams : [];
     const canvas    = document.getElementById('adminGrowthChart');
     const selName   = document.getElementById('exam-admin-student-select')?.value;
-    const isGongiup = isGongiupTrack(selName);
+    // ★ 다른 렌더러(비교/선배)와 동일하게 examViewingTrack 직접 사용
+    //   (isGongiupTrack(이름)은 5분 캐시에 의존해 만료 시 공기업 학생이 공무원 차트로 렌더됨)
+    const isGongiup = examViewingTrack === '공기업';
 
     // 체크박스 패널 / NCS 배지 전환
     const chkPanel = document.getElementById('admin-growth-checkbox-panel');
@@ -7175,6 +7396,7 @@ async function submitExamScores() {
             hasAnyScore = true;
             scores.push({
                 name:    student.name,
+                track:   student.track || '공무원',   // 등수·평균을 트랙별로 나누기 위해
                 korean:  isNaN(korean)  ? 0 : korean,
                 english: isNaN(english) ? 0 : english,
                 history: isNaN(history) ? 0 : history,
@@ -7186,17 +7408,22 @@ async function submitExamScores() {
     if (!hasAnyScore) return showToast("최소 한 명 이상의 점수를 입력해주세요.");
     if (!confirm(`"${examName}" 성적을 ${scores.length}명 등록하시겠소?`)) return;
 
-    // 등수 계산 (총점 기준)
-    const sorted = [...scores].sort((a, b) => b.total - a.total);
-    scores.forEach(s => {
-        s.rank = sorted.findIndex(x => x.name === s.name) + 1;
+    // ★ 등수는 같은 트랙(공무원/공기업) 안에서만 계산
+    //   공기업은 NCS 1과목(총점≤100)이라 전체 총점 순위에 섞으면 무조건 하위권이 됨
+    ['공무원', '공기업'].forEach(tr => {
+        const group  = scores.filter(s => s.track === tr);
+        const sorted = [...group].sort((a, b) => b.total - a.total);
+        group.forEach(s => { s.rank = sorted.findIndex(x => x.name === s.name) + 1; });
     });
 
-    // 반 평균 계산
-    const avgKorean  = Math.round(scores.reduce((s, x) => s + x.korean,  0) / scores.length * 10) / 10;
-    const avgEnglish = Math.round(scores.reduce((s, x) => s + x.english, 0) / scores.length * 10) / 10;
-    const avgHistory = Math.round(scores.reduce((s, x) => s + x.history, 0) / scores.length * 10) / 10;
-    const avgTotal   = Math.round(scores.reduce((s, x) => s + x.total,   0) / scores.length * 10) / 10;
+    // ★ 반 평균(__avg__)은 공무원 학생 기준으로만 계산 — 공기업의 영어/한국사 0점이
+    //   평균을 끌어내리고 NCS와 국어가 섞이는 오염 방지. (공무원이 없으면 전체로)
+    const avgSource  = scores.filter(s => s.track === '공무원');
+    const avgBase    = avgSource.length ? avgSource : scores;
+    const avgKorean  = Math.round(avgBase.reduce((s, x) => s + x.korean,  0) / avgBase.length * 10) / 10;
+    const avgEnglish = Math.round(avgBase.reduce((s, x) => s + x.english, 0) / avgBase.length * 10) / 10;
+    const avgHistory = Math.round(avgBase.reduce((s, x) => s + x.history, 0) / avgBase.length * 10) / 10;
+    const avgTotal   = Math.round(avgBase.reduce((s, x) => s + x.total,   0) / avgBase.length * 10) / 10;
 
     // 성적 저장 후 관련 캐시 무효화
     AppCache.invalidatePrefix('getMyExamScores');
@@ -7267,7 +7494,12 @@ async function openCounseling() {
 
     // 학생 목록 (한 번만 로드)
     if (counselingStudentList.length === 0) {
-        const adminData = await callApi('getAdminData');
+        let adminData;
+        try {
+            adminData = await callApi('getAdminData');
+        } catch(e) {
+            return renderLoadError(document.getElementById('counsel-daily-list'), 'openCounseling()');
+        }
         counselingStudentList = adminData.members.filter(m => m.name !== '교사' && m.role !== 'teacher');
         const sel = document.getElementById('counsel-student-select');
         // ★ 전체 옵션 추가
@@ -7310,7 +7542,12 @@ async function loadCounselingByDate() {
     if (!date) return;
 
     listDiv.innerHTML = '<p style="text-align:center;color:#999;">불러오는 중...</p>';
-    const data = await callApi('getCounselingByDate', { date });
+    let data;
+    try {
+        data = await callApi('getCounselingByDate', { date });
+    } catch(e) {
+        return renderLoadError(listDiv, 'loadCounselingByDate()');
+    }
     listDiv.innerHTML = '';
 
     if (!data || data.length === 0) {
@@ -7548,7 +7785,12 @@ async function loadCounselingCalendar() {
     document.getElementById('counsel-cal-memo').style.display = 'none';
 
     // 상담 기록 가져오기
-    const data = await callApi('getCounselingByStudent', { studentName: name, yearMonth: ym });
+    let data;
+    try {
+        data = await callApi('getCounselingByStudent', { studentName: name, yearMonth: ym });
+    } catch(e) {
+        return renderLoadError(document.getElementById('counsel-calendar'), 'loadCounselingCalendar()');
+    }
     counselCalData = data || [];
 
     // 이 달의 날짜들 중 이미 지난 날짜에 대한 출결 조회 (날짜별로 해당 학생 출결 확인)
@@ -7916,8 +8158,10 @@ async function loadCounselStats() {
             if (!weekdayDates.has(recentDates[idx])) return;  // 주말 제외
             (rows || []).forEach(r => {
                 if (!attMap[r.name]) return;
+                // ★ '미출석'(=아직 기록 없음: 등교 전·휴일·트리거 정지 기간)은 결석으로 세지 않음
+                if (r.status === '미출석' || !r.status) return;
                 attMap[r.name].total++;
-                if (r.status === '결석' || r.status === '미출석') attMap[r.name].absent++;
+                if (r.status === '결석') attMap[r.name].absent++;
                 else if (r.status === '지각') attMap[r.name].late++;
                 else if (r.status === '출석') attMap[r.name].attend++;
             });
@@ -8065,7 +8309,8 @@ function renderCounselStats() {
     // 전체 학생 상담 횟수 맵 저장 (적은 순 계산용)
     window._counselCountMap = {};
     counselingStudentList.forEach(s => { window._counselCountMap[s.name] = 0; });
-    (counselStatsData || []).forEach(r => {
+    // ★ 요약 카드·차트와 같은 기준(선택 연도 yData)으로 집계 — 전체 연도 누적이던 버그 수정
+    (yData || []).forEach(r => {
         if (window._counselCountMap[r.name] !== undefined)
             window._counselCountMap[r.name]++;
     });
