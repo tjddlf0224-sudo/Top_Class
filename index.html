@@ -6096,7 +6096,7 @@ async function loadClassStats() {
    ========================================================= */
 
 /** 캐시된 시험 데이터 */
-let myExamData   = null;  // { exams: [...], classAvg: [...] }
+let myExamData   = null;  // { exams: [...], classAvg: [공무원 __avg__], classAvgG: [공기업 NCS __avgG__] }
 let growthChartInstance = null;
 let examViewingName  = null;  // 교사가 현재 조회 중인 학생 이름
 let examViewingTrack = null;  // 교사가 현재 조회 중인 학생 track ('공무원'/'공기업')
@@ -6368,8 +6368,12 @@ function renderGrowthChart() {
 /** 탭3: 반 평균 대비 내 점수 */
 function renderCompareChart() {
     const div    = document.getElementById('exam-compare-content');
-    const exams  = (myExamData && myExamData.exams)    ? myExamData.exams    : [];
-    const avgArr = (myExamData && myExamData.classAvg) ? myExamData.classAvg : [];
+    const exams  = (myExamData && myExamData.exams) ? myExamData.exams : [];
+    const isGongiup = isGongiupTrack();
+    // ★ 공기업 학생은 공기업 전용 평균(__avgG__, NCS 기준)과 비교 — 없으면 '반평균 없음' 표시
+    const avgArr = isGongiup
+        ? ((myExamData && myExamData.classAvgG) ? myExamData.classAvgG : [])
+        : ((myExamData && myExamData.classAvg)  ? myExamData.classAvg  : []);
 
     if (exams.length === 0) {
         div.innerHTML = '<p style="text-align:center;color:#999; margin:30px 0;">등록된 성적이 없습니다.</p>';
@@ -6381,8 +6385,6 @@ function renderCompareChart() {
     const latestAvg = avgArr.find(a => a.name === latest.name) || null;
 
     let html = `<h4 style="margin-bottom:12px;">📌 최근 시험: ${latest.name}</h4>`;
-
-    const isGongiup = isGongiupTrack();
     const subjects = [
         ...(isGongiup
             ? [{ label: 'NCS', me: latest.korean, avg: latestAvg?.avgKorean ?? null, max: 100 }]
@@ -6711,8 +6713,10 @@ function renderLegacyCohort() {
         || null;
     const myTotal = myExam ? (myExam.total || myExam.korean + myExam.english + myExam.history) : null;
 
-    // 현재 기수 평균 (ExamScores 시트의 __avg__ 행)
-    const currentAvg = myExamData?.classAvg?.find(a => a.name === examName) || null;
+    // 현재 기수 평균 — 공기업 학생은 __avgG__(NCS 기준), 그 외 __avg__ 행
+    const currentAvg = (isGongiupTrack()
+        ? myExamData?.classAvgG?.find(a => a.name === examName)
+        : myExamData?.classAvg?.find(a => a.name === examName)) || null;
 
     // 모든 기수 + 현재 기수를 합쳐서 막대 그래프
     const allCohorts = [...cohorts];
@@ -7085,9 +7089,12 @@ function renderAdminGrowthChart() {
 /** 관리 탭 반비교 */
 function renderAdminCompareChart() {
     const div    = document.getElementById('admin-exam-compare-content');
-    const exams  = (adminExamData && adminExamData.exams)    ? adminExamData.exams    : [];
-    const avgArr = (adminExamData && adminExamData.classAvg) ? adminExamData.classAvg : [];
+    const exams  = (adminExamData && adminExamData.exams) ? adminExamData.exams : [];
     const isGongiup = examViewingTrack === '공기업';
+    // ★ 공기업 학생은 공기업 전용 평균(__avgG__)과 비교
+    const avgArr = isGongiup
+        ? ((adminExamData && adminExamData.classAvgG) ? adminExamData.classAvgG : [])
+        : ((adminExamData && adminExamData.classAvg)  ? adminExamData.classAvg  : []);
     if (exams.length === 0) { div.innerHTML='<p style="text-align:center;color:#999;margin:30px 0;">등록된 성적이 없습니다.</p>'; return; }
     const latest    = exams[exams.length-1];
     const latestAvg = avgArr.find(a=>a.name===latest.name) || null;
@@ -7271,7 +7278,9 @@ function renderAdminLegacyCohort() {
         || null;
     const myTotal=myExam?(myExam.total||myExam.korean+myExam.english+myExam.history):null;
     const myTotalAdm = isGongiupAdminCohort ? (myExam?.korean??null) : myTotal;
-    const currentAvg=adminExamData?.classAvg?.find(a=>a.name===examName)||null;
+    const currentAvg=(isGongiupAdminCohort
+        ? adminExamData?.classAvgG?.find(a=>a.name===examName)
+        : adminExamData?.classAvg?.find(a=>a.name===examName))||null;
     const allCohorts=[...cohorts];
     if (currentAvg) allCohorts.push({cohort:'현재 기수',avgTotal:currentAvg.avgTotal,avgKorean:currentAvg.avgKorean,avgEnglish:currentAvg.avgEnglish,avgHistory:currentAvg.avgHistory,isCurrent:true});
     const colors=['#BCAAA4','#A1887F','#8D6E63','#795548','#6D4C41','#5D4037'];
@@ -7425,13 +7434,21 @@ async function submitExamScores() {
     const avgHistory = Math.round(avgBase.reduce((s, x) => s + x.history, 0) / avgBase.length * 10) / 10;
     const avgTotal   = Math.round(avgBase.reduce((s, x) => s + x.total,   0) / avgBase.length * 10) / 10;
 
+    // ★ 공기업 전용 평균(__avgG__): NCS(korean 칸) 기준 — 공기업 학생 화면의 '반평균'용
+    const gScores   = scores.filter(s => s.track === '공기업');
+    const classAvgG = gScores.length ? (() => {
+        const ncsAvg = Math.round(gScores.reduce((s, x) => s + x.korean, 0) / gScores.length * 10) / 10;
+        return { avgKorean: ncsAvg, avgEnglish: 0, avgHistory: 0, avgTotal: ncsAvg };
+    })() : null;
+
     // 성적 저장 후 관련 캐시 무효화
     AppCache.invalidatePrefix('getMyExamScores');
     AppCache.invalidate('getClassStats', {});
     fetchToCache('getClassStats', {});
     await callApi('saveExamScores', {
         examName, examDate, scores,
-        classAvg: { avgKorean, avgEnglish, avgHistory, avgTotal }
+        classAvg: { avgKorean, avgEnglish, avgHistory, avgTotal },
+        classAvgG   // 공기업 학생 없으면 null (구버전 백엔드는 이 필드를 무시)
     });
 
     showToast(`성적이 등록되었습니다. (${scores.length}명)`);
@@ -8720,7 +8737,8 @@ async function buildParentReportDocx(name) {
 
     const isGongiup  = examViewingTrack === '공기업';
     const exams      = adminExamData.exams || [];
-    const classAvg   = adminExamData.classAvg || [];
+    // ★ 공기업 학생 보고서의 '반평균'은 공기업 전용 평균(__avgG__, NCS 기준)
+    const classAvg   = isGongiup ? (adminExamData.classAvgG || []) : (adminExamData.classAvg || []);
     const today      = new Date().toLocaleDateString('ko-KR', { year:'numeric', month:'long', day:'numeric' });
     const trackLabel = isGongiup ? '공기업 취업 과정' : '공무원 시험 준비 과정';
 
@@ -9968,10 +9986,11 @@ async function updateTriggerPauseBadge() {
         }
       });
 
-      // 평균 처리
+      // 평균 처리 — __avg__(공무원 기준) / __avgG__(공기업 NCS 기준) 분리
+      const avgGMap = {};
       avgSnap.forEach(d => {
         const r = d.data();
-        avgMap[r.examName] = {
+        const entry = {
           name:       r.examName,
           date:       r.examDate,
           avgKorean:  r.korean  || 0,
@@ -9979,11 +9998,15 @@ async function updateTriggerPauseBadge() {
           avgHistory: r.history || 0,
           avgTotal:   r.total   || 0
         };
+        if (r.studentName === '__avgG__') avgGMap[r.examName] = entry;
+        else                              avgMap[r.examName]  = entry;
       });
 
       exams.sort((a, b) => a.date.localeCompare(b.date));
-      const classAvg = Object.values(avgMap).sort((a, b) => a.date.localeCompare(b.date));
-      return { exams, classAvg };
+      const byDate    = (a, b) => a.date.localeCompare(b.date);
+      const classAvg  = Object.values(avgMap).sort(byDate);
+      const classAvgG = Object.values(avgGMap).sort(byDate);
+      return { exams, classAvg, classAvgG };
     } catch(e) {
       console.warn('[FS] fsGetMyExamScores 실패 → GAS fallback:', e.message);
       return null;
