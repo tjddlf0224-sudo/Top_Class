@@ -2291,7 +2291,14 @@ async function primeDailyCache(action, rangeAction, dates) {
 
 /** Date → "YYYY-MM-DD" 문자열 (로컬 시간 기준) */
 function toDateStr(date) {
-    date = date || new Date();
+    // 인자가 있으면 그 날짜를 그대로 변환 (특정 날짜 조회용 — 기존 동작 유지).
+    // 인자가 없으면 "지금 기준 오늘" — 학교의 하루는 오전 6시에 시작(백엔드 toDateStr와 동일).
+    // ★ 이래야 자정~오전 6시에 앱이 '새 날'로 착각해 플래너·출석 상태를 초기화하지 않음.
+    //   (학생이 밤 11시에 플래너 작성 → 자정 넘겨도 오전 6시까지 같은 날로 유지)
+    if (!date) {
+        date = new Date();
+        if (date.getHours() < 6) date.setDate(date.getDate() - 1);
+    }
     const y = date.getFullYear();
     const m = String(date.getMonth() + 1).padStart(2, '0');
     const d = String(date.getDate()).padStart(2, '0');
@@ -4399,6 +4406,109 @@ async function showMyStats() {
    10. 엽전 내역
    ========================================================= */
 
+/**
+ * 엽전 기록 카드 렌더링 (교사 '기록' 탭)
+ * 학생 드롭다운 + 사유·이름 키워드로 필터링해서 #pointlog-cards만 다시 그림.
+ * ★ 수정/삭제 버튼의 인덱스는 항상 원본 window._adminPointLogs 기준을 유지 —
+ *   필터링해도 엉뚱한 기록을 건드리지 않음.
+ */
+function renderPointLogCards() {
+    const wrap = document.getElementById('pointlog-cards');
+    if (!wrap) return;
+    const all  = window._adminPointLogs || [];
+    const nameSel = document.getElementById('pointlog-filter-name');
+    const kwInput = document.getElementById('pointlog-filter-keyword');
+    const nameFilter = nameSel ? nameSel.value : '';
+    const kw = kwInput ? kwInput.value.trim().toLowerCase() : '';
+
+    wrap.innerHTML = '';
+    let shown = 0, sumPlus = 0, sumMinus = 0;
+
+    all.forEach((log, logIdx) => {
+        if (nameFilter && log.name !== nameFilter) return;
+        if (kw) {
+            const hay = (String(log.reason || '') + ' ' + String(log.name || '')).toLowerCase();
+            if (!hay.includes(kw)) return;
+        }
+        const delta     = Number(log.delta) || 0;
+        const isPlus    = delta >= 0;
+        const isPending = log.status === '대기';
+        if (isPlus) sumPlus += delta; else sumMinus += delta;
+        shown++;
+
+        const div = document.createElement('div');
+        div.className = 'card pointlog-item';
+        div.dataset.row  = log.row;
+        div.dataset.name = log.name;
+        div.style.cssText = 'margin-bottom:8px;transition:background 0.15s;';
+        div.innerHTML = `
+            <div style="display:flex;align-items:flex-start;gap:10px;">
+                <input type="checkbox" class="pointlog-cb" data-row="${log.row}" data-name="${log.name}" data-delta="${delta}"
+                       onclick="event.stopPropagation();updatePointLogSelection()"
+                       style="width:20px;height:20px;margin-top:2px;flex-shrink:0;cursor:pointer;
+                              accent-color:var(--gold);-webkit-appearance:checkbox;">
+                <div style="flex:1;min-width:0;">
+                    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
+                        <div style="flex:1;min-width:0;">
+                            <div style="font-size:0.78rem;color:var(--muted);margin-bottom:2px;">
+                                ${log.date} <span style="margin-left:4px;">${log.actor||''}</span>
+                            </div>
+                            <div style="font-weight:700;font-size:0.95rem;">${log.name}</div>
+                            <div style="font-size:0.88rem;color:var(--muted);margin-top:2px;">${log.reason}</div>
+                        </div>
+                        <div style="text-align:right;flex-shrink:0;">
+                            <div style="font-weight:800;font-size:1.1rem;color:${isPlus?'#2E7D32':'#C62828'};">
+                                ${isPlus?'+':''}${delta}냥
+                            </div>
+                            <div style="font-size:0.72rem;color:${isPending?'#E65100':'var(--muted)'};">
+                                ${isPending?'대기':'완료'}
+                            </div>
+                        </div>
+                    </div>
+                    <div style="display:flex;gap:6px;margin-top:8px;">
+                        <button onclick="editPointLog(${logIdx})"
+                                style="flex:1;background:rgba(44,44,44,0.08);border:1px solid var(--stone);
+                                       color:var(--ink);border-radius:7px;padding:6px;cursor:pointer;
+                                       font-family:inherit;font-size:0.82rem;">수정</button>
+                        <button onclick="deletePointLog(${logIdx})"
+                                style="flex:1;background:rgba(198,40,40,0.08);border:1px solid rgba(198,40,40,0.3);
+                                       color:#C62828;border-radius:7px;padding:6px;cursor:pointer;
+                                       font-family:inherit;font-size:0.82rem;">삭제</button>
+                    </div>
+                </div>
+            </div>`;
+        wrap.appendChild(div);
+    });
+
+    if (!shown) {
+        wrap.innerHTML = '<p style="color:#999;text-align:center;padding:20px 0;">검색 결과가 없습니다.</p>';
+    }
+
+    // 필터 요약
+    const summary = document.getElementById('pointlog-filter-summary');
+    if (summary) {
+        if (nameFilter || kw) {
+            summary.innerHTML = `검색 결과 <b>${shown}</b>건`
+                + (shown ? ` · 합계 <b style="color:#2E7D32;">+${sumPlus}</b> / <b style="color:#C62828;">${sumMinus}</b>냥` : '');
+        } else {
+            summary.textContent = `전체 ${all.length}건`;
+        }
+    }
+
+    // 재렌더로 체크 상태가 풀리므로 전체선택·일괄삭제 버튼 상태 갱신
+    const checkAll = document.getElementById('pointlog-check-all');
+    if (checkAll) checkAll.checked = false;
+    if (typeof updatePointLogSelection === 'function') updatePointLogSelection();
+}
+
+function clearPointLogFilter() {
+    const nameSel = document.getElementById('pointlog-filter-name');
+    const kwInput = document.getElementById('pointlog-filter-keyword');
+    if (nameSel) nameSel.value = '';
+    if (kwInput) kwInput.value = '';
+    renderPointLogCards();
+}
+
 async function openPointLog(tab) {
     showSection('sec-point-log');
     const tabsDiv = document.getElementById('point-log-tabs');
@@ -4431,6 +4541,27 @@ async function openPointLog(tab) {
             const sorted = [...data].reverse();
             window._adminPointLogs = sorted;   // 수정/삭제 버튼이 인덱스로 참조 (따옴표 깨짐 방지)
 
+            // 🔍 검색/필터 바 (학생별 + 사유 키워드)
+            const names = [...new Set(sorted.map(l => l.name).filter(Boolean))]
+                .sort((a, b) => String(a).localeCompare(String(b), 'ko'));
+            const searchBar = document.createElement('div');
+            searchBar.style.cssText = 'display:flex;flex-direction:column;gap:8px;padding:12px 14px;background:var(--secondary);border-radius:12px;margin-bottom:10px;border:1px solid var(--stone);';
+            searchBar.innerHTML = `
+                <div style="display:flex;gap:8px;">
+                    <select id="pointlog-filter-name" onchange="renderPointLogCards()"
+                        style="flex:1;min-width:0;padding:8px;border:1px solid var(--stone);border-radius:8px;font-family:inherit;font-size:0.85rem;background:#fff;">
+                        <option value="">👥 전체 학생</option>
+                        ${names.map(n => `<option value="${String(n).replace(/"/g,'&quot;')}">${String(n).replace(/</g,'&lt;')}</option>`).join('')}
+                    </select>
+                    <button onclick="clearPointLogFilter()"
+                        style="flex-shrink:0;padding:8px 12px;border:1px solid var(--stone);border-radius:8px;background:#fff;cursor:pointer;font-family:inherit;font-size:0.82rem;color:var(--muted);">초기화</button>
+                </div>
+                <input id="pointlog-filter-keyword" oninput="renderPointLogCards()" type="text"
+                    placeholder="🔍 사유·이름 검색 (예: 전산회계)"
+                    style="width:100%;padding:8px 10px;border:1px solid var(--stone);border-radius:8px;font-family:inherit;font-size:0.85rem;box-sizing:border-box;">
+                <div id="pointlog-filter-summary" style="font-size:0.8rem;color:var(--muted);"></div>`;
+            listDiv.appendChild(searchBar);
+
             // 상단 일괄 삭제 툴바
             const toolbar = document.createElement('div');
             toolbar.id = 'pointlog-toolbar';
@@ -4449,53 +4580,11 @@ async function openPointLog(tab) {
                 </button>`;
             listDiv.appendChild(toolbar);
 
-            sorted.forEach((log, logIdx) => {
-                const delta     = Number(log.delta) || 0;
-                const isPlus    = delta >= 0;
-                const isPending = log.status === '대기';
-                const div = document.createElement('div');
-                div.className = 'card pointlog-item';
-                div.dataset.row  = log.row;
-                div.dataset.name = log.name;
-                div.style.cssText = 'margin-bottom:8px;transition:background 0.15s;';
-                div.innerHTML = `
-                    <div style="display:flex;align-items:flex-start;gap:10px;">
-                        <input type="checkbox" class="pointlog-cb" data-row="${log.row}" data-name="${log.name}" data-delta="${delta}"
-                               onclick="event.stopPropagation();updatePointLogSelection()"
-                               style="width:20px;height:20px;margin-top:2px;flex-shrink:0;cursor:pointer;
-                                      accent-color:var(--gold);-webkit-appearance:checkbox;">
-                        <div style="flex:1;min-width:0;">
-                            <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
-                                <div style="flex:1;min-width:0;">
-                                    <div style="font-size:0.78rem;color:var(--muted);margin-bottom:2px;">
-                                        ${log.date} <span style="margin-left:4px;">${log.actor||''}</span>
-                                    </div>
-                                    <div style="font-weight:700;font-size:0.95rem;">${log.name}</div>
-                                    <div style="font-size:0.88rem;color:var(--muted);margin-top:2px;">${log.reason}</div>
-                                </div>
-                                <div style="text-align:right;flex-shrink:0;">
-                                    <div style="font-weight:800;font-size:1.1rem;color:${isPlus?'#2E7D32':'#C62828'};">
-                                        ${isPlus?'+':''}${delta}냥
-                                    </div>
-                                    <div style="font-size:0.72rem;color:${isPending?'#E65100':'var(--muted)'};">
-                                        ${isPending?'대기':'완료'}
-                                    </div>
-                                </div>
-                            </div>
-                            <div style="display:flex;gap:6px;margin-top:8px;">
-                                <button onclick="editPointLog(${logIdx})"
-                                        style="flex:1;background:rgba(44,44,44,0.08);border:1px solid var(--stone);
-                                               color:var(--ink);border-radius:7px;padding:6px;cursor:pointer;
-                                               font-family:inherit;font-size:0.82rem;">수정</button>
-                                <button onclick="deletePointLog(${logIdx})"
-                                        style="flex:1;background:rgba(198,40,40,0.08);border:1px solid rgba(198,40,40,0.3);
-                                               color:#C62828;border-radius:7px;padding:6px;cursor:pointer;
-                                               font-family:inherit;font-size:0.82rem;">삭제</button>
-                            </div>
-                        </div>
-                    </div>`;
-                listDiv.appendChild(div);
-            });
+            // 카드 컨테이너 — 검색/필터는 이 부분만 다시 그림 (수정/삭제 인덱스는 원본 배열 기준 유지)
+            const cardsWrap = document.createElement('div');
+            cardsWrap.id = 'pointlog-cards';
+            listDiv.appendChild(cardsWrap);
+            renderPointLogCards();
 
         } else if (activeTab === 'grant') {
             const [adminData, memberSheet, presets] = await Promise.all([
