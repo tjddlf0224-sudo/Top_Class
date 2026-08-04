@@ -675,6 +675,15 @@ input::placeholder, textarea::placeholder { color: #BDB19A; }
 
         <div id="asform-when" style="font-size:0.85rem; color:var(--muted); margin-bottom:10px;"></div>
 
+        <div id="asform-range-wrap" style="display:none;">
+            <div style="font-size:0.8rem; color:var(--muted); margin-bottom:5px;">적용 기간 (비우면 학기 내내 적용)</div>
+            <div style="display:flex; gap:8px; margin-bottom:12px; align-items:center;">
+                <input id="asform-startdate" type="date" style="flex:1; padding:9px; border:1px solid #ccc; border-radius:8px; font-family:inherit;">
+                <span style="color:#999;">~</span>
+                <input id="asform-enddate" type="date" style="flex:1; padding:9px; border:1px solid #ccc; border-radius:8px; font-family:inherit;">
+            </div>
+        </div>
+
         <div style="display:flex; gap:8px; margin-bottom:12px;">
             <input id="asform-start" type="time" style="flex:1; padding:9px; border:1px solid #ccc; border-radius:8px; font-family:inherit;">
             <span style="align-self:center; color:#999;">~</span>
@@ -2854,7 +2863,7 @@ function asColor(subject) {
 }
 let asYear, asMonth, asData = { weekly: [], exceptions: [] };
 let asSelectedDate = null, asDayItems = [];
-let asFormMode = 'date', asFormId = null;
+let asFormMode = 'date', asFormId = null, asFormOrigin = null;
 
 function asPad2(n) { return String(n).padStart(2, '0'); }
 
@@ -2920,15 +2929,21 @@ function asChangeMonth(delta) {
     renderMonth();
 }
 
-/** 특정 날짜의 수업 = 그 요일 반복수업(휴강 반영) + 그 날짜 특강 */
+/** 특정 날짜의 수업 = 그 요일 반복수업(기간·휴강 반영) + 그 날짜 특강 */
 function asResolveDay(y, m, d) {
     const wd = AS_WEEKDAYS[new Date(y, m, d).getDay()];
     const ds = `${y}-${asPad2(m + 1)}-${asPad2(d)}`;
     const cancels = (asData.exceptions || []).filter(e => e.date === ds && e.type === '휴강');
-    let items = (asData.weekly || []).filter(c => c.day === wd).map(c => {
+    // ★ 시작일/종료일 범위 밖이면 그 요일이라도 표시 안 함(학기 경계).
+    //   필드가 없는 기존 수업은 무제한(하위호환) — 날짜 문자열이라 사전식 비교로 충분.
+    let items = (asData.weekly || [])
+        .filter(c => c.day === wd)
+        .filter(c => (!c.startDate || ds >= c.startDate) && (!c.endDate || ds <= c.endDate))
+        .map(c => {
         const cc = cancels.find(x => x.subject === c.subject && (!x.start || x.start === c.start));
         return { id: c.id, day: c.day, start: c.start, end: c.end, subject: c.subject, teacher: c.teacher,
-                 track: c.track, place: c.place, note: c.note, kind: 'weekly', cancelled: !!cc, exId: cc ? cc.id : null };
+                 track: c.track, place: c.place, note: c.note, kind: 'weekly', cancelled: !!cc, exId: cc ? cc.id : null,
+                 startDate: c.startDate || '', endDate: c.endDate || '' };
     });
     (asData.exceptions || []).filter(e => e.date === ds && e.type === '특강').forEach(e => {
         items.push({ start: e.start, end: e.end, subject: e.subject, teacher: e.teacher, track: e.track,
@@ -2984,6 +2999,9 @@ function asOpenDay(y, m, d) {
             const time  = asTimeRange(it.start, it.end);
             const place = asCleanPlace(it.place);
             const meta  = (it.teacher || '') + (place ? ' · ' + place : '');
+            // 교사 화면에서만: 왜 이 날짜에 표시되는지 알 수 있게 적용 기간 안내(기간 설정된 반복수업만)
+            const periodLine = (isT && it.kind === 'weekly' && (it.startDate || it.endDate))
+                ? `<div style="font-size:0.74rem;color:#8B6914;margin-top:2px;">📅 ${it.startDate || '처음'} ~ ${it.endDate || '계속'}</div>` : '';
             const tr    = (it.track === '공무원' || it.track === '공기업') ? it.track + '반' : '';
             const trTag = tr ? `<span style="font-size:0.68rem;background:rgba(186,117,23,0.2);color:#8B6914;border-radius:4px;padding:1px 5px;margin-left:5px;">${tr}</span>` : '';
             const tag   = (it.kind === 'date' ? '<span style="font-size:0.68rem;background:#E3F2FD;color:#1565C0;border-radius:4px;padding:1px 5px;margin-left:5px;">이날만</span>' : '') + trTag;
@@ -3009,6 +3027,7 @@ function asOpenDay(y, m, d) {
                         <div style="font-size:0.78rem;color:var(--muted);">${timeLine}${tag}</div>
                         <div style="font-weight:700;${it.cancelled ? 'text-decoration:line-through;' : ''}">${it.subject}${it.cancelled ? ' (휴강)' : ''}</div>
                         <div style="font-size:0.82rem;color:var(--muted);">${meta}</div>
+                        ${periodLine}
                     </div>
                     <div style="display:flex;flex-direction:column;gap:4px;flex-shrink:0;">${ctrl}</div>
                 </div></div>`;
@@ -3079,22 +3098,28 @@ function asDelExceptionIdx(idx) {
     asPersist();
 }
 
-/* 날짜상세에서 항목 수정 열기 */
+/* 날짜상세에서 항목 수정 열기 — 그 날짜 화면으로 돌아오도록 origin='day' 표시 */
 function asEditItem(idx) {
     const it = asDayItems[idx]; if (!it) return;
-    asOpenForm(it.kind === 'weekly' ? 'weekly' : 'date', it);
+    asOpenForm(it.kind === 'weekly' ? 'weekly' : 'date', it, 'day');
 }
 
-/* 수업 입력 폼 */
-function asOpenForm(mode, existing) {
-    asFormMode = mode; asFormId = existing ? existing.id : null;
+/* 수업 입력 폼
+   origin: 'day'(날짜 상세에서 수정 — 저장 후 그 날짜로 복귀) | null(반복수업 관리 목록에서 추가/수정) */
+function asOpenForm(mode, existing, origin) {
+    asFormMode = mode; asFormId = existing ? existing.id : null; asFormOrigin = origin || null;
     document.getElementById('asform-title').textContent = existing ? '수업 수정' : (mode === 'weekly' ? '반복 수업 추가' : '수업 추가');
     const when = document.getElementById('asform-when');
+    const rangeWrap = document.getElementById('asform-range-wrap');
     if (mode === 'weekly') {
         when.innerHTML = '요일 <select id="asform-day" style="padding:8px;border:1px solid #ccc;border-radius:8px;font-family:inherit;margin-left:6px;">' +
             ['월','화','수','목','금','토','일'].map(dd => `<option ${existing && existing.day === dd ? 'selected' : ''}>${dd}</option>`).join('') + '</select>';
+        rangeWrap.style.display = 'block';
+        document.getElementById('asform-startdate').value = existing ? (existing.startDate || '') : toDateStr();
+        document.getElementById('asform-enddate').value   = existing ? (existing.endDate   || '') : '';
     } else {
         when.textContent = `📅 ${asSelectedDate}`;
+        rangeWrap.style.display = 'none';
     }
     document.getElementById('asform-start').value   = existing ? asFmtTime(existing.start)   : '';
     document.getElementById('asform-end').value     = existing ? asFmtTime(existing.end)     : '';
@@ -3110,6 +3135,16 @@ function asCloseForm() { document.getElementById('asform-overlay').classList.add
 async function asSaveForm() {
     const subject = document.getElementById('asform-subject').value.trim();
     if (!subject) return showToast('과목명을 입력해주세요.');
+
+    // 반복수업 적용 기간 검증 (둘 다 있으면 시작<=종료만 확인, 한쪽만 있어도 무방)
+    let startDate = '', endDate = '';
+    if (asFormMode === 'weekly') {
+        startDate = document.getElementById('asform-startdate').value;
+        endDate   = document.getElementById('asform-enddate').value;
+        if (startDate && endDate && startDate > endDate)
+            return showToast('시작일이 종료일보다 늦을 수 없습니다.');
+    }
+
     const payload = {
         start:   document.getElementById('asform-start').value,
         end:     document.getElementById('asform-end').value,
@@ -3122,10 +3157,13 @@ async function asSaveForm() {
     const isEdit = !!asFormId;
     const id     = asFormId || asGenId();
     const mode   = asFormMode;
+    const origin = asFormOrigin;
     payload.id   = id;
 
     if (mode === 'weekly') {
-        payload.day = document.getElementById('asform-day').value;
+        payload.day       = document.getElementById('asform-day').value;
+        payload.startDate = startDate;   // 비우면 '' → 무제한(하위호환)
+        payload.endDate   = endDate;
         if (isEdit) { const w = asData.weekly.find(c => c.id === id); if (w) Object.assign(w, payload); }
         else asData.weekly.push(Object.assign({}, payload));
     } else {
@@ -3136,7 +3174,13 @@ async function asSaveForm() {
 
     // 화면 즉시 반영 후 닫기
     asCloseForm();
-    if (mode === 'weekly') { renderMonth(); asOpenWeekly(); } else asRerender(asSelectedDate);
+    if (mode === 'weekly') {
+        // 날짜 상세에서 수정한 경우 그 날짜 화면으로 복귀, 그 외(관리 목록)는 목록 다시 열기
+        if (origin === 'day') asRerender(asSelectedDate);
+        else { renderMonth(); asOpenWeekly(); }
+    } else {
+        asRerender(asSelectedDate);
+    }
     asPersist();   // Firestore에 직접 저장 (GAS 안 거침)
 }
 
@@ -3151,12 +3195,18 @@ function asOpenWeekly() {
         if (!list.length) return;
         html += `<div style="font-weight:700;color:var(--ink);margin:10px 0 4px;">${day}요일</div>`;
         list.forEach(c => {
+            const period = (c.startDate || c.endDate)
+                ? `<div style="font-size:0.72rem;color:#8B6914;margin-top:1px;">📅 ${c.startDate || '처음'} ~ ${c.endDate || '계속'}</div>` : '';
             html += `<div style="display:flex;justify-content:space-between;align-items:center;background:#fff;border:1px solid var(--stone);border-radius:8px;padding:8px 10px;margin-bottom:5px;">
                 <div style="min-width:0;">
                     <div style="font-size:0.9rem;font-weight:600;">${c.subject}</div>
                     <div style="font-size:0.78rem;color:var(--muted);">${(c.start || '') + (c.end ? '~' + c.end : '')}${c.teacher ? ' · ' + c.teacher : ''}${c.place ? ' · ' + c.place : ''}</div>
+                    ${period}
                 </div>
-                <button onclick="asDelWeekly('${c.id}')" style="background:rgba(198,40,40,0.08);color:#C62828;border:1px solid rgba(198,40,40,0.3);border-radius:6px;padding:5px 9px;cursor:pointer;font-size:0.8rem;flex-shrink:0;">삭제</button>
+                <div style="display:flex;gap:5px;flex-shrink:0;">
+                    <button onclick="asEditWeeklyFromList('${c.id}')" style="background:rgba(44,44,44,0.06);color:var(--ink);border:1px solid var(--stone);border-radius:6px;padding:5px 9px;cursor:pointer;font-size:0.8rem;">수정</button>
+                    <button onclick="asDelWeekly('${c.id}')" style="background:rgba(198,40,40,0.08);color:#C62828;border:1px solid rgba(198,40,40,0.3);border-radius:6px;padding:5px 9px;cursor:pointer;font-size:0.8rem;">삭제</button>
+                </div>
             </div>`;
         });
     });
@@ -3171,6 +3221,13 @@ function asDelWeekly(id) {
     asData.weekly = asData.weekly.filter(c => c.id !== id);   // 낙관적 삭제
     renderMonth(); asOpenWeekly();
     asPersist();
+}
+
+/* 반복수업 관리 목록에서 수정 열기 */
+function asEditWeeklyFromList(id) {
+    const c = asData.weekly.find(x => x.id === id); if (!c) return;
+    asCloseWeekly();
+    asOpenForm('weekly', c);
 }
 
 /* 강사 로그인 */
@@ -9570,8 +9627,10 @@ function _asItemsForDate(data, dateObj) {
     const wd = AS_WEEKDAYS[dateObj.getDay()];
     const ds = toDateStr(dateObj);
     const cancels = (data.exceptions || []).filter(e => e.date === ds && e.type === '휴강');
+    // ★ asResolveDay와 동일하게 적용 기간(startDate~endDate) 밖이면 제외 — 학기 경계
     const items = (data.weekly || [])
         .filter(c => c.day === wd)
+        .filter(c => (!c.startDate || ds >= c.startDate) && (!c.endDate || ds <= c.endDate))
         .filter(c => !cancels.find(x => x.subject === c.subject && (!x.start || x.start === c.start)));
     (data.exceptions || []).filter(e => e.date === ds && e.type === '특강').forEach(e => items.push(e));
     items.sort((a, b) => (a.start || '').localeCompare(b.start || ''));
