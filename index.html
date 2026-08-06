@@ -1389,6 +1389,15 @@ input::placeholder, textarea::placeholder { color: #BDB19A; }
             <div style="font-family:'Nanum Myeongjo',serif; font-size:1.1rem; font-weight:800; letter-spacing:3px; color:var(--ink);">방과후 시간표</div>
         </div>
 
+        <!-- 강사 전용: 알림 켜기 배너 (강사는 홈 화면을 거치지 않아 여기서 별도 안내) -->
+        <div id="as-push-enable-banner" onclick="enablePush()"
+             style="display:none; align-items:center; justify-content:space-between; gap:10px;
+                    background:rgba(186,117,23,0.16); border:1px solid var(--gold); border-radius:12px;
+                    padding:11px 14px; margin:0 16px 8px; cursor:pointer; flex-shrink:0;">
+            <span style="font-size:0.84rem; color:var(--ink); font-weight:600;">🔔 알림 켜고 수업 일정 변경 받기</span>
+            <span style="font-size:0.8rem; color:#8B6914; font-weight:700; white-space:nowrap;">켜기 →</span>
+        </div>
+
         <!-- 월 네비게이션 -->
         <div style="display:flex; align-items:center; justify-content:center; gap:18px; padding:6px 16px; flex-shrink:0;">
             <button onclick="asChangeMonth(-1)" style="background:none; border:none; cursor:pointer; font-size:1.3rem; color:var(--ink); padding:4px 10px;">‹</button>
@@ -2687,11 +2696,12 @@ async function enablePush() {
     try { await callApi('savePushToken', { token: res.token, name: currentUser ? currentUser.name : '' }); } catch(e) {}
     showToast('🔔 알림이 켜졌어요!');
     refreshPushBanner();
+    refreshPushBanner('as-push-enable-banner');   // 방과후 화면(강사)에서 눌렀을 수도 있으니 같이 갱신
 }
 
-/** 알림 권한 상태에 따라 홈 배너 표시/숨김 */
-function refreshPushBanner() {
-    const b = document.getElementById('push-enable-banner');
+/** 알림 권한 상태에 따라 배너 표시/숨김 (기본: 홈 배너, id로 다른 화면 배너도 재사용 — 예: 강사용 방과후 화면) */
+function refreshPushBanner(id) {
+    const b = document.getElementById(id || 'push-enable-banner');
     if (!b) return;
     const perm = (typeof window.fsPushPermission === 'function') ? window.fsPushPermission() : 'default';
     b.style.display = (perm === 'granted' || perm === 'unsupported') ? 'none' : 'flex';
@@ -2864,6 +2874,7 @@ function asColor(subject) {
 let asYear, asMonth, asData = { weekly: [], exceptions: [] };
 let asSelectedDate = null, asDayItems = [];
 let asFormMode = 'date', asFormId = null, asFormOrigin = null;
+let asFormSingleOrigin = null;   // 'single' 모드(이 날짜만 수정)에서 취소할 원래 반복수업 occurrence {date, subject, start}
 
 function asPad2(n) { return String(n).padStart(2, '0'); }
 
@@ -2875,6 +2886,8 @@ async function openAfterSchool() {
     showSection('sec-afterschool');
     const isT = currentUser && currentUser.role === 'teacher';
     document.getElementById('as-teacher-tools').style.display = isT ? 'block' : 'none';
+    // 강사는 홈 화면을 거치지 않아 알림 켜기 배너를 못 보므로 여기서 별도 안내
+    if (currentUser && currentUser.role === 'instructor') refreshPushBanner('as-push-enable-banner');
     const t = new Date(); asYear = t.getFullYear(); asMonth = t.getMonth();
     // 1) Firestore에서 직접 로드 (GAS 안 거침)
     if (typeof window.fsReadAfterSchool === 'function') {
@@ -2914,6 +2927,19 @@ function asPersist() {
         }
         showToast('저장 실패 — 권한/네트워크를 확인해주세요.');
     });
+}
+
+/**
+ * 방과후 일정 변경을 관련 학생(track)+강사에게 푸시로 알림.
+ * ★ asPersist()로 이미 저장이 끝난 뒤에만 호출할 것 — 이 호출이 실패해도(네트워크 등)
+ *   일정 데이터 자체는 안전하며, 실패 토스트도 '알림 발송'으로만 한정 표시됨.
+ */
+function asNotify(track, teacherName, bodyText) {
+    if (!bodyText) return;
+    callApiBg('notifyAfterSchoolChange', {
+        track: track || '공통', teacherName: teacherName || '',
+        title: '📅 방과후 일정 변경', body: bodyText
+    }, '일정 변경 알림').catch(() => {});
 }
 
 function asBack() {
@@ -3010,11 +3036,13 @@ function asOpenDay(y, m, d) {
                 : (isT ? '<span style="color:#C62828;">시간 미설정 — 수정하세요</span>' : '시간 미설정');
             const btn = (label, handler, color) =>
                 `<button onclick="${handler}" style="background:${color.bg};color:${color.fg};border:1px solid ${color.bd};border-radius:6px;padding:5px 10px;cursor:pointer;font-size:0.78rem;white-space:nowrap;">${label}</button>`;
-            const editBtn = btn('수정', `asEditItem(${idx})`, { bg:'rgba(44,44,44,0.06)', fg:'var(--ink)', bd:'var(--stone)' });
+            // ★ 반복수업(kind='weekly')의 수정/삭제는 '전체일정' vs '이 날짜만' 선택 모달을 거침(asChooseEdit/asChooseDelete).
+            //   특강(kind='date')은 애초에 그 날짜 하나뿐이라 선택 없이 바로 수정/삭제.
+            const editBtn = btn('수정', `asChooseEdit(${idx})`, { bg:'rgba(44,44,44,0.06)', fg:'var(--ink)', bd:'var(--stone)' });
             let ctrl = '';
             if (isT) {
                 if (it.kind === 'weekly' && !it.cancelled)
-                    ctrl = editBtn + btn('이 날 휴강', `asCancelDate(${idx})`, { bg:'rgba(198,40,40,0.08)', fg:'#C62828', bd:'rgba(198,40,40,0.3)' });
+                    ctrl = editBtn + btn('삭제', `asChooseDelete(${idx})`, { bg:'rgba(198,40,40,0.08)', fg:'#C62828', bd:'rgba(198,40,40,0.3)' });
                 else if (it.kind === 'weekly' && it.cancelled)
                     ctrl = btn('휴강 취소', `asDelExceptionIdx(${idx})`, { bg:'rgba(46,125,50,0.08)', fg:'#2E7D32', bd:'rgba(46,125,50,0.3)' });
                 else if (it.kind === 'date')
@@ -3080,13 +3108,15 @@ async function asReload(reopenDate) {
     if (reopenDate) { const p = reopenDate.split('-').map(Number); asOpenDay(p[0], p[1] - 1, p[2]); }
 }
 
+/** 이 날짜만 취소(휴강) — 반복수업은 그대로 두고 이 날짜만 삭제하는 효과 */
 function asCancelDate(idx) {
     const it = asDayItems[idx]; if (!it) return;
-    if (!confirm(`${asSelectedDate} '${it.subject}' 수업을 이 날 휴강 처리하시겠소?`)) return;
+    if (!confirm(`${asSelectedDate} '${it.subject}' 수업을 이 날짜만 삭제(휴강)하시겠소?`)) return;
     const ex = { id: asGenId(), date: asSelectedDate, type: '휴강', subject: it.subject, start: it.start };
     asData.exceptions.push(ex);                 // 낙관적 반영 (즉시)
     asRerender(asSelectedDate);
     asPersist();
+    asNotify(it.track, it.teacher, `${asSelectedDate} '${it.subject}' 수업이 휴강(취소)되었습니다.`);
 }
 
 function asDelExceptionIdx(idx) {
@@ -3096,19 +3126,96 @@ function asDelExceptionIdx(idx) {
     asData.exceptions = asData.exceptions.filter(x => x.id !== id);   // 낙관적 삭제
     asRerender(asSelectedDate);
     asPersist();
+    const msg = it.cancelled
+        ? `${asSelectedDate} '${it.subject}' 수업 휴강이 취소되어 다시 진행됩니다.`
+        : `${asSelectedDate} '${it.subject}' 수업이 삭제되었습니다.`;
+    asNotify(it.track, it.teacher, msg);
 }
 
-/* 날짜상세에서 항목 수정 열기 — 그 날짜 화면으로 돌아오도록 origin='day' 표시 */
+/** 수정 버튼 — 반복수업(kind='weekly')이면 '전체일정/이 날짜만' 선택 모달, 특강은 바로 수정 */
+function asChooseEdit(idx) {
+    const it = asDayItems[idx]; if (!it) return;
+    if (it.kind !== 'weekly') { asEditItem(idx); return; }
+    const subj = String(it.subject).replace(/</g, '&lt;');
+    _openSimpleModal('as-choice-modal', `
+        <div style="font-weight:800;font-size:1.05rem;margin-bottom:4px;color:var(--ink);">'${subj}' 수정</div>
+        <div style="font-size:0.8rem;color:var(--muted);margin-bottom:14px;">매주 ${it.day}요일 반복수업입니다. 어느 범위를 수정할까요?</div>
+        <button onclick="document.getElementById('as-choice-modal').remove(); asEditItem(${idx});"
+            style="width:100%;text-align:left;background:#fff;border:1px solid var(--stone);border-radius:10px;padding:12px 14px;margin-bottom:8px;cursor:pointer;font-family:inherit;">
+            <div style="font-weight:700;color:var(--ink);">🔁 전체일정 수정</div>
+            <div style="font-size:0.78rem;color:var(--muted);margin-top:2px;">요일·시간 등 매주 반복되는 수업 자체를 수정합니다</div>
+        </button>
+        <button onclick="document.getElementById('as-choice-modal').remove(); asEditSingleOccurrence(${idx});"
+            style="width:100%;text-align:left;background:#fff;border:1px solid var(--stone);border-radius:10px;padding:12px 14px;margin-bottom:8px;cursor:pointer;font-family:inherit;">
+            <div style="font-weight:700;color:var(--ink);">📌 이 날짜만 수정</div>
+            <div style="font-size:0.78rem;color:var(--muted);margin-top:2px;">${asSelectedDate}만 다른 날짜·시간으로 바꾸고, 다른 주는 그대로 둡니다</div>
+        </button>
+        <button onclick="document.getElementById('as-choice-modal').remove();"
+            style="width:100%;background:var(--stone);color:var(--ink);border:none;border-radius:9px;padding:10px;cursor:pointer;font-family:inherit;font-weight:600;">취소</button>
+    `);
+}
+
+/** 삭제 버튼 — 반복수업이면 '전체일정/이 날짜만' 선택 모달, 특강은 바로 삭제 */
+function asChooseDelete(idx) {
+    const it = asDayItems[idx]; if (!it) return;
+    if (it.kind !== 'weekly') { asDelExceptionIdx(idx); return; }
+    const subj = String(it.subject).replace(/</g, '&lt;');
+    _openSimpleModal('as-choice-modal', `
+        <div style="font-weight:800;font-size:1.05rem;margin-bottom:4px;color:var(--ink);">'${subj}' 삭제</div>
+        <div style="font-size:0.8rem;color:var(--muted);margin-bottom:14px;">매주 ${it.day}요일 반복수업입니다. 어느 범위를 삭제할까요?</div>
+        <button onclick="document.getElementById('as-choice-modal').remove(); asDeleteWeeklySeries(${idx});"
+            style="width:100%;text-align:left;background:#fff;border:1px solid rgba(198,40,40,0.3);border-radius:10px;padding:12px 14px;margin-bottom:8px;cursor:pointer;font-family:inherit;">
+            <div style="font-weight:700;color:#C62828;">🔁 전체일정 삭제</div>
+            <div style="font-size:0.78rem;color:var(--muted);margin-top:2px;">매주 ${it.day}요일 수업이 앞으로 모두 사라집니다</div>
+        </button>
+        <button onclick="document.getElementById('as-choice-modal').remove(); asCancelDate(${idx});"
+            style="width:100%;text-align:left;background:#fff;border:1px solid rgba(198,40,40,0.3);border-radius:10px;padding:12px 14px;margin-bottom:8px;cursor:pointer;font-family:inherit;">
+            <div style="font-weight:700;color:#C62828;">📌 이 날짜만 삭제</div>
+            <div style="font-size:0.78rem;color:var(--muted);margin-top:2px;">${asSelectedDate}만 휴강 처리되고, 다른 주는 그대로 진행됩니다</div>
+        </button>
+        <button onclick="document.getElementById('as-choice-modal').remove();"
+            style="width:100%;background:var(--stone);color:var(--ink);border:none;border-radius:9px;padding:10px;cursor:pointer;font-family:inherit;font-weight:600;">취소</button>
+    `);
+}
+
+/* 날짜상세에서 항목 수정 열기(전체일정 수정) — 그 날짜 화면으로 돌아오도록 origin='day' 표시 */
 function asEditItem(idx) {
     const it = asDayItems[idx]; if (!it) return;
     asOpenForm(it.kind === 'weekly' ? 'weekly' : 'date', it, 'day');
 }
 
+/**
+ * 이 날짜만 수정 — 반복수업의 이 occurrence만 바꾼다(요일 전체는 그대로).
+ * 원래 자리는 저장 시점(asSaveForm)에 자동으로 휴강 처리되고, 이 날짜(변경 가능)에
+ * 새 특강으로 등록된다 — 즉 '휴강 + 특강' 조합으로 이동/변경을 표현.
+ */
+function asEditSingleOccurrence(idx) {
+    const it = asDayItems[idx]; if (!it || it.kind !== 'weekly' || it.cancelled) return;
+    asFormSingleOrigin = { date: asSelectedDate, subject: it.subject, start: it.start };
+    asOpenForm('single', {
+        subject: it.subject, start: it.start, end: it.end, teacher: it.teacher,
+        track: it.track, place: it.place, note: it.note, date: asSelectedDate
+    }, 'day');
+}
+
+/* 반복수업 전체 삭제(날짜 상세에서 진입) — 삭제 후 이 날짜 화면으로 복귀 */
+function asDeleteWeeklySeries(idx) {
+    const it = asDayItems[idx]; if (!it || it.kind !== 'weekly') return;
+    if (!confirm(`'${it.subject}' 반복수업 전체를 삭제하시겠소? (매주 ${it.day}요일 수업이 모두 사라집니다)`)) return;
+    asData.weekly = asData.weekly.filter(c => c.id !== it.id);
+    asRerender(asSelectedDate);
+    asPersist();
+    asNotify(it.track, it.teacher, `'${it.subject}' 반복수업(매주 ${it.day}요일)이 전체 삭제되었습니다.`);
+}
+
 /* 수업 입력 폼
+   mode: 'weekly'(반복수업) | 'date'(특강, 원래 있던 그 날짜만 조회 전용 텍스트) | 'single'(반복수업의 한 회차만 — 날짜 직접 변경 가능)
    origin: 'day'(날짜 상세에서 수정 — 저장 후 그 날짜로 복귀) | null(반복수업 관리 목록에서 추가/수정) */
 function asOpenForm(mode, existing, origin) {
     asFormMode = mode; asFormId = existing ? existing.id : null; asFormOrigin = origin || null;
-    document.getElementById('asform-title').textContent = existing ? '수업 수정' : (mode === 'weekly' ? '반복 수업 추가' : '수업 추가');
+    if (mode !== 'single') asFormSingleOrigin = null;   // 다른 모드로 열 때 이전 상태 잔존 방지
+    document.getElementById('asform-title').textContent =
+        mode === 'single' ? '이 날짜만 수정' : (existing ? '수업 수정' : (mode === 'weekly' ? '반복 수업 추가' : '수업 추가'));
     const when = document.getElementById('asform-when');
     const rangeWrap = document.getElementById('asform-range-wrap');
     if (mode === 'weekly') {
@@ -3118,7 +3225,9 @@ function asOpenForm(mode, existing, origin) {
         document.getElementById('asform-startdate').value = existing ? (existing.startDate || '') : toDateStr();
         document.getElementById('asform-enddate').value   = existing ? (existing.endDate   || '') : '';
     } else {
-        when.textContent = `📅 ${asSelectedDate}`;
+        // 'date'(특강 추가/수정) / 'single'(이 날짜만 수정) — 날짜를 직접 고를 수 있음
+        when.innerHTML = '날짜 <input id="asform-date" type="date" style="padding:8px;border:1px solid #ccc;border-radius:8px;font-family:inherit;margin-left:6px;">';
+        document.getElementById('asform-date').value = (existing && existing.date) ? existing.date : asSelectedDate;
         rangeWrap.style.display = 'none';
     }
     document.getElementById('asform-start').value   = existing ? asFmtTime(existing.start)   : '';
@@ -3144,6 +3253,12 @@ async function asSaveForm() {
         if (startDate && endDate && startDate > endDate)
             return showToast('시작일이 종료일보다 늦을 수 없습니다.');
     }
+    // 'date'/'single' 모드는 날짜를 직접 고름 — 필수
+    let chosenDate = '';
+    if (asFormMode !== 'weekly') {
+        chosenDate = document.getElementById('asform-date').value;
+        if (!chosenDate) return showToast('날짜를 선택해주세요.');
+    }
 
     const payload = {
         start:   document.getElementById('asform-start').value,
@@ -3154,22 +3269,44 @@ async function asSaveForm() {
         place:   document.getElementById('asform-place').value.trim(),
         note:    document.getElementById('asform-note').value.trim()
     };
-    const isEdit = !!asFormId;
-    const id     = asFormId || asGenId();
-    const mode   = asFormMode;
-    const origin = asFormOrigin;
-    payload.id   = id;
+    const isEdit  = !!asFormId;
+    const id      = asFormId || asGenId();
+    const mode    = asFormMode;
+    const origin  = asFormOrigin;
+    const singleOrigin = asFormSingleOrigin;   // 'single' 모드일 때만 값 있음
+    payload.id    = id;
+
+    let notifyMsg = '';   // 저장 후 발송할 알림 문구 (비어 있으면 미발송)
+    const timeTxt = asTimeRange(payload.start, payload.end) || '시간 미정';
 
     if (mode === 'weekly') {
         payload.day       = document.getElementById('asform-day').value;
         payload.startDate = startDate;   // 비우면 '' → 무제한(하위호환)
         payload.endDate   = endDate;
-        if (isEdit) { const w = asData.weekly.find(c => c.id === id); if (w) Object.assign(w, payload); }
-        else asData.weekly.push(Object.assign({}, payload));
+        if (isEdit) {
+            const w = asData.weekly.find(c => c.id === id); if (w) Object.assign(w, payload);
+            notifyMsg = `'${subject}' 반복수업(매주 ${payload.day}요일) 일정이 변경되었습니다. (${timeTxt})`;
+        } else {
+            asData.weekly.push(Object.assign({}, payload));
+            notifyMsg = `'${subject}' 수업이 매주 ${payload.day}요일 ${timeTxt}에 새로 등록되었습니다.`;
+        }
     } else {
-        payload.date = asSelectedDate; payload.type = '특강';
-        if (isEdit) { const e = asData.exceptions.find(x => x.id === id); if (e) Object.assign(e, payload); }
-        else asData.exceptions.push(Object.assign({}, payload));
+        payload.date = chosenDate; payload.type = '특강';
+        if (isEdit) {
+            const e = asData.exceptions.find(x => x.id === id); if (e) Object.assign(e, payload);
+            notifyMsg = `${chosenDate} '${subject}' 수업 일정이 변경되었습니다. (${timeTxt})`;
+        } else {
+            asData.exceptions.push(Object.assign({}, payload));
+            notifyMsg = mode === 'single'
+                ? `'${subject}' 수업이 ${singleOrigin ? singleOrigin.date : ''} → ${chosenDate}(으)로 변경되었습니다. (${timeTxt})`
+                : `${chosenDate}에 '${subject}' 수업이 새로 추가되었습니다. (${timeTxt})`;
+        }
+        // 'single' 모드: 원래 반복수업 자리를 이 날짜만 취소(휴강) — 이동/변경의 짝
+        if (mode === 'single' && singleOrigin) {
+            asData.exceptions.push({ id: asGenId(), date: singleOrigin.date, type: '휴강',
+                                      subject: singleOrigin.subject, start: singleOrigin.start });
+            asFormSingleOrigin = null;
+        }
     }
 
     // 화면 즉시 반영 후 닫기
@@ -3182,6 +3319,7 @@ async function asSaveForm() {
         asRerender(asSelectedDate);
     }
     asPersist();   // Firestore에 직접 저장 (GAS 안 거침)
+    asNotify(payload.track, payload.teacher, notifyMsg);
 }
 
 /* 매주 반복 수업 관리 */
@@ -3217,10 +3355,12 @@ function asOpenWeekly() {
 function asCloseWeekly() { document.getElementById('asweekly-overlay').classList.add('hidden'); }
 
 function asDelWeekly(id) {
+    const c = asData.weekly.find(x => x.id === id);
     if (!confirm('이 반복 수업을 삭제하시겠소? (매주 사라집니다)')) return;
-    asData.weekly = asData.weekly.filter(c => c.id !== id);   // 낙관적 삭제
+    asData.weekly = asData.weekly.filter(x => x.id !== id);   // 낙관적 삭제
     renderMonth(); asOpenWeekly();
     asPersist();
+    if (c) asNotify(c.track, c.teacher, `'${c.subject}' 반복수업(매주 ${c.day}요일)이 전체 삭제되었습니다.`);
 }
 
 /* 반복수업 관리 목록에서 수정 열기 */
