@@ -2993,16 +2993,19 @@ function renderMonth() {
     for (let i = 0; i < firstDow; i++) html += '<div></div>';
     for (let d = 1; d <= days; d++) {
         const r = asResolveDay(asYear, asMonth, d);
+        // ★ 휴강(취소)된 항목은 화면에 아예 안 보이게 — 취소선 처리된 채로 계속 남아있으면
+        //   '삭제했는데 왜 아직 보이지'로 오해받음
+        const visItems = r.items.filter(it => !it.cancelled);
         const dow = new Date(asYear, asMonth, d).getDay();
         const isToday = (asYear === tY && asMonth === tM && d === tD);
         const numColor = dow === 0 ? '#C62828' : dow === 6 ? '#1565C0' : 'var(--ink)';
-        let chips = r.items.slice(0, 3).map(it => {
-            const col = it.cancelled ? '#bbb' : asColor(it.subject);
+        let chips = visItems.slice(0, 3).map(it => {
+            const col = asColor(it.subject);
             return `<div style="font-size:0.6rem;line-height:1.35;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
                   border-left:3px solid ${col};padding-left:3px;margin-bottom:1px;
-                  color:${col};${it.cancelled ? 'text-decoration:line-through;' : ''}">${it.subject}</div>`;
+                  color:${col};">${it.subject}</div>`;
         }).join('');
-        if (r.items.length > 3) chips += `<div style="font-size:0.58rem;color:#999;">+${r.items.length - 3}</div>`;
+        if (visItems.length > 3) chips += `<div style="font-size:0.58rem;color:#999;">+${visItems.length - 3}</div>`;
         html += `<div onclick="asOpenDay(${asYear},${asMonth},${d})"
             style="border:1px solid ${isToday ? 'var(--gold)' : 'rgba(233,230,225,0.6)'};border-radius:6px;padding:3px 4px;
                    background:${isToday ? 'rgba(186,117,23,0.1)' : 'var(--paper)'};cursor:pointer;overflow:hidden;min-width:0;">
@@ -3014,14 +3017,17 @@ function renderMonth() {
 function asOpenDay(y, m, d) {
     const r = asResolveDay(y, m, d);
     asSelectedDate = r.dateStr;
-    asDayItems = r.items;
+    // ★ 휴강(취소)된 항목은 목록에서 완전히 제외 — 취소선 카드로 계속 남아있으면
+    //   '삭제했는데 왜 아직 보이지'로 오해받음. 데이터(휴강 exception)는 그대로 유지되고
+    //   화면에서만 안 보임(asDayItems를 이 필터된 배열로 두어 버튼의 idx도 항상 일치시킴).
+    asDayItems = r.items.filter(it => !it.cancelled);
     document.getElementById('asday-title').textContent = `${m + 1}월 ${d}일 (${r.weekday})`;
     const isT = currentUser && currentUser.role === 'teacher';
     const content = document.getElementById('asday-content');
-    if (!r.items.length) {
+    if (!asDayItems.length) {
         content.innerHTML = '<p style="color:#999;text-align:center;padding:10px 0;">수업이 없습니다.</p>';
     } else {
-        content.innerHTML = r.items.map((it, idx) => {
+        content.innerHTML = asDayItems.map((it, idx) => {
             const time  = asTimeRange(it.start, it.end);
             const place = asCleanPlace(it.place);
             const meta  = (it.teacher || '') + (place ? ' · ' + place : '');
@@ -3038,22 +3044,16 @@ function asOpenDay(y, m, d) {
                 `<button onclick="${handler}" style="background:${color.bg};color:${color.fg};border:1px solid ${color.bd};border-radius:6px;padding:5px 10px;cursor:pointer;font-size:0.78rem;white-space:nowrap;">${label}</button>`;
             // ★ 반복수업(kind='weekly')의 수정/삭제는 '전체일정' vs '이 날짜만' 선택 모달을 거침(asChooseEdit/asChooseDelete).
             //   특강(kind='date')은 애초에 그 날짜 하나뿐이라 선택 없이 바로 수정/삭제.
+            //   (휴강된 항목은 위에서 이미 걸러져 여기 도달하지 않음 — '휴강 취소' 버튼 불필요)
             const editBtn = btn('수정', `asChooseEdit(${idx})`, { bg:'rgba(44,44,44,0.06)', fg:'var(--ink)', bd:'var(--stone)' });
-            let ctrl = '';
-            if (isT) {
-                if (it.kind === 'weekly' && !it.cancelled)
-                    ctrl = editBtn + btn('삭제', `asChooseDelete(${idx})`, { bg:'rgba(198,40,40,0.08)', fg:'#C62828', bd:'rgba(198,40,40,0.3)' });
-                else if (it.kind === 'weekly' && it.cancelled)
-                    ctrl = btn('휴강 취소', `asDelExceptionIdx(${idx})`, { bg:'rgba(46,125,50,0.08)', fg:'#2E7D32', bd:'rgba(46,125,50,0.3)' });
-                else if (it.kind === 'date')
-                    ctrl = editBtn + btn('삭제', `asDelExceptionIdx(${idx})`, { bg:'rgba(198,40,40,0.08)', fg:'#C62828', bd:'rgba(198,40,40,0.3)' });
-            }
-            const accent = it.cancelled ? '#ccc' : asColor(it.subject);
-            return `<div style="background:#fff;border:1px solid var(--stone);border-left:5px solid ${accent};border-radius:9px;padding:10px 12px;margin-bottom:6px;${it.cancelled ? 'opacity:0.55;' : ''}">
+            const delBtn  = btn('삭제', it.kind === 'weekly' ? `asChooseDelete(${idx})` : `asDelExceptionIdx(${idx})`,
+                                 { bg:'rgba(198,40,40,0.08)', fg:'#C62828', bd:'rgba(198,40,40,0.3)' });
+            const ctrl = isT ? editBtn + delBtn : '';
+            return `<div style="background:#fff;border:1px solid var(--stone);border-left:5px solid ${asColor(it.subject)};border-radius:9px;padding:10px 12px;margin-bottom:6px;">
                 <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
                     <div style="min-width:0;">
                         <div style="font-size:0.78rem;color:var(--muted);">${timeLine}${tag}</div>
-                        <div style="font-weight:700;${it.cancelled ? 'text-decoration:line-through;' : ''}">${it.subject}${it.cancelled ? ' (휴강)' : ''}</div>
+                        <div style="font-weight:700;">${it.subject}</div>
                         <div style="font-size:0.82rem;color:var(--muted);">${meta}</div>
                         ${periodLine}
                     </div>
@@ -3108,28 +3108,30 @@ async function asReload(reopenDate) {
     if (reopenDate) { const p = reopenDate.split('-').map(Number); asOpenDay(p[0], p[1] - 1, p[2]); }
 }
 
-/** 이 날짜만 취소(휴강) — 반복수업은 그대로 두고 이 날짜만 삭제하는 효과 */
+/**
+ * 반복수업의 이 날짜만 삭제 — 내부적으로는 '휴강' 예외를 하나 남겨 이 날짜만
+ * 매칭에서 제외시키는 방식(반복수업 전체는 그대로 유지)이지만, 화면에는(달력·날짜
+ * 상세 모두) 아예 표시되지 않으므로 사용자 입장에서는 "이 날짜만 삭제"와 동일하게 보임.
+ */
 function asCancelDate(idx) {
     const it = asDayItems[idx]; if (!it) return;
-    if (!confirm(`${asSelectedDate} '${it.subject}' 수업을 이 날짜만 삭제(휴강)하시겠소?`)) return;
+    if (!confirm(`${asSelectedDate} '${it.subject}' 수업을 이 날짜만 삭제하시겠소?`)) return;
     const ex = { id: asGenId(), date: asSelectedDate, type: '휴강', subject: it.subject, start: it.start };
     asData.exceptions.push(ex);                 // 낙관적 반영 (즉시)
     asRerender(asSelectedDate);
     asPersist();
-    asNotify(it.track, it.teacher, `${asSelectedDate} '${it.subject}' 수업이 휴강(취소)되었습니다.`);
+    asNotify(it.track, it.teacher, `${asSelectedDate} '${it.subject}' 수업이 삭제되었습니다.`);
 }
 
+/** 특강(kind='date') 삭제 — 항상 실제 삭제(휴강 개념 없음). asDayItems엔 휴강 항목이 안 들어오므로 it.cancelled는 항상 false. */
 function asDelExceptionIdx(idx) {
     const it = asDayItems[idx]; if (!it) return;
     const id = it.exId || it.id; if (!id) return;
-    if (!confirm(it.cancelled ? '휴강을 취소(되살리기)하시겠소?' : '이 수업을 삭제하시겠소?')) return;
+    if (!confirm('이 수업을 삭제하시겠소?')) return;
     asData.exceptions = asData.exceptions.filter(x => x.id !== id);   // 낙관적 삭제
     asRerender(asSelectedDate);
     asPersist();
-    const msg = it.cancelled
-        ? `${asSelectedDate} '${it.subject}' 수업 휴강이 취소되어 다시 진행됩니다.`
-        : `${asSelectedDate} '${it.subject}' 수업이 삭제되었습니다.`;
-    asNotify(it.track, it.teacher, msg);
+    asNotify(it.track, it.teacher, `${asSelectedDate} '${it.subject}' 수업이 삭제되었습니다.`);
 }
 
 /** 수정 버튼 — 반복수업(kind='weekly')이면 '전체일정/이 날짜만' 선택 모달, 특강은 바로 수정 */
@@ -3171,7 +3173,7 @@ function asChooseDelete(idx) {
         <button onclick="document.getElementById('as-choice-modal').remove(); asCancelDate(${idx});"
             style="width:100%;text-align:left;background:#fff;border:1px solid rgba(198,40,40,0.3);border-radius:10px;padding:12px 14px;margin-bottom:8px;cursor:pointer;font-family:inherit;">
             <div style="font-weight:700;color:#C62828;">📌 이 날짜만 삭제</div>
-            <div style="font-size:0.78rem;color:var(--muted);margin-top:2px;">${asSelectedDate}만 휴강 처리되고, 다른 주는 그대로 진행됩니다</div>
+            <div style="font-size:0.78rem;color:var(--muted);margin-top:2px;">${asSelectedDate}만 삭제되고, 다른 주는 그대로 진행됩니다</div>
         </button>
         <button onclick="document.getElementById('as-choice-modal').remove();"
             style="width:100%;background:var(--stone);color:var(--ink);border:none;border-radius:9px;padding:10px;cursor:pointer;font-family:inherit;font-weight:600;">취소</button>
