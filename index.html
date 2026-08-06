@@ -1405,20 +1405,18 @@ input::placeholder, textarea::placeholder { color: #BDB19A; }
             <button onclick="asChangeMonth(1)" style="background:none; border:none; cursor:pointer; font-size:1.3rem; color:var(--ink); padding:4px 10px;">›</button>
         </div>
 
-        <!-- 요일 헤더 -->
-        <div style="display:grid; grid-template-columns:repeat(7,1fr); padding:4px 8px 0; flex-shrink:0;">
-            <div style="text-align:center; font-size:0.72rem; font-weight:700; color:#C62828;">일</div>
+        <!-- 요일 헤더 (평일만 — 주말 칸을 없애 칸을 더 넓게) -->
+        <div style="display:grid; grid-template-columns:repeat(5,1fr); padding:4px 8px 0; flex-shrink:0;">
             <div style="text-align:center; font-size:0.72rem; font-weight:700; color:var(--muted);">월</div>
             <div style="text-align:center; font-size:0.72rem; font-weight:700; color:var(--muted);">화</div>
             <div style="text-align:center; font-size:0.72rem; font-weight:700; color:var(--muted);">수</div>
             <div style="text-align:center; font-size:0.72rem; font-weight:700; color:var(--muted);">목</div>
             <div style="text-align:center; font-size:0.72rem; font-weight:700; color:var(--muted);">금</div>
-            <div style="text-align:center; font-size:0.72rem; font-weight:700; color:#1565C0;">토</div>
         </div>
 
-        <!-- 달력 그리드 -->
-        <div id="as-grid" style="flex:1; overflow-y:auto; display:grid; grid-template-columns:repeat(7,1fr);
-                    grid-auto-rows:minmax(68px,auto); align-content:start; gap:2px; padding:4px 8px 12px;"></div>
+        <!-- 달력 그리드 — 주말 칸 없음(평일 5칸), 세로도 남는 공간까지 꽉 채움(1fr) -->
+        <div id="as-grid" style="flex:1; overflow-y:auto; display:grid; grid-template-columns:repeat(5,1fr);
+                    grid-auto-rows:minmax(64px,1fr); gap:2px; padding:4px 8px 12px;"></div>
 
         <!-- 교사 전용 도구 -->
         <div id="as-teacher-tools" style="display:none; padding:8px 16px calc(env(safe-area-inset-bottom) + 10px); flex-shrink:0; border-top:1px solid var(--stone);">
@@ -2984,21 +2982,26 @@ function renderMonth() {
     if (label) label.textContent = `${asYear}년 ${asMonth + 1}월`;
     const grid = document.getElementById('as-grid');
     if (!grid) return;
-    const firstDow = new Date(asYear, asMonth, 1).getDay();
-    const days     = new Date(asYear, asMonth + 1, 0).getDate();
+    const days  = new Date(asYear, asMonth + 1, 0).getDate();
     const today = new Date();
     const tY = today.getFullYear(), tM = today.getMonth(), tD = today.getDate();
 
+    // ★ 주말(토·일)은 칸 자체를 만들지 않음 — 평일 5칸만 그리므로 grid-template-columns도 5열.
+    //   이번 달 첫 평일 앞에만 빈 칸을 넣어 요일(월~금) 위치를 맞춤(그 이후는 5칸마다 자동으로 다음 주 월요일로 줄바꿈).
     let html = '';
-    for (let i = 0; i < firstDow; i++) html += '<div></div>';
+    let placedFirst = false;
     for (let d = 1; d <= days; d++) {
+        const dow = new Date(asYear, asMonth, d).getDay();   // 0=일 ~ 6=토
+        if (dow === 0 || dow === 6) continue;
+        if (!placedFirst) {
+            for (let i = 0; i < dow - 1; i++) html += '<div></div>';   // 월=0 ~ 금=4
+            placedFirst = true;
+        }
         const r = asResolveDay(asYear, asMonth, d);
         // ★ 휴강(취소)된 항목은 화면에 아예 안 보이게 — 취소선 처리된 채로 계속 남아있으면
         //   '삭제했는데 왜 아직 보이지'로 오해받음
         const visItems = r.items.filter(it => !it.cancelled);
-        const dow = new Date(asYear, asMonth, d).getDay();
         const isToday = (asYear === tY && asMonth === tM && d === tD);
-        const numColor = dow === 0 ? '#C62828' : dow === 6 ? '#1565C0' : 'var(--ink)';
         let chips = visItems.slice(0, 3).map(it => {
             const col = asColor(it.subject);
             return `<div style="font-size:0.6rem;line-height:1.35;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
@@ -3008,8 +3011,9 @@ function renderMonth() {
         if (visItems.length > 3) chips += `<div style="font-size:0.58rem;color:#999;">+${visItems.length - 3}</div>`;
         html += `<div onclick="asOpenDay(${asYear},${asMonth},${d})"
             style="border:1px solid ${isToday ? 'var(--gold)' : 'rgba(233,230,225,0.6)'};border-radius:6px;padding:3px 4px;
-                   background:${isToday ? 'rgba(186,117,23,0.1)' : 'var(--paper)'};cursor:pointer;overflow:hidden;min-width:0;">
-            <div style="font-size:0.72rem;font-weight:700;color:${numColor};">${d}</div>${chips}</div>`;
+                   background:${isToday ? 'rgba(186,117,23,0.1)' : 'var(--paper)'};cursor:pointer;overflow:hidden;min-width:0;
+                   display:flex;flex-direction:column;">
+            <div style="font-size:0.72rem;font-weight:700;color:var(--ink);">${d}</div>${chips}</div>`;
     }
     grid.innerHTML = html;
 }
