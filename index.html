@@ -2680,12 +2680,44 @@ function showToast(msg, duration = 2200) {
     setTimeout(() => toast.classList.remove('show'), duration);
 }
 
+/** 알림이 차단된 상태일 때 — 브라우저/기기별로 실제 풀 수 있는 경로를 안내 */
+function _showPushDeniedGuide() {
+    const ua = navigator.userAgent || '';
+    const isSamsung = /SamsungBrowser/i.test(ua);
+    const isChrome  = /Chrome/i.test(ua) && !isSamsung;
+
+    let steps = '';
+    if (isSamsung) {
+        steps = `
+            <div style="font-weight:700;margin-bottom:4px;">① 홈 화면 아이콘으로 설치된 경우 (가장 확실함)</div>
+            <div style="margin-bottom:10px;color:#555;">휴대폰 <b>설정 → 애플리케이션(앱)</b> → "장원급제반" 찾기 → <b>알림</b> → 켜기</div>
+            <div style="font-weight:700;margin-bottom:4px;">② 삼성 인터넷 브라우저에서</div>
+            <div style="color:#555;">삼성 인터넷 실행 → 메뉴(≡) → <b>설정 → 사이트 및 다운로드 → 알림</b> → 차단된 사이트 목록에서 이 사이트를 찾아 삭제(또는 허용)로 변경</div>`;
+    } else if (isChrome) {
+        steps = `
+            <div style="font-weight:700;margin-bottom:4px;">① 주소창에서 바로 (가장 빠름)</div>
+            <div style="margin-bottom:10px;color:#555;">주소창 왼쪽의 자물쇠(또는 ⓘ) 아이콘 탭 → <b>권한 → 알림</b> → 허용으로 변경</div>
+            <div style="font-weight:700;margin-bottom:4px;">② 홈 화면 아이콘으로 설치된 경우</div>
+            <div style="color:#555;">휴대폰 <b>설정 → 애플리케이션(앱)</b> → "장원급제반" 찾기 → <b>알림</b> → 켜기</div>`;
+    } else {
+        steps = `
+            <div style="margin-bottom:10px;color:#555;">휴대폰 <b>설정 → 애플리케이션(앱)</b>에서 이 앱(또는 사용 중인 브라우저)을 찾아 <b>알림</b>을 켜주세요.</div>
+            <div style="color:#555;">브라우저 안에서는 보통 <b>설정 → 사이트 설정(또는 권한) → 알림</b> 메뉴에서도 바꿀 수 있어요.</div>`;
+    }
+    _openSimpleModal('pushdenied-modal', `
+        <h3 style="margin:0 0 8px;">🔕 알림이 차단돼 있어요</h3>
+        <p style="font-size:0.8rem;color:#888;margin:0 0 12px;">이미 한 번 "차단"을 눌렀거나, 휴대폰 알림 설정이 꺼져 있는 상태예요. 아래 방법으로 켜주세요.</p>
+        <div style="font-size:0.85rem;line-height:1.5;">${steps}</div>
+        <button onclick="document.getElementById('pushdenied-modal').remove()" class="btn" style="width:100%;margin-top:14px;">확인했어요</button>
+    `);
+}
+
 /** 🔔 푸시 알림 켜기 (사용자가 버튼 눌렀을 때) */
 async function enablePush() {
     if (typeof window.fsEnablePush !== 'function') return showToast('이 브라우저는 알림을 지원하지 않아요.');
     const res = await window.fsEnablePush();
     if (!res.ok) {
-        if (res.reason === 'denied')      showToast('알림이 차단돼 있어요. 브라우저 설정에서 허용해주세요.');
+        if (res.reason === 'denied')      _showPushDeniedGuide();
         else if (res.reason === 'no-vapid') showToast('알림 설정이 아직 준비 중이에요. (관리자 설정 필요)');
         else if (res.reason === 'unsupported') showToast('이 브라우저/기기는 웹 알림을 지원하지 않아요. (아이폰은 홈 화면에 추가해야 함)');
         else showToast('알림을 켤 수 없어요.');
