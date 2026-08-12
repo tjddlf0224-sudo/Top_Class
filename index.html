@@ -1365,6 +1365,17 @@ input::placeholder, textarea::placeholder { color: #BDB19A; }
 
             <hr>
 
+            <h3>날짜별 방과후 출석 체크</h3>
+            <div style="font-size:0.78rem;color:var(--muted);margin-bottom:6px;">기록용이며 엽전에는 영향을 주지 않습니다.</div>
+            <div style="display:flex; gap:5px;">
+                <input type="date" id="admin-asatt-date">
+                <button class="btn" style="width:80px; margin:10px 0;"
+                        onclick="viewAfterSchoolAttendance()">조회</button>
+            </div>
+            <div id="admin-asatt-result" style="margin-top:10px;"></div>
+
+            <hr>
+
             <h3>학급 전체 학습 현황 (일별 평균)</h3>
             <button class="btn" onclick="loadClassStats()">통계 조회</button>
             <div id="admin-stats-chart" style="margin-top:15px;"></div>
@@ -3465,6 +3476,27 @@ window.onload = () => {
         loadHome();
         // 자동 로그인 후 백그라운드 프리페치
         prefetchAll();
+
+        // ★ 푸시 알림 탭 딥링크 — 교사 전용(?goto=att|asatt&date=YYYY-MM-DD)
+        //   해당 날짜의 출결/방과후출석 확인 화면으로 바로 이동
+        if (currentUser.role === 'teacher') {
+            const qp   = new URLSearchParams(location.search);
+            const goto = qp.get('goto');
+            const date = qp.get('date');
+            if (goto === 'att' || goto === 'asatt') {
+                openAdmin().then(() => {
+                    if (goto === 'att') {
+                        const el = document.getElementById('admin-att-date');
+                        if (el) { el.value = date || toDateStr(); viewAdminAttendance(); }
+                    } else {
+                        const el = document.getElementById('admin-asatt-date');
+                        if (el) { el.value = date || toDateStr(); viewAfterSchoolAttendance(); }
+                    }
+                });
+                // 새로고침 시 같은 딥링크가 반복 실행되지 않도록 주소창 정리
+                history.replaceState(null, '', location.pathname);
+            }
+        }
     } else {
         showSection('sec-login');
     }
@@ -6384,6 +6416,84 @@ async function correctAttendance(date, name, sel) {
     } catch(e) {
         showToast('정정 실패: ' + (e.message || ''));
         sel.value = oldStatus;
+    }
+}
+
+/* =========================================================
+   방과후 수업 출석 체크 (교사 전용) — 기록용, 엽전에는 영향 없음
+   대상 학생 = 그 수업의 트랙 기준(공통이면 전체). 기본값은 '출석'이라 결석자만 체크하면 됨.
+   ========================================================= */
+async function viewAfterSchoolAttendance(dateOverride) {
+    const dateInput = document.getElementById('admin-asatt-date');
+    if (dateOverride) dateInput.value = dateOverride;
+    if (!dateInput.value) return showToast('날짜를 선택해주세요.');
+    const dateStr = dateInput.value;
+    const resultDiv = document.getElementById('admin-asatt-result');
+    resultDiv.innerHTML = '조회 중...';
+
+    let data;
+    try {
+        data = await callApi('getAfterSchoolAttendance', { date: dateStr });
+    } catch(e) {
+        return renderLoadError(resultDiv, `viewAfterSchoolAttendance('${dateStr}')`);
+    }
+
+    if (!data || !data.classes || !data.classes.length) {
+        resultDiv.innerHTML = '<p style="color:#999;">해당 날짜에 방과후 수업이 없습니다.</p>';
+        window._asAttData = null;
+        return;
+    }
+
+    window._asAttData = data;
+    resultDiv.innerHTML = data.classes.map((_, ci) => `<div class="card" id="asatt-box-${ci}" style="margin-bottom:10px;"></div>`).join('');
+    data.classes.forEach((_, ci) => _renderAsAttClassBox(ci));
+}
+
+function _renderAsAttClassBox(ci) {
+    const cls = window._asAttData && window._asAttData.classes[ci];
+    const box = document.getElementById(`asatt-box-${ci}`);
+    if (!box || !cls) return;
+    const timeTxt = (cls.start || cls.end) ? `${cls.start||''}${cls.end?'~'+cls.end:''}` : '';
+    const trTag = (cls.track && cls.track !== '공통')
+        ? `<span style="font-size:0.7rem;background:rgba(186,117,23,0.2);color:#8B6914;border-radius:4px;padding:1px 5px;margin-left:5px;">${cls.track}반</span>` : '';
+    const rows = cls.students.map((s, si) => {
+        const isAbsent = s.status === '결석';
+        return `<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #eee;">
+            <span style="${isAbsent ? 'color:#C62828;font-weight:700;' : ''}">${s.name}</span>
+            <label style="display:flex;align-items:center;gap:5px;font-size:0.82rem;cursor:pointer;">
+                <input type="checkbox" ${isAbsent ? 'checked' : ''}
+                       onchange="_asAttToggle(${ci},${si},this.checked)" style="width:18px;height:18px;accent-color:#C62828;">
+                결석
+            </label>
+        </div>`;
+    }).join('');
+    box.innerHTML = `
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+            <div><b>${cls.subject}</b>${trTag}<div style="font-size:0.78rem;color:var(--muted);">${timeTxt}${cls.teacher ? ' · ' + cls.teacher : ''}</div></div>
+            <button class="btn" style="width:auto;margin:0;padding:7px 14px;font-size:0.85rem;" onclick="saveAfterSchoolAttendanceForClass(${ci})">저장</button>
+        </div>
+        <div>${rows}</div>`;
+}
+
+/** 체크박스 토글 → 메모리 상태 갱신 후 이름 강조를 반영해 다시 그림(저장 버튼 눌러야 서버 반영) */
+function _asAttToggle(ci, si, checked) {
+    window._asAttData.classes[ci].students[si].status = checked ? '결석' : '출석';
+    _renderAsAttClassBox(ci);
+}
+
+async function saveAfterSchoolAttendanceForClass(ci) {
+    const data = window._asAttData;
+    const cls  = data && data.classes[ci];
+    if (!cls) return;
+    try {
+        await callApi('saveAfterSchoolAttendance', {
+            date: data.date, subject: cls.subject,
+            records: cls.students.map(s => ({ name: s.name, status: s.status })),
+            actor: currentUser.name
+        });
+        showToast(`✅ '${cls.subject}' 출석이 저장되었습니다.`);
+    } catch(e) {
+        showToast('저장 실패: ' + (e.message || ''));
     }
 }
 
