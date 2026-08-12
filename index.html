@@ -10173,6 +10173,19 @@ async function updateTriggerPauseBadge() {
   try { _messaging = getMessaging(firebaseApp); }
   catch(e) { console.warn('[FCM] 이 브라우저는 푸시 미지원:', e.message); }
 
+  // ★ 서비스워커는 알림 권한과 무관하게 앱 로드 시 항상 등록해둔다.
+  //   이유: 안드로이드 크롬이 "홈 화면에 추가"를 정식 설치(WebAPK)로 만들지,
+  //   임시 바로가기로만 만들지는 그 시점에 서비스워커가 등록돼 있는지로 갈린다.
+  //   등록 안 된 상태면 임시 바로가기가 되어 캐시 삭제·배터리 최적화에 쉽게 사라짐
+  //   (특히 삼성 갤럭시에서 흔한 증상). 알림을 켜지 않은 학생도 정식 설치가 되도록,
+  //   버튼(fsEnablePush)을 누르기 전부터 미리 등록해 둔다.
+  let _swReg = null;
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/Top_Class/firebase-messaging-sw.js')
+      .then(reg => { _swReg = reg; })
+      .catch(e => console.warn('[SW] 등록 실패:', e.message));
+  }
+
   /** 알림 권한 요청 + 토큰 발급 (사용자 제스처에서 호출) */
   window.fsEnablePush = async function() {
     if (!_messaging) return { ok: false, reason: 'unsupported' };
@@ -10180,7 +10193,8 @@ async function updateTriggerPauseBadge() {
     try {
       const perm = await Notification.requestPermission();
       if (perm !== 'granted') return { ok: false, reason: 'denied' };
-      const reg = await navigator.serviceWorker.register('/Top_Class/firebase-messaging-sw.js');
+      // 위에서 이미 등록됐다면 그 등록을 재사용(register()는 같은 URL이면 재등록해도 안전)
+      const reg = _swReg || await navigator.serviceWorker.register('/Top_Class/firebase-messaging-sw.js');
       const token = await getToken(_messaging, { vapidKey: FCM_VAPID_KEY, serviceWorkerRegistration: reg });
       if (!token) return { ok: false, reason: 'no-token' };
       return { ok: true, token };
