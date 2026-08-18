@@ -8066,14 +8066,7 @@ function openCounselEdit(name, date, currentDone, currentMemo) {
     modal.innerHTML = `
         <div style="background:white; border-radius:12px; padding:20px; width:100%; max-width:400px;">
             <h3 style="margin:0 0 14px 0;">💬 ${name} 상담 (${date})</h3>
-            <div id="counsel-done-toggle" data-done="${currentDone ? '1' : '0'}" onclick="toggleCounselDone()"
-                 style="display:flex; align-items:center; gap:12px; margin-bottom:14px; cursor:pointer;
-                        padding:12px 14px; border-radius:10px;">
-                <span id="counsel-done-box" style="width:26px; height:26px; border-radius:6px; flex-shrink:0;
-                        display:flex; align-items:center; justify-content:center; font-size:18px; font-weight:900;"></span>
-                <span id="counsel-done-text" style="font-weight:bold; font-size:1rem;"></span>
-            </div>
-            <label style="font-size:0.85rem; color:#666; margin-bottom:5px; display:block;">상담 메모</label>
+            <label style="font-size:0.85rem; color:#666; margin-bottom:5px; display:block;">상담 메모 <span style="color:#aaa; font-weight:normal;">(작성 후 저장하면 자동으로 상담완료 처리됩니다)</span></label>
             <textarea id="counsel-memo-input" rows="4"
                       style="width:calc(100% - 16px); font-size:0.9rem; resize:vertical;"
                       placeholder="간단한 상담 내용을 입력해주세요...">${String(currentMemo || '').replace(/</g,'&lt;')}</textarea>
@@ -8085,35 +8078,12 @@ function openCounselEdit(name, date, currentDone, currentMemo) {
             </div>
         </div>`;
     document.body.appendChild(modal);
-    renderCounselDoneToggle();
 }
 
-/** 상담 완료 토글 표시 갱신 (체크 상태가 확실히 보이도록 색상 대비) */
-function renderCounselDoneToggle() {
-    const t = document.getElementById('counsel-done-toggle');
-    if (!t) return;
-    const done = t.dataset.done === '1';
-    const box  = document.getElementById('counsel-done-box');
-    const txt  = document.getElementById('counsel-done-text');
-    t.style.background = done ? '#2E7D32' : '#F0EEE9';
-    t.style.border     = done ? '2px solid #2E7D32' : '2px solid #D8D4CC';
-    box.style.background = '#fff';
-    box.style.border     = done ? '2px solid #2E7D32' : '2px solid #B9B5AC';
-    box.style.color      = '#2E7D32';
-    box.textContent      = done ? '✓' : '';
-    txt.textContent  = done ? '상담 완료' : '상담 미완료 (탭하여 완료)';
-    txt.style.color  = done ? '#fff' : '#888';
-}
-function toggleCounselDone() {
-    const t = document.getElementById('counsel-done-toggle');
-    t.dataset.done = t.dataset.done === '1' ? '0' : '1';
-    renderCounselDoneToggle();
-}
-
-/** 상담 저장 실행 */
+/** 상담 저장 실행 — 메모를 작성해 저장하면 자동으로 완료 처리 */
 async function saveCounselEntry(name, date) {
-    const done = document.getElementById('counsel-done-toggle').dataset.done === '1';
     const memo = document.getElementById('counsel-memo-input').value.trim();
+    const done = memo.length > 0;
 
     document.getElementById('counsel-modal').remove();
     await callApi('saveCounseling', { date, studentName: name, done, memo });
