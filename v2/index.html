@@ -204,7 +204,7 @@ main{padding:6px 18px calc(32px + var(--safe-bottom));}
       <div>
         <div class="h-name" id="uName">맹진우</div>
         <div class="h-meta">
-          <span class="h-role" id="uRole">공기업반 · 관원</span>
+          <span class="h-role" id="uRole">공기업반</span>
           <span class="chip chip-gold" id="uStreak">🔥 3일 연속</span>
         </div>
       </div>
@@ -380,7 +380,7 @@ function setRole(r){ROLE=r;TAB='home';
 function applyRole(){
   var t=ROLE==='teacher';
   document.getElementById('uName').textContent = t?'교사':ME.name;
-  document.getElementById('uRole').textContent = t?'장원급제반 담임':(ME.track+'반 · 관원');
+  document.getElementById('uRole').textContent = t?'장원급제반 담임':(ME.track+'반');
   document.getElementById('uStreak').style.display = t?'none':'';
   document.getElementById('btnReq').style.display = t?'':'none';
   renderTabs();renderView();
