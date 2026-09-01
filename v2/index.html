@@ -629,6 +629,14 @@ function protoSync(){
   var b=document.querySelectorAll('#proto button');
   for(var i=0;i<b.length;i++)b[i].className=(i===on?'on':'');
 }
+/* 푸시 알림 딥링크: ?goto=after&date=YYYY-MM-DD */
+function applyDeepLink(){
+  var q=new URLSearchParams(location.search);
+  var goto=q.get('goto'); if(!goto) return;
+  var d=q.get('date'); if(d) asDate=d;
+  TAB=goto;
+}
+applyDeepLink();
 fillIcoSlots();
 </script>
 </body>
