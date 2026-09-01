@@ -4,6 +4,14 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1,user-scalable=no">
 <title>장원급제반</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#5b6af0">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/icon-32.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="장원급제반">
 <style>
 @font-face{
   font-family:'Pretendard';
@@ -39,8 +47,9 @@ input,select,textarea{font-family:inherit;font-size:16px;}
 #login{min-height:100vh;display:flex;flex-direction:column;justify-content:center;
   padding:32px 24px calc(32px + var(--safe-bottom));background:var(--surface);}
 .login-brand{text-align:center;margin-bottom:36px;}
-.login-mark{width:64px;height:64px;border-radius:20px;background:var(--accent-soft);
-  display:flex;align-items:center;justify-content:center;margin:0 auto 16px;color:var(--accent);}
+.login-mark{width:72px;height:72px;display:flex;align-items:center;justify-content:center;
+  margin:0 auto 14px;}
+.login-mark img{display:block;width:72px;height:72px;}
 .login-title{font-size:1.55rem;font-weight:800;letter-spacing:-0.5px;}
 .login-sub{font-size:0.86rem;color:var(--ink-mute);margin-top:6px;}
 .field{margin-bottom:10px;}
@@ -181,7 +190,7 @@ main{padding:6px 18px calc(32px + var(--safe-bottom));}
 <!-- ══════════ 로그인 ══════════ -->
 <div id="login">
   <div class="login-brand">
-    <div class="login-mark"><span class="ico-slot" data-ico="cap" data-sz="32"></span></div>
+    <div class="login-mark"><img src="icons/icon-512.png" alt="" width="72" height="72"></div>
     <div class="login-title">장원급제반</div>
     <div class="login-sub">청양고등학교 · 공직의 길을 걷는 자</div>
   </div>
