@@ -1,0 +1,86 @@
+rules_version = '2';
+
+// ═══════════════════════════════════════════════════════════════
+// 장원급제반 v2 Firestore 보안규칙
+//
+// 적용 방법: Firebase 콘솔 → Firestore Database → 규칙 탭 →
+//            아래 내용 전체를 붙여넣고 "게시"
+//
+// 설계 원칙
+//  - 조회는 전부 열어둔다(기존과 동일). 학생 명부·출결·시간표는
+//    어차피 반 안에서 공유되는 정보라 읽기 제한의 실익이 없다.
+//  - 쓰기는 "학생이 자기에게 유리하게 조작할 수 있는가"를 기준으로 막는다.
+//  - GAS(서비스 계정)는 이 규칙을 우회하므로 트리거·엽전지급은 영향 없음.
+//
+// ⚠️ 시간은 전부 한국시간(KST = UTC+9) 기준으로 환산해 검사한다.
+//    Firestore 규칙의 request.time은 UTC라서, KST 시각에서 9시간을 빼서 비교한다.
+// ═══════════════════════════════════════════════════════════════
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // UTC 자정 기준 경과 분(0~1439)
+    function utcMinutes() {
+      return request.time.hours() * 60 + request.time.minutes();
+    }
+
+    // ── 방과후 출석 체크인 ──────────────────────────────────
+    // 학생이 수업 시작(18:30 KST) 이후 그날 24시(KST)까지 직접 찍는다.
+    // 결석은 따로 저장하지 않는다 — "기록이 없으면 결석"으로 조회 시 계산.
+    //   → 자정이 지나면 자동으로 결석이 확정되므로 마감 트리거가 필요 없다.
+    //
+    // KST 18:30~24:00  ==  UTC 09:30~15:00 (같은 UTC 날짜 안에 들어옴)
+    //   09:30 = 570분,  15:00 = 900분
+    match /asCheckIn/{docId} {
+      allow read: if true;
+
+      allow create: if
+           // 시각은 서버 시계만 인정 — 학생이 날짜·시각을 위조할 수 없다
+           request.resource.data.at == request.time
+           // 수업 시작(18:30 KST) 이후, 그날 자정(24:00 KST) 이전에만
+        && utcMinutes() >= 570
+        && utcMinutes() <  900
+           // 허용 필드 고정
+        && request.resource.data.keys().hasOnly(['at','subject','name','track'])
+        && request.resource.data.name is string
+        && request.resource.data.subject is string;
+
+      // 한 번 찍으면 못 바꾼다. 정정은 교사가 asOverride에 따로 남긴다.
+      allow update, delete: if false;
+    }
+
+    // ── 교사 출석 정정 ─────────────────────────────────────
+    // 학생이 못 찍었지만 실제로는 참석한 경우 등, 교사가 덮어쓰는 기록.
+    // ⚠️ 지금은 진짜 로그인이 없어 "교사임"을 규칙으로 검증할 수 없다.
+    //    Firebase Auth를 붙이기 전까지는 열어둘 수밖에 없다.
+    //    (엽전에 영향이 없는 순수 기록이라 악용 유인은 낮음)
+    match /asOverride/{docId} {
+      allow read: if true;
+      allow write: if request.resource == null
+                   || request.resource.data.keys().hasOnly(['status','by','at','subject','name']);
+    }
+
+    // ── 학생 명부 ──────────────────────────────────────────
+    // 엽전 잔액이 여기 있다. 클라이언트가 늘리는 방향으로는 절대 못 쓰게 한다.
+    match /members/{id} {
+      allow read: if true;
+
+      // 스트릭 프리즈 구매: 엽전이 정확히 가격만큼 줄고 프리즈가 딱 1 늘 때만 허용.
+      // 이 조합이 아니면(엽전만 늘리기, 프리즈만 늘리기, 가격 깎기) 전부 거부된다.
+      allow update: if
+           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['coins','freezes'])
+        && request.resource.data.coins   == resource.data.coins   - 10
+        && request.resource.data.freezes == resource.data.freezes + 1
+        && request.resource.data.coins   >= 0;
+
+      allow create, delete: if false;   // 명부 추가·삭제는 GAS(교사)만
+    }
+
+    // ── 그 외 전부 ─────────────────────────────────────────
+    // 읽기만 허용. 쓰기는 GAS(서비스 계정)를 통해서만 — 규칙을 우회하므로 정상 동작.
+    match /{document=**} {
+      allow read: if true;
+      allow write: if false;
+    }
+  }
+}
