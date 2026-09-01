@@ -315,3 +315,15 @@ false인 이유: 학생들이 구 앱을 쓰는 동안엔 체크인 기록이 0�
 | 출결·플래너·상담·저잣거리·엽전기록 화면 | 대기 | **예** — 같은 이유 |
 
 **⚠️ 구조적 제약**: "GAS 제거"를 완성하려면 나머지 시트(Attendance/PointLog/Planner/Counseling/Market 등)를 Firestore로 미러링해야 하고, 그건 code.gs 수정+배포가 **한 번은 반드시** 필요하다. 배포를 미루는 동안에는 Firestore에 이미 있는 데이터(members·examScores·schedule)로 만들 수 있는 화면부터 진행한다.
+
+### 9.1 GAS 완전 제거 무료 대안 조사 (2026-09-01, 웹검색 검증)
+
+사용자 요청 "GAS를 빼면서도 무료로 할 수 있는 방법 재조사" 결과: **있음 — Cloudflare Workers 무료 플랜**(카드 등록 불필요).
+- Cron Triggers 무료 포함(워커당 3개, 1분 단위). 트리거 7개는 "30분마다 1개 크론 → KST 시각 보고 내부 분기" 패턴이면 크론 1개로 전부 커버
+- FCM HTTP v1 발송 가능(WebCrypto RS256으로 서비스계정 JWT 서명, fcm-cloudflare-workers 라이브러리 실존)
+- Firestore admin 접근도 같은 JWT 흐름으로 가능(규칙 우회) → 결석 -2냥 등 서버 판단 쓰기 OK
+- 교사 엽전 지급도 워커 HTTP 엔드포인트(시크릿 헤더)로 대체 가능 — GAS 1~3초 → ~0.1초
+- 무료 한도 10만 req/일(우리 사용량의 수천 배), CPU 10ms/호출(I/O 대기는 미포함이라 충분)
+- 주의: 실패 시 자동 재시도 없음 → 기존 _jobAlreadyRan 멱등 패턴 이식 + 30분 틱 catch-up으로 해결
+- 기각한 대안: GitHub Actions cron(15분~수시간 지연 상습, 시각 민감한 결석처리에 부적합), Deno Deploy/Supabase(가능하나 CF보다 이점 없음), Blaze(카드 필요)
+- **결정 대기**: 사용자 승인 시 GAS 트리거+푸시+교사지급 전부를 CF Worker 1개로 이관 → GAS 완전 제거 경로 확정
