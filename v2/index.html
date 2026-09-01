@@ -257,7 +257,14 @@ function kstRange(dateStr){
 window.FS = {
   async schedule(){
     const s = await getDoc(doc(db,'schedule','afterschool'));
-    return s.exists() ? s.data() : { weekly:[], exceptions:[] };
+    if (!s.exists()) return { weekly:[], exceptions:[] };
+    // GAS가 weekly/exceptions를 JSON 문자열로 저장한다 — 배열이면 그대로, 문자열이면 파싱
+    const parse = v => {
+      if (Array.isArray(v)) return v;
+      try { const p = JSON.parse(v); return Array.isArray(p) ? p : []; } catch(e){ return []; }
+    };
+    const d = s.data();
+    return { weekly: parse(d.weekly), exceptions: parse(d.exceptions) };
   },
   async members(){
     const snap = await getDocs(collection(db,'members'));
