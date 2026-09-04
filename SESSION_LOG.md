@@ -365,3 +365,10 @@ CF Workers 이관은 **기각**(사용자: "그럼 냅두자"). 근거: 사용�
 
 ### 10.3 미완 항목
 - **출결 Firestore 마이그레이션 미실행 확인됨**(`attendance` 컬렉션 비어있음, 2026-09-04 확인). `migrate_attendance.gs`를 편집기에서 `migrateAttendanceToFirestore` 실행해야 스트릭 작업 진행 가능.
+
+### 10.4 사고 기록: code.gs 공개 저장소 유출 (2026-09-04)
+`git add -A` 사용으로 `code.gs`가 커밋 `21de293`, `f0b4716`에 포함돼 공개 저장소에 약 30분간 노출됨.
+- **노출 내용**: 백엔드 로직 전체 + 서비스계정 **이메일**(주석 1줄). **개인키·API키·VAPID키·GAS URL은 포함되지 않음**(개인키는 Script Properties에만 존재, 나머지는 원래 index.html에 있는 공개값) → 실질 피해 없음.
+- **조치**: `git rm --cached code.gs`로 최신 트리에서 제거(커밋 `7ce83ba`), `.gitignore`에 `code.gs`/`*.gs`/`backup/` 등록.
+- **사용자 결정**: 히스토리 정리(force push)는 **하지 않음**(선택지 B). 과거 커밋 2개에는 남아있으나 개인키가 없어 위험 낮다고 판단.
+- **재발 방지**: 앞으로 `git add -A` 금지, **추가할 파일을 명시적으로 지정**할 것.
