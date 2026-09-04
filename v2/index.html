@@ -536,7 +536,8 @@ async function openStreakModal(){
   var html = '<div class="modal-box">'+
     '<div style="text-align:center;padding:6px 0 18px">'+
       '<div style="font-size:2.8rem;line-height:1">🔥</div>'+
-      '<div style="font-size:2.6rem;font-weight:800;letter-spacing:-2px;margin-top:6px">'+s.streak+'<small style="font-size:1.1rem;font-weight:700;margin-left:3px">일 연속</small></div>'+
+      '<div style="font-size:2.6rem;font-weight:800;letter-spacing:-2px;margin-top:6px">'+s.streak+
+        '<small style="font-size:1.1rem;font-weight:700;margin-left:5px;letter-spacing:-.3px">일 연속</small></div>'+
       '<div style="font-size:.8rem;color:var(--ink-mute);margin-top:6px">최장 기록 '+s.longest+'일</div>'+
     '</div>';
 
@@ -553,7 +554,7 @@ async function openStreakModal(){
 
   html += '<div class="sec-label" style="margin:14px 2px 8px">기록</div><div class="card">'+
     '<div class="row" style="cursor:default"><div class="row-main"><div class="row-t">스트릭 프리즈</div>'+
-      '<div class="row-s">하루 빠져도 연속을 지켜줘요 · 저잣거리에서 '+FREEZE_COST+'냥</div></div>'+
+      '<div class="row-s">하루 빠져도 연속을 지켜줘요<br>저잣거리에서 '+FREEZE_COST+'냥에 살 수 있어요</div></div>'+
       '<div class="row-v">'+s.freezes+'개</div></div>';
 
   if (s.brokenAt && s.freezes > 0)
