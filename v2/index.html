@@ -436,9 +436,13 @@ function isWeekend(ds){ var w = new Date(ds+'T00:00:00+09:00').getDay(); return 
 function dayVerdict(status, ds, todayStr, schoolDays, freezeSet){
   if (status === '출석') return 'up';
   if (status === '지각' || status === '공결') return 'keep';
-  if (ds === todayStr)            return 'skip';   // 오늘은 아직 판정하지 않음
-  if (!schoolDays.has(ds))        return 'skip';   // 공휴일·재량휴업일
-  if (freezeSet.has(ds))          return 'keep';   // 프리즈로 메운 날
+  // 결석은 오늘이라도 이미 확정된 판정이므로 끊는다 (프리즈로 메운 날만 예외)
+  if (status === '결석') return freezeSet.has(ds) ? 'keep' : 'break';
+
+  // 여기부터는 그 날 기록이 아예 없는 경우
+  if (ds === todayStr)     return 'skip';   // 오늘은 아직 인증 전 — 판정 보류
+  if (!schoolDays.has(ds)) return 'skip';   // 공휴일·재량휴업일(전교생 기록 없음)
+  if (freezeSet.has(ds))   return 'keep';   // 프리즈로 메운 날
   return 'break';
 }
 
