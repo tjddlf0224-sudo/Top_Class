@@ -3310,14 +3310,14 @@ function _sendPushTokens(tokenObjs, title, body, link) {
 }
 
 /** 전체 발송 */
-function _sendPushToAll(title, body) {
+function _sendPushToAll(title, body, link) {
   const data = getValidData(_getPushSheet());
   const list = [];
   for (let i = 1; i < data.length; i++) {
     const tk = String(data[i][0]).trim();
     if (tk) list.push({ row: i + 1, token: tk });
   }
-  return _sendPushTokens(list, title, body);
+  return _sendPushTokens(list, title, body, link);
 }
 
 /** 특정 이름(학생/교사)에게만 발송 — 본인 행동/대상 알림용 */
@@ -3356,7 +3356,7 @@ function _classTrack(c) {
 }
 
 /** 특정 반(공무원/공기업) 학생 + 교사에게만 발송 */
-function _sendPushToTrack(track, title, body) {
+function _sendPushToTrack(track, title, body, link) {
   const mem = getValidData(SS.getSheetByName('Member'));
   const names = new Set();
   for (let i = 1; i < mem.length; i++) {
@@ -3373,7 +3373,7 @@ function _sendPushToTrack(track, title, body) {
       if (tk) list.push({ row: i + 1, token: tk });
     }
   }
-  return _sendPushTokens(list, title, body);
+  return _sendPushTokens(list, title, body, link);
 }
 
 /**
@@ -3513,6 +3513,97 @@ function saveAfterSchoolAttendance(p) {
  * 아침자습(오늘 기준)과 달리 '어제' 수업을 다루므로, 어제 날짜는 06시 경계와 무관하게
  * 현재 시각에서 24시간을 빼 계산한다(이 트리거 자체가 06시보다 한참 뒤인 8~9시 실행이라 안전).
  */
+/* =========================================================
+   ★ 방과후 학생 셀프 출석체크 (v2 앱 기능)
+   수업 시작 18:30 / 마감 당일 24:00, 전부 한국시간.
+   결석은 저장하지 않고 "체크인 기록이 없으면 결석"으로 계산한다
+   → 자정이 지나면 자동으로 확정되므로 마감 트리거가 필요 없다.
+
+   ⚠️ AS_SELFCHECK_ENABLED
+     학생들이 아직 구 앱을 쓰는 동안에는 체크인 기록이 0건이라
+     아침 알림이 "전원 결석"으로 잘못 나간다. 그래서 기본값을 false로 두고,
+     v2를 학생들에게 여는 날 true로 바꾼다(이 한 줄만 바꾸면 됨).
+   ========================================================= */
+const AS_SELFCHECK_ENABLED = false;
+const V2_URL = 'https://tjddlf0224-sudo.github.io/Top_Class/v2/';
+
+/** 특정 날짜의 방과후 체크인 기록 조회 (Firestore asCheckIn) */
+function _fsReadCheckIns(dateStr) {
+  try {
+    const token   = _getFsAccessToken();
+    // 체크인 가능 구간은 그날 18:30 ~ 다음날 00:00 (KST)
+    const from    = new Date(dateStr + 'T18:30:00+09:00');
+    const nextDay = new Date(new Date(dateStr + 'T00:00:00+09:00').getTime() + 86400000);
+    const to      = new Date(Utilities.formatDate(nextDay, 'Asia/Seoul', 'yyyy-MM-dd') + 'T00:00:00+09:00');
+
+    const res = UrlFetchApp.fetch(
+      'https://firestore.googleapis.com/v1/projects/' + FS_PROJECT_ID +
+      '/databases/(default)/documents:runQuery',
+      { method: 'post', contentType: 'application/json',
+        headers: { Authorization: 'Bearer ' + token },
+        payload: JSON.stringify({ structuredQuery: {
+          from: [{ collectionId: 'asCheckIn' }],
+          where: { compositeFilter: { op: 'AND', filters: [
+            { fieldFilter: { field: { fieldPath: 'at' }, op: 'GREATER_THAN_OR_EQUAL',
+                             value: { timestampValue: from.toISOString() } } },
+            { fieldFilter: { field: { fieldPath: 'at' }, op: 'LESS_THAN',
+                             value: { timestampValue: to.toISOString() } } }
+          ]}}
+        }}),
+        muteHttpExceptions: true });
+
+    if (res.getResponseCode() !== 200) {
+      Logger.log('[FS] asCheckIn 조회 실패: ' + res.getContentText().slice(0, 200));
+      return [];
+    }
+    const out = [];
+    (JSON.parse(res.getContentText()) || []).forEach(function(r) {
+      if (!r.document || !r.document.fields) return;
+      const f = r.document.fields;
+      out.push({ name:    (f.name    && f.name.stringValue)    || '',
+                 subject: (f.subject && f.subject.stringValue) || '' });
+    });
+    return out;
+  } catch(e) {
+    Logger.log('[FS] asCheckIn 조회 오류: ' + e.message);
+    return [];
+  }
+}
+
+/**
+ * [트리거] 매일 18:30 — 방과후 수업 시작, 학생에게 출석체크 알림
+ * ⚠️ v2를 학생들에게 열기 전까지는 이 트리거를 등록하지 말 것.
+ */
+function pushAfterSchoolCheckIn() {
+  const today = toDateStr();
+  const dow   = new Date(today + 'T00:00:00+09:00').getDay();
+  if (dow === 0 || dow === 6) { Logger.log('[방과후체크인알림] 주말 → 건너뜀'); return; }
+  if (isTriggerPaused(today)) { Logger.log('[방과후체크인알림] 일시정지 → 건너뜀'); return; }
+  if (isKoreanHoliday(today)) { Logger.log('[방과후체크인알림] 공휴일 → 건너뜀'); return; }
+  if (_jobAlreadyRan('asCheckInPush', today)) { Logger.log('[방과후체크인알림] 이미 실행됨 → 건너뜀'); return; }
+
+  const classes = _getTodayAfterSchool(today);
+  if (!classes.length) {
+    Logger.log('[방과후체크인알림] 오늘 방과후 수업 없음');
+    _markJobRan('asCheckInPush', today);
+    return;
+  }
+
+  const byTrack = { '공무원': [], '공기업': [], '공통': [] };
+  classes.forEach(function(c) { byTrack[_classTrack(c)].push(c.subject); });
+
+  const link = V2_URL + '?goto=after';
+  const msg  = function(subs) { return subs.join(', ') + ' — 앱에서 출석을 체크하세요 (오늘 24시 마감)'; };
+
+  if (byTrack['공통'].length)   _sendPushToAll('✅ 방과후 출석체크', msg(byTrack['공통']), link);
+  if (byTrack['공무원'].length) _sendPushToTrack('공무원', '✅ 방과후 출석체크', msg(byTrack['공무원']), link);
+  if (byTrack['공기업'].length) _sendPushToTrack('공기업', '✅ 방과후 출석체크', msg(byTrack['공기업']), link);
+
+  _markJobRan('asCheckInPush', today);
+  Logger.log('[방과후체크인알림] 발송: ' + classes.map(function(c){ return c.subject; }).join(', '));
+}
+
+/** [트리거] 다음날 아침 — 교사에게 어제 방과후 출결 알림 */
 function pushAfterSchoolAttendanceCheck() {
   const yesterday = toDateStr(new Date(new Date().getTime() - 24 * 3600 * 1000));
 
@@ -3526,10 +3617,42 @@ function pushAfterSchoolAttendanceCheck() {
     return;
   }
 
-  const names = classes.map(function(c) { return c.subject; }).join(', ');
-  const body  = yesterday + ' 방과후 수업(' + names + ') 출석을 체크해주세요.';
-  const link  = 'https://tjddlf0224-sudo.github.io/Top_Class/?goto=asatt&date=' + yesterday;
-  try { _sendPushToStudent('교사', '📝 방과후 출석 체크', body, link); }
+  let title, body, link;
+
+  if (!AS_SELFCHECK_ENABLED) {
+    // 구 앱 운영 중 — 종전대로 "체크해주세요"만. (체크인 기록이 없으므로 결석 집계를 하면 안 됨)
+    title = '📝 방과후 출석 체크';
+    body  = yesterday + ' 방과후 수업(' + classes.map(function(c){ return c.subject; }).join(', ') + ') 출석을 체크해주세요.';
+    link  = 'https://tjddlf0224-sudo.github.io/Top_Class/?goto=asatt&date=' + yesterday;
+  } else {
+    // v2 운영 중 — 학생 셀프 체크인 결과를 집계해 결석자를 바로 알려준다
+    const checked = {};   // 수업명 -> { 이름: true }
+    _fsReadCheckIns(yesterday).forEach(function(r) {
+      if (!checked[r.subject]) checked[r.subject] = {};
+      checked[r.subject][r.name] = true;
+    });
+
+    const memRows = getValidData(SS.getSheetByName('Member')).slice(1)
+      .filter(function(r) { const n = String(r[1] || '').trim(); return n && n !== '교사' && r[2] !== 'teacher'; });
+
+    const lines = classes.map(function(c) {
+      const track  = _classTrack(c);
+      const roster = memRows
+        .filter(function(r) { return track === '공통' || (String(r[6] || '').trim() || '공무원') === track; })
+        .map(function(r) { return String(r[1]).trim(); });
+      const map    = checked[c.subject] || {};
+      const absent = roster.filter(function(n) { return !map[n]; });
+      return absent.length
+        ? c.subject + ' 결석 ' + absent.length + '명(' + absent.join(', ') + ')'
+        : c.subject + ' 전원 출석';
+    });
+
+    title = '📝 어제 방과후 출결';
+    body  = yesterday + ' · ' + lines.join(' / ');
+    link  = V2_URL + '?goto=after&date=' + yesterday;
+  }
+
+  try { _sendPushToStudent('교사', title, body, link); }
   catch(e) { Logger.log('[방과후출석체크] 알림 오류: ' + e.message); }
   _markJobRan('asAttCheck', yesterday);
 }
