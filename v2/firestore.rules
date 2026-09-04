@@ -72,14 +72,28 @@ service cloud.firestore {
     match /members/{id} {
       allow read: if true;
 
-      // 스트릭 프리즈 구매: 엽전이 정확히 10냥 줄고 프리즈가 딱 1 늘 때만 허용.
-      // 엽전만 늘리기 / 프리즈만 늘리기 / 가격 깎기는 전부 거부된다.
-      // (freezes 필드가 아직 없는 학생도 있으므로 get(...,0)으로 기본값 처리)
-      allow update: if
-           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['coins','freezes'])
-        && request.resource.data.coins == resource.data.coins - 10
-        && request.resource.data.get('freezes', 0) == resource.data.get('freezes', 0) + 1
-        && request.resource.data.coins >= 0;
+      // 허용되는 쓰기는 딱 두 가지 모양뿐 — 그 외는 전부 거부된다.
+      // (freezes/freezeDates 필드가 아직 없는 학생도 있어 get(...,기본값)으로 처리)
+      allow update: if isFreezePurchase() || isFreezeUse();
+
+      // ① 프리즈 구매: 엽전이 정확히 10냥 줄고 프리즈가 딱 1 늘 때만.
+      //    엽전만 늘리기 / 프리즈만 늘리기 / 가격 깎기는 모두 막힌다.
+      function isFreezePurchase() {
+        return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['coins','freezes'])
+            && request.resource.data.coins == resource.data.coins - 10
+            && request.resource.data.get('freezes', 0) == resource.data.get('freezes', 0) + 1
+            && request.resource.data.coins >= 0;
+      }
+
+      // ② 프리즈 사용: 프리즈가 정확히 1 줄고, 메운 날짜 목록만 함께 바뀔 때.
+      //    엽전은 건드릴 수 없고, 보유량 이상은 못 쓴다(0 미만 금지).
+      //    freezeDates의 '내용'은 규칙으로 검증할 수 없지만, 쓸 수 있는 횟수가
+      //    구매한 개수로 묶여 있어(엽전 소모) 경제적으로는 조작이 불가능하다.
+      function isFreezeUse() {
+        return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['freezes','freezeDates'])
+            && request.resource.data.freezes == resource.data.get('freezes', 0) - 1
+            && request.resource.data.freezes >= 0;
+      }
 
       allow create, delete: if false;   // 명부 추가·삭제는 GAS(교사)만
     }

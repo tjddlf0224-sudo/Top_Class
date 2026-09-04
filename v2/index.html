@@ -81,6 +81,15 @@ input::placeholder{color:#b4b4c8;}
 .chip{display:inline-flex;align-items:center;gap:3px;font-size:0.7rem;font-weight:700;
   padding:2px 8px;border-radius:20px;background:var(--accent-soft);color:var(--accent);}
 .chip-gold{background:var(--gold-soft);color:var(--gold);}
+.chip-risk{background:var(--rose-soft);color:var(--rose);animation:pulse 1.8s ease-in-out infinite;}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.55}}
+
+/* 모달 */
+.modal-overlay{position:fixed;inset:0;background:rgba(26,26,46,.45);backdrop-filter:blur(4px);
+  display:flex;align-items:center;justify-content:center;z-index:9990;padding:20px;
+  padding-top:calc(20px + var(--safe-top));overflow-y:auto;}
+.modal-box{background:var(--surface);border-radius:18px;padding:22px;width:100%;max-width:380px;
+  box-shadow:0 20px 60px rgba(26,26,46,.2);}
 .icon-btn{background:none;border:none;cursor:pointer;padding:6px;color:var(--ink-mute);
   border-radius:8px;transition:background .15s,color .15s;position:relative;}
 .icon-btn:hover{background:var(--line-soft);color:var(--ink);}
@@ -240,8 +249,18 @@ main{padding:6px 18px calc(32px + var(--safe-bottom));}
 <!-- ═══ Firebase (조회·체크인 전부 여기로. GAS 안 거침) ═══ -->
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-app.js";
-import { getFirestore, doc, getDoc, setDoc, collection, getDocs, query, where, serverTimestamp }
+import { getFirestore, doc, getDoc, setDoc, updateDoc, collection, getDocs, query, where, serverTimestamp }
   from "https://www.gstatic.com/firebasejs/12.12.1/firebase-firestore.js";
+
+/* GAS가 배열·객체를 JSON 문자열로 저장하므로(schedule/attendance 동일 패턴) 읽을 때 되돌린다 */
+function parseObj(v){
+  if (v && typeof v === 'object') return v;
+  try { const p = JSON.parse(v); return (p && typeof p === 'object') ? p : {}; } catch(e){ return {}; }
+}
+function parseList(v){
+  if (Array.isArray(v)) return v;
+  try { const p = JSON.parse(v); return Array.isArray(p) ? p : []; } catch(e){ return []; }
+}
 
 const db = getFirestore(initializeApp({
   apiKey:"AIzaSyDRViuzADHxHnvv78jfnvPbAJ5hH3wzpCw",
@@ -281,10 +300,44 @@ window.FS = {
     snap.forEach(d => { const v = d.data();
       const n = String(v.name||'').trim();
       if (n && n !== '교사' && n !== '테스트' && v.role !== 'teacher')
-        out.push({ name:n, track:String(v.track||'공무원').trim(), coins:Number(v.coins)||0 });
+        out.push({ id:d.id, name:n, track:String(v.track||'공무원').trim(),
+                   coins:Number(v.coins)||0, freezes:Number(v.freezes)||0,
+                   freezeDates:parseList(v.freezeDates) });
     });
     return out.sort((a,b)=>a.name.localeCompare(b.name,'ko'));
   },
+
+  /* 출결 전체 조회 — 학생 1명당 문서 1개(days는 JSON 문자열).
+     전교생 문서를 함께 읽는 이유: "그 날이 수업일이었나"를 알아야
+     공휴일·재량휴업일에 스트릭이 잘못 끊기지 않는다.
+     (아무도 기록이 없는 날 = 수업일 아님) */
+  async attendanceAll(){
+    const snap = await getDocs(collection(db,'attendance'));
+    const byName = {}, schoolDays = new Set();
+    snap.forEach(d => {
+      const v = d.data();
+      const days = parseObj(v.days);
+      byName[d.id] = days;
+      Object.keys(days).forEach(k => schoolDays.add(k));
+    });
+    return { byName, schoolDays };
+  },
+
+  /* 스트릭 프리즈 구매 — 엽전 10냥 차감 + 프리즈 +1.
+     이 정확한 조합일 때만 보안규칙이 통과시킨다(엽전 조작 차단). */
+  async buyFreeze(memberId, coins, freezes){
+    await updateDoc(doc(db,'members',memberId),
+      { coins: coins - 10, freezes: freezes + 1 });
+  },
+
+  /* 프리즈 사용 — 끊긴 날짜를 메운다. 프리즈가 정확히 1 줄어야 규칙 통과. */
+  async useFreeze(memberId, freezes, freezeDates, dateStr){
+    await updateDoc(doc(db,'members',memberId), {
+      freezes: freezes - 1,
+      freezeDates: JSON.stringify(freezeDates.concat([dateStr]))
+    });
+  },
+
   async checkIns(dateStr){
     const { from, to } = kstRange(dateStr);
     const snap = await getDocs(query(collection(db,'asCheckIn'),
@@ -362,6 +415,187 @@ function renderView(){
   if(TAB==='after'){renderAfterSchool(v);return;}
   v.innerHTML=stub();fillIcoSlots(v);
 }
+
+/* ═══ 연속출석 스트릭 ═══════════════════════════════════
+   판정 규칙 (2026-09-01 확정)
+     출석 → +1 (스트릭이 늘어나는 유일한 경우)
+     지각 → 유지되되 늘지 않음   ← 이 반은 결석보다 지각이 압도적이라 핵심
+     공결 → 유지, 늘지 않음
+     결석 → 끊김 (단, 그 날짜를 프리즈로 메웠으면 유지)
+     주말 / 수업일 아닌 날(전교생 기록 없음) → 건너뜀
+     오늘 아직 미인증 → 판정 보류(관용)
+   프리즈: 저잣거리에서 엽전 10냥에 구매, 끊긴 날에 사용해 되살림 */
+var MILESTONES = [3, 7, 30, 100];
+var FREEZE_COST = 10;
+var streakCache = null;   // { streak, longest, atRisk, brokenAt, freezes, member }
+
+function ymd(d){ return d.getFullYear()+'-'+pad2(d.getMonth()+1)+'-'+pad2(d.getDate()); }
+function isWeekend(ds){ var w = new Date(ds+'T00:00:00+09:00').getDay(); return w===0||w===6; }
+
+/** 하루의 판정: 'up'(증가) | 'keep'(유지) | 'skip'(무관) | 'break'(끊김) */
+function dayVerdict(status, ds, todayStr, schoolDays, freezeSet){
+  if (status === '출석') return 'up';
+  if (status === '지각' || status === '공결') return 'keep';
+  if (ds === todayStr)            return 'skip';   // 오늘은 아직 판정하지 않음
+  if (!schoolDays.has(ds))        return 'skip';   // 공휴일·재량휴업일
+  if (freezeSet.has(ds))          return 'keep';   // 프리즈로 메운 날
+  return 'break';
+}
+
+/** 오늘부터 거꾸로 세어 현재 연속일 + 끊긴 날짜를 찾는다 */
+function calcStreak(myDays, schoolDays, freezeSet, todayStr){
+  var streak = 0, brokenAt = null;
+  var cur = new Date(todayStr + 'T00:00:00+09:00');
+  for (var i = 0; i < 400; i++){
+    var ds = ymd(cur);
+    if (!isWeekend(ds)){
+      var v = dayVerdict((myDays[ds]||{}).s, ds, todayStr, schoolDays, freezeSet);
+      if (v === 'up') streak++;
+      else if (v === 'break'){ brokenAt = ds; break; }
+    }
+    cur = new Date(cur.getTime() - 86400000);
+  }
+  return { streak: streak, brokenAt: brokenAt };
+}
+
+/** 역대 최장 기록 — 과거→현재로 한 번 훑으며 최대 연속 구간을 찾는다 */
+function calcLongest(myDays, schoolDays, freezeSet, todayStr){
+  var dates = Object.keys(myDays).sort();
+  if (!dates.length) return 0;
+  var best = 0, run = 0;
+  var cur = new Date(dates[0] + 'T00:00:00+09:00');
+  var end = new Date(todayStr + 'T00:00:00+09:00');
+  while (cur <= end){
+    var ds = ymd(cur);
+    if (!isWeekend(ds)){
+      var v = dayVerdict((myDays[ds]||{}).s, ds, todayStr, schoolDays, freezeSet);
+      if (v === 'up'){ run++; if (run > best) best = run; }
+      else if (v === 'break') run = 0;
+    }
+    cur = new Date(cur.getTime() + 86400000);
+  }
+  return best;
+}
+
+/** 오늘 아직 출결 기록이 없어 "오늘 결석하면 끊기는" 상태인지 */
+function calcAtRisk(myDays, todayStr, streak){
+  if (streak <= 0) return false;
+  if (isWeekend(todayStr)) return false;
+  return !myDays[todayStr];
+}
+
+async function loadStreak(force){
+  if (streakCache && !force) return streakCache;
+  var att = await FS.attendanceAll();
+  var mem = (await FS.members()).find(function(m){ return m.name === ME.name; });
+  var freezeSet = new Set((mem && mem.freezeDates) || []);
+  var myDays = att.byName[ME.name] || {};
+  var today  = kstToday();
+
+  var r = calcStreak(myDays, att.schoolDays, freezeSet, today);
+  streakCache = {
+    streak:   r.streak,
+    brokenAt: r.brokenAt,
+    longest:  Math.max(r.streak, calcLongest(myDays, att.schoolDays, freezeSet, today)),
+    atRisk:   calcAtRisk(myDays, today, r.streak),
+    freezes:  (mem && mem.freezes) || 0,
+    member:   mem
+  };
+  return streakCache;
+}
+
+/** 헤더 알약 갱신 (0일이면 숨김, 위험하면 펄스) */
+async function refreshStreakChip(){
+  var el = document.getElementById('uStreak');
+  if (!el || ROLE !== 'student') return;
+  try {
+    var s = await loadStreak();
+    if (!s.streak){ el.style.display = 'none'; return; }
+    el.style.display = '';
+    el.className = 'chip ' + (s.atRisk ? 'chip-risk' : 'chip-gold');
+    el.textContent = '🔥 ' + s.streak + '일';
+    el.style.cursor = 'pointer';
+    el.onclick = openStreakModal;
+  } catch(e){ el.style.display = 'none'; }
+}
+
+function nextMilestone(streak){
+  for (var i = 0; i < MILESTONES.length; i++) if (MILESTONES[i] > streak) return MILESTONES[i];
+  return null;
+}
+
+async function openStreakModal(){
+  var s = await loadStreak();
+  var next = nextMilestone(s.streak);
+  var earned = MILESTONES.filter(function(m){ return s.streak >= m || s.longest >= m; });
+
+  var html = '<div class="modal-box">'+
+    '<div style="text-align:center;padding:6px 0 18px">'+
+      '<div style="font-size:2.8rem;line-height:1">🔥</div>'+
+      '<div style="font-size:2.6rem;font-weight:800;letter-spacing:-2px;margin-top:6px">'+s.streak+'<small style="font-size:1.1rem;font-weight:700;margin-left:3px">일 연속</small></div>'+
+      '<div style="font-size:.8rem;color:var(--ink-mute);margin-top:6px">최장 기록 '+s.longest+'일</div>'+
+    '</div>';
+
+  if (s.atRisk)
+    html += '<div class="notice" style="background:var(--rose-soft);color:var(--rose);border-radius:10px;'+
+            'padding:11px 12px;margin-bottom:12px;cursor:default">'+ic('warn',15)+
+            '<span>오늘 아직 등교 인증 전이에요. 결석하면 '+s.streak+'일이 끊겨요</span></div>';
+
+  if (next)
+    html += '<div class="card pad" style="margin-bottom:12px;box-shadow:none;background:var(--line-soft)">'+
+      '<div class="blk-head"><div class="row-t">다음 목표 '+next+'일</div>'+
+      '<div class="row-v" style="color:var(--accent)">'+(next-s.streak)+'일 남음</div></div>'+
+      '<div class="bar"><i style="width:'+Math.round(s.streak/next*100)+'%"></i></div></div>';
+
+  html += '<div class="sec-label" style="margin:14px 2px 8px">기록</div><div class="card">'+
+    '<div class="row" style="cursor:default"><div class="row-main"><div class="row-t">스트릭 프리즈</div>'+
+      '<div class="row-s">하루 빠져도 연속을 지켜줘요 · 저잣거리에서 '+FREEZE_COST+'냥</div></div>'+
+      '<div class="row-v">'+s.freezes+'개</div></div>';
+
+  if (s.brokenAt && s.freezes > 0)
+    html += '<div class="row" style="cursor:default"><div class="row-main">'+
+      '<div class="row-t" style="color:var(--rose)">'+s.brokenAt.slice(5).replace('-','월 ')+'일에 끊겼어요</div>'+
+      '<div class="row-s">프리즈를 쓰면 그날을 메우고 이어집니다</div></div>'+
+      '<button class="btn btn-sm" onclick="useFreezeNow(\''+s.brokenAt+'\')">되살리기</button></div>';
+
+  html += '</div>';
+
+  if (earned.length)
+    html += '<div class="sec-label" style="margin:14px 2px 8px">달성한 배지</div>'+
+      '<div style="display:flex;gap:8px;flex-wrap:wrap">'+earned.map(function(m){
+        return '<span class="chip chip-gold" style="padding:6px 12px;font-size:.78rem">🏅 '+m+'일</span>';
+      }).join('')+'</div>';
+
+  html += '<button class="btn btn-outline" style="margin-top:16px" onclick="closeModal()">닫기</button></div>';
+  showModal(html);
+}
+
+async function useFreezeNow(dateStr){
+  var s = streakCache;
+  if (!s || !s.member || s.freezes <= 0) return;
+  try {
+    await FS.useFreeze(s.member.id, s.member.freezes, s.member.freezeDates, dateStr);
+    closeModal();
+    await loadStreak(true);
+    await refreshStreakChip();
+    renderView();
+    openStreakModal();
+  } catch(e){
+    alert('되살리지 못했습니다.\n' + (e.message || e));
+  }
+}
+
+/* 공용 모달 */
+function showModal(inner){
+  closeModal();
+  var el = document.createElement('div');
+  el.className = 'modal-overlay'; el.id = 'modal';
+  el.innerHTML = inner;
+  el.onclick = function(ev){ if (ev.target === el) closeModal(); };
+  document.body.appendChild(el);
+  fillIcoSlots(el);
+}
+function closeModal(){ var m = document.getElementById('modal'); if (m) m.remove(); }
 
 /* ═══ 방과후 출석체크 ═══════════════════════════════════
    수업 시작 18:30 · 마감 당일 24:00 (전부 한국시간)
@@ -536,7 +770,8 @@ function homeStudent(){
     '<div class="hero-inline">'+
       '<div>이번 주 출석<b>'+ok+'일</b></div>'+
       '<div>플래너<b>'+pct+'%</b></div>'+
-      '<div>연속 출석<b>'+ME.streak+'일</b></div>'+
+      '<div style="cursor:pointer" onclick="openStreakModal()">연속 출석'+
+        '<b id="heroStreak">'+(streakCache ? streakCache.streak : '–')+'일</b></div>'+
     '</div>'+
   '</div>'+
 
@@ -621,6 +856,13 @@ function applyRole(){
   document.getElementById('uStreak').style.display = t?'none':'';
   document.getElementById('btnReq').style.display = t?'':'none';
   renderTabs();renderView();
+  if (!t) refreshStreakChip().then(syncHeroStreak);
+}
+
+/** 홈 히어로의 연속출석 숫자를 스트릭 계산 결과로 채운다 */
+function syncHeroStreak(){
+  var el = document.getElementById('heroStreak');
+  if (el && streakCache) el.textContent = streakCache.streak + '일';
 }
 function logout(){document.getElementById('app').classList.add('hidden');
   document.getElementById('login').classList.remove('hidden');protoSync();}
