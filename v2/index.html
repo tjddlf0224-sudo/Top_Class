@@ -601,6 +601,24 @@ window.FS = {
       { date:dateStr, name, status, by, at: serverTimestamp() });
   },
 
+  /* 한 학생의 등교 기록 전체 — 스트릭은 과거를 통째로 훑어야 해서
+     날짜별로 조회하면 수백 번 읽게 된다. 이름으로 한 번에 가져온다. */
+  async amCheckInsOf(name){
+    const snap = await getDocs(query(collection(db,'amCheckIn'), where('name','==',name)));
+    const out = {};
+    snap.forEach(d => { const v = d.data();
+      if (!v.at || !v.at.seconds) return;
+      const k = new Date(v.at.seconds*1000 + 9*60*60*1000).toISOString().slice(0,10);
+      out[k] = v; });
+    return out;
+  },
+  async amOverridesOf(name){
+    const snap = await getDocs(query(collection(db,'amOverride'), where('name','==',name)));
+    const out = {};
+    snap.forEach(d => { const v = d.data(); if (v.date) out[String(v.date)] = v; });
+    return out;
+  },
+
   /* ── 엽전 원장 ─────────────────────────────────────
      잔액 = 개시잔액 + 원장 합계 + 계산분(출결·플래너·프리즈·저잣거리).
      계산할 수 있는 것은 원장에 쌓지 않는다 — 같은 사실을 두 군데 적으면
@@ -786,11 +804,19 @@ function verdictFromAt(at, dorm){
 /** 하루치 출결 판정. 판정할 근거가 없으면 null(보류)을 준다.
     우선순위: 교사 정정 > v2 기록 > 구앱(시트) 이력 > 계산(결석) */
 function attStatusOf(ds, ctx){
+  // 교사가 직접 고친 것은 무엇보다 우선한다(휴업일이라도 존중)
   if (ctx.ov && ctx.ov[ds])     return ctx.ov[ds].status;
+
+  // ⚠️ 휴업일이면 기록이 있어도 판정하지 않는다.
+  //    구앱은 공휴일·재량휴업일에도 결석을 찍어놓은 날이 있다(예: 2026-07-17 제헌절).
+  //    트리거가 학사일정을 모르고 돌았기 때문인데, 그대로 두면 쉬는 날에
+  //    스트릭이 끊기고 엽전도 -2씩 깎인다. 나이스 학사일정이 있는 지금은
+  //    달력을 기록보다 위에 둔다.
+  if (!isSchoolDay(ds))         return null;
+
   if (ctx.am && ctx.am[ds])     return verdictFromAt(ctx.am[ds].at, ctx.dorm);
   var leg = ctx.days && ctx.days[ds];
   if (leg && leg.s)             return leg.s;
-  if (!isSchoolDay(ds))         return null;            // 휴업일
   if (ds === ctx.today)         return null;            // 오늘은 아직 인증 전일 수 있다
   // 기록이 없는 수업일 — 그 구간을 실제로 담당하는 소스가 있을 때만 결석으로 센다.
   // 구앱 이력이 끝난 뒤 v2 전환 전까지는 아무도 담당하지 않으므로 보류한다.
@@ -1740,78 +1766,95 @@ function ymd(d){ return d.getFullYear()+'-'+pad2(d.getMonth()+1)+'-'+pad2(d.getD
 function dowOf(ds){ return new Date(ds+'T12:00:00Z').getUTCDay(); }
 function isWeekend(ds){ var w = dowOf(ds); return w===0||w===6; }
 
-/** 하루의 판정: 'up'(증가) | 'keep'(유지) | 'skip'(무관) | 'break'(끊김) */
-function dayVerdict(status, ds, todayStr, schoolDays, freezeSet){
-  if (status === '출석') return 'up';
-  if (status === '지각' || status === '공결') return 'keep';
-  // 결석은 오늘이라도 이미 확정된 판정이므로 끊는다 (프리즈로 메운 날만 예외)
-  if (status === '결석') return freezeSet.has(ds) ? 'keep' : 'break';
+/** 하루의 판정: 'up'(증가) | 'keep'(유지) | 'skip'(무관) | 'break'(끊김)
+    출결 판정은 attStatusOf에 맡긴다 — 교사정정 > v2기록 > 구앱이력 > 계산.
+    덕분에 교사가 출결을 고치면 스트릭도 자동으로 따라 바뀐다.
+    ⚠️ 예전엔 "전교생 중 아무도 기록이 없는 날 = 휴업일"이라는 휴리스틱을 썼다.
+       그래서 출결 데이터가 밀리면 수업일이 통째로 휴업일로 보였다.
+       지금은 나이스 학사일정(isSchoolDay)으로 판단한다. */
+function dayVerdict(ds, ctx, freezeSet){
+  var st = attStatusOf(ds, ctx);
+  if (st === '출석')                  return 'up';
+  if (st === '지각' || st === '공결') return 'keep';
+  if (st === '결석')                  return freezeSet.has(ds) ? 'keep' : 'break';
+  // null = 판정 보류: 휴업일 · 오늘(아직 인증 전) · 담당 소스가 없는 구간
+  return 'skip';
+}
 
-  // 여기부터는 그 날 기록이 아예 없는 경우
-  if (ds === todayStr)     return 'skip';   // 오늘은 아직 인증 전 — 판정 보류
-  if (!schoolDays.has(ds)) return 'skip';   // 공휴일·재량휴업일(전교생 기록 없음)
-  if (freezeSet.has(ds))   return 'keep';   // 프리즈로 메운 날
-  return 'break';
+/** 날짜 문자열을 하루씩 옮긴다 — UTC 정오 기준이라 기기 시간대에 안 흔들린다 */
+function shiftDay(ds, n){
+  return new Date(new Date(ds+'T12:00:00Z').getTime() + n*86400000)
+           .toISOString().slice(0,10);
 }
 
 /** 오늘부터 거꾸로 세어 현재 연속일 + 끊긴 날짜를 찾는다 */
-function calcStreak(myDays, schoolDays, freezeSet, todayStr){
-  var streak = 0, brokenAt = null;
-  var cur = new Date(todayStr + 'T00:00:00+09:00');
+function calcStreak(ctx, freezeSet, todayStr){
+  var streak = 0, brokenAt = null, ds = todayStr;
   for (var i = 0; i < 400; i++){
-    var ds = ymd(cur);
     if (!isWeekend(ds)){
-      var v = dayVerdict((myDays[ds]||{}).s, ds, todayStr, schoolDays, freezeSet);
+      var v = dayVerdict(ds, ctx, freezeSet);
       if (v === 'up') streak++;
       else if (v === 'break'){ brokenAt = ds; break; }
     }
-    cur = new Date(cur.getTime() - 86400000);
+    ds = shiftDay(ds, -1);
   }
   return { streak: streak, brokenAt: brokenAt };
 }
 
-/** 역대 최장 기록 — 과거→현재로 한 번 훑으며 최대 연속 구간을 찾는다 */
-function calcLongest(myDays, schoolDays, freezeSet, todayStr){
-  var dates = Object.keys(myDays).sort();
-  if (!dates.length) return 0;
-  var best = 0, run = 0;
-  var cur = new Date(dates[0] + 'T00:00:00+09:00');
-  var end = new Date(todayStr + 'T00:00:00+09:00');
-  while (cur <= end){
-    var ds = ymd(cur);
+/** 역대 최장 기록 — 가장 오래된 기록부터 오늘까지 훑으며 최대 연속 구간을 찾는다 */
+function calcLongest(ctx, freezeSet, todayStr){
+  var all = Object.keys(ctx.days || {})
+              .concat(Object.keys(ctx.am || {}))
+              .concat(Object.keys(ctx.ov || {})).sort();
+  if (!all.length) return 0;
+  var best = 0, run = 0, ds = all[0];
+  for (var i = 0; i < 800 && ds <= todayStr; i++){
     if (!isWeekend(ds)){
-      var v = dayVerdict((myDays[ds]||{}).s, ds, todayStr, schoolDays, freezeSet);
+      var v = dayVerdict(ds, ctx, freezeSet);
       if (v === 'up'){ run++; if (run > best) best = run; }
       else if (v === 'break') run = 0;
     }
-    cur = new Date(cur.getTime() + 86400000);
+    ds = shiftDay(ds, 1);
   }
   return best;
 }
 
 /** 오늘 아직 출결 기록이 없어 "오늘 결석하면 끊기는" 상태인지 */
-function calcAtRisk(myDays, todayStr, streak){
+function calcAtRisk(ctx, todayStr, streak){
   if (streak <= 0) return false;
-  if (isWeekend(todayStr)) return false;
-  return !myDays[todayStr];
+  if (!isSchoolDay(todayStr)) return false;      // 휴업일엔 위험하지 않다
+  return attStatusOf(todayStr, ctx) === null;    // 아직 판정할 기록이 없다
 }
 
 async function loadStreak(force){
   if (streakCache && !force) return streakCache;
-  var att = await FS.attendanceAll();
-  // 엽전은 로그인할 때 이미 받아왔다. FS.members()는 '테스트' 계정을 걸러서
-  // 그걸 쓰면 테스트 계정 로그인 시 엽전이 0으로 보인다.
-  var fz  = await FS.freezeOf(ME.name);          // 보유·사용기록은 streakFreeze에서
-  var freezeSet = new Set(fz.dates);
-  var myDays = att.byName[ME.name] || {};
-  var today  = kstToday();
+  await loadCalendar();
 
-  var r = calcStreak(myDays, att.schoolDays, freezeSet, today);
+  var m = await FS.memberById(ME.id || '');
+  var att = await FS.attendanceAll();            // 구앱 이력(시트에서 옮겨온 것)
+  var myDays = att.byName[ME.name] || {};
+  var legacyLast = '';
+  for (var nm in att.byName){
+    var ks = Object.keys(att.byName[nm]).sort();
+    if (ks.length && ks[ks.length-1] > legacyLast) legacyLast = ks[ks.length-1];
+  }
+
+  var am = {}, ov = {};
+  try { am = await FS.amCheckInsOf(ME.name); } catch(e){}
+  try { ov = await FS.amOverridesOf(ME.name); } catch(e){}
+
+  var fz = await FS.freezeOf(ME.name);
+  var freezeSet = new Set(fz.dates);
+  var today = kstToday();
+  var ctx = { days: myDays, legacyLast: legacyLast, today: today,
+              dorm: m ? m.dorm : ME.dorm, am: am, ov: ov };
+
+  var r = calcStreak(ctx, freezeSet, today);
   streakCache = {
     streak:   r.streak,
     brokenAt: r.brokenAt,
-    longest:  Math.max(r.streak, calcLongest(myDays, att.schoolDays, freezeSet, today)),
-    atRisk:   calcAtRisk(myDays, today, r.streak),
+    longest:  Math.max(r.streak, calcLongest(ctx, freezeSet, today)),
+    atRisk:   calcAtRisk(ctx, today, r.streak),
     freezes:  fz.count,
     freezeBought: fz.bought,
     freezeDates: fz.dates,
