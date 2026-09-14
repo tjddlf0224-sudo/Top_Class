@@ -26,6 +26,7 @@ rules_version = '2';
 // ── 2026-09-14 엽전 계산 방식(B단계) ───────────────────────────
 //   - /opening 추가 — 계산 시작 기준점(교사만 생성, 수정·삭제 불가)
 //   - /ledger  추가 — 계산할 수 없는 엽전 이동(교사만, 추가만 가능)
+//   - /planner 추가 — 학생 플래너. 날짜는 서버 at으로만 정해진다(소급 입력 차단)
 //
 // 참고: Firestore 규칙은 "먼저 매칭된 것이 이긴다"가 아니라 **하나라도 허용하면 통과**다.
 //       그래서 아래 구체 규칙들과 맨 끝 catch-all(write:false)이 공존해도 문제 없다.
@@ -180,6 +181,44 @@ service cloud.firestore {
                     && request.resource.data.reason is string
                     && request.resource.data.at == request.time;
       allow update, delete: if false;
+    }
+
+    // ── 플래너 ──────────────────────────────────────────
+    // 엽전이 걸려 있다: 100% 달성 +2 / 미작성 −1. 그래서 "며칠자 플래너인가"를
+    // 학생이 정하게 두면 지난 날짜를 채워 넣어 감점을 보너스로 바꿀 수 있다.
+    //
+    // 그래서 날짜를 필드로 받지 않는다. 앱은 서버가 찍은 at으로만 날짜를 센다.
+    // at은 만들 때 request.time으로 고정되고 이후 절대 못 바꾸므로,
+    // 학생은 '지금' 날짜의 플래너만 만들 수 있다.
+    match /planner/{docId} {
+      allow read: if true;
+
+      allow create: if
+           signedIn()
+        && request.resource.data.at == request.time
+        && request.resource.data.keys().hasOnly(['name','tasks','progress','at'])
+        && request.resource.data.name is string
+        && request.resource.data.tasks is string          // 과제 목록 JSON
+        && request.resource.data.progress is int
+        && request.resource.data.progress >= 0
+        && request.resource.data.progress <= 100;
+
+      // 그날 안에서만 고칠 수 있다. at·이름은 못 바꾼다 — at이 날짜의 근거라
+      // 바뀌면 지난 날짜로 옮길 수 있게 된다.
+      // 18시간 제한: 아침에 쓴 플래너를 밤늦게까지 고치는 건 되고,
+      // 다음 날 지난 플래너를 100%로 올리는 건 막힌다.
+      allow update: if
+           signedIn()
+        && request.resource.data.at == resource.data.at
+        && request.resource.data.name == resource.data.name
+        && request.resource.data.diff(resource.data).affectedKeys()
+             .hasOnly(['tasks','progress'])
+        && request.resource.data.progress is int
+        && request.resource.data.progress >= 0
+        && request.resource.data.progress <= 100
+        && request.time < resource.data.at + duration.value(18, 'h');
+
+      allow delete: if false;
     }
 
     // ── 학생 명부 (엽전 잔액이 여기 있음) ───────────────────

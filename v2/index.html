@@ -537,6 +537,34 @@ window.FS = {
         by: String(by), date: kstTodayISO(), at: serverTimestamp() });
   },
 
+  /* ── 플래너 ────────────────────────────────────────
+     날짜는 저장된 서버 시각(at)으로만 센다 — 학생이 날짜를 못 고른다.
+     문서 ID에 날짜가 들어가지만 그건 편의용 키일 뿐 판단 근거가 아니다. */
+  async plannerOf(name){
+    const snap = await getDocs(query(collection(db,'planner'), where('name','==',name)));
+    const byDate = {};
+    snap.forEach(d => {
+      const v = d.data();
+      if (!v.at || !v.at.seconds) return;
+      const k = new Date(v.at.seconds*1000 + 9*60*60*1000).toISOString().slice(0,10);
+      const prog = Number(v.progress)||0;
+      // 같은 날 문서가 여러 개면 진도가 높은 쪽을 그 날의 기록으로 본다
+      if (!byDate[k] || prog > byDate[k].progress)
+        byDate[k] = { id:d.id, progress:prog, tasks:String(v.tasks||'[]') };
+    });
+    return byDate;
+  },
+  async savePlanner(name, tasks, progress){
+    await _authReady;
+    const id  = (kstTodayISO()+'_'+name).replace(/[^\wㄱ-ㅎ가-힣-]/g,'_');
+    const ref = doc(db,'planner',id);
+    const cur = await getDoc(ref);
+    const body = { tasks: JSON.stringify(tasks), progress: Number(progress)||0 };
+    if (cur.exists()) await updateDoc(ref, body);
+    else              await setDoc(ref, Object.assign({ name, at: serverTimestamp() }, body));
+    return id;
+  },
+
   async checkIns(dateStr){
     const { from, to } = kstRange(dateStr);
     const snap = await getDocs(query(collection(db,'asCheckIn'),
@@ -779,7 +807,8 @@ async function doAmCheckIn(){
       시트에서 온 members.coins를 그대로 쓴다 — 전환 전까지 아무것도
       달라지지 않게 하려는 것. 전환일에 opening 문서를 만들면 자동으로
       계산 방식으로 넘어간다. */
-var COIN_RULE = { 출석:+1, 지각:-1, 결석:-2, 공결:0, 주간개근:+5 };
+var COIN_RULE = { 출석:+1, 지각:-1, 결석:-2, 공결:0, 주간개근:+5,
+                  플래너100:+2, 플래너미작성:-1 };
 
 /** 두 날짜 사이의 평일을 훑는다(양끝 포함) */
 function eachWeekday(fromDs, toDs, fn){
@@ -832,6 +861,31 @@ function coinFromAttendance(fromDs, toDs, ctx){
   return { total: total, items: items };
 }
 
+/** 플래너에서 생긴 엽전 — 100% +2 / 미작성 −1.
+    ⚠️ 결석한 날은 미작성 감점을 하지 않는다(구앱과 동일 — 중복 차감 방지).
+       code.gs dailyPlannerPenalty: absentSet에 있으면 건너뜀. */
+function coinFromPlanner(fromDs, toDs, plannerByDate, ctx){
+  var total = 0, items = [];
+  eachWeekday(fromDs, toDs, function(ds){
+    if (!isSchoolDay(ds)) return;
+    if (ds === ctx.today) return;              // 오늘은 아직 쓸 시간이 남았다
+
+    var st = attStatusOf(ds, ctx);
+    if (st === null) return;                   // 출결 판정 보류 구간은 플래너도 보류
+    if (st === '결석') return;                 // 결석자는 미작성 감점 제외
+
+    var pl = plannerByDate[ds];
+    if (!pl){
+      total += COIN_RULE.플래너미작성;
+      items.push({ date: ds, amount: COIN_RULE.플래너미작성, reason: '플래너미작성', by: '계산' });
+    } else if (pl.progress === 100){
+      total += COIN_RULE.플래너100;
+      items.push({ date: ds, amount: COIN_RULE.플래너100, reason: '플래너100%달성', by: '계산' });
+    }
+  });
+  return { total: total, items: items };
+}
+
 /** 한 학생의 엽전 잔액과 내역.
     반환 mode: '계산' = v2가 계산한 값 / '시트' = 아직 전환 전이라 GAS 값 */
 async function loadWallet(m){
@@ -866,12 +920,121 @@ async function loadWallet(m){
               .toISOString().slice(0,10);
   var att = coinFromAttendance(from, today, ctx);
 
-  var items = att.items.concat(ledger.map(function(l){
+  var plannerByDate = {};
+  try { plannerByDate = await FS.plannerOf(name); } catch(e){}
+  var pl = coinFromPlanner(from, today, plannerByDate, ctx);
+
+  var items = att.items.concat(pl.items).concat(ledger.map(function(l){
     return { date:l.date, amount:l.amount, reason:l.reason, by:l.by||'교사' };
   })).sort(function(a,b){ return a.date < b.date ? 1 : -1; });
 
-  return { mode:'계산', balance: open.coins + ledgerSum + att.total,
+  return { mode:'계산', balance: open.coins + ledgerSum + att.total + pl.total,
            items: items, opening: open };
+}
+
+/* ═══ 플래너 ═══════════════════════════════════════════
+   구앱과 같은 형식으로 저장한다: [{text, status}] (0 미정 / 1 못함 / 2 진행중 / 3 완료)
+   진도 = 완료(3) 개수 / 전체 × 100. 100%면 +2냥, 수업일에 안 쓰면 −1냥.
+   ⚠️ 둘 다 계산으로 처리하므로 엽전을 따로 기록하지 않는다. */
+var PLAN_ICON = ['⬜','❌','🔄','✅'];
+var PLAN_LBL  = ['미정','못함','진행중','완료'];
+var planTasks = [];
+
+function planProgress(tasks){
+  if (!tasks.length) return 0;
+  var done = tasks.filter(function(t){ return t.status === 3; }).length;
+  return Math.round(done / tasks.length * 100);
+}
+
+/** 홈 카드에 쓸 오늘 플래너 진도. 기록이 없으면 null(화면에 '–') */
+async function loadPlannerToday(){
+  ME.planner = null;
+  if (!ME.name) return;
+  try {
+    var byDate = await FS.plannerOf(ME.name);
+    var t = byDate[kstToday()];
+    if (!t) return;
+    var tasks = JSON.parse(t.tasks || '[]');
+    if (!Array.isArray(tasks) || !tasks.length) return;
+    ME.planner = { done: tasks.filter(function(x){ return x.status === 3; }).length,
+                   total: tasks.length };
+  } catch(e){}
+}
+
+async function openPlanner(){
+  if (!ME.name) return;
+  var today = kstToday();
+  var byDate = {};
+  try { byDate = await FS.plannerOf(ME.name); } catch(e){}
+  try { planTasks = JSON.parse((byDate[today]||{}).tasks || '[]'); } catch(e){ planTasks = []; }
+  if (!Array.isArray(planTasks)) planTasks = [];
+  drawPlanner();
+}
+
+function drawPlanner(){
+  var pct = planProgress(planTasks);
+  var html = '<div class="modal-box">'+
+    '<div style="text-align:center;padding:4px 0 12px">'+
+      '<div style="font-size:1.25rem;font-weight:800">오늘의 플래너</div>'+
+      '<div style="font-size:.82rem;color:var(--ink-mute);margin-top:4px">'+
+        (planTasks.length? pct+'% · 100%면 +2냥' : '할 일을 적으면 시작돼요')+'</div>'+
+    '</div>'+
+    '<div class="bar" style="margin-bottom:12px"><i class="'+(pct===100?'g':'')+
+      '" style="width:'+pct+'%"></i></div>';
+
+  html += planTasks.map(function(t,i){
+    return '<div class="row" style="cursor:pointer" onclick="cyclePlan('+i+')">'+
+      '<div style="font-size:1.15rem;width:26px;text-align:center">'+PLAN_ICON[t.status||0]+'</div>'+
+      '<div class="row-main"><div class="row-t" style="'+(t.status===3?'color:var(--ink-mute)':'')+'">'+
+        escapeHtml(t.text)+'</div>'+
+      '<div class="row-s">'+PLAN_LBL[t.status||0]+'</div></div>'+
+      '<span onclick="event.stopPropagation();removePlan('+i+')" '+
+        'style="color:var(--ink-mute);padding:6px 8px">✕</span></div>';
+  }).join('');
+
+  html += '<div class="field" style="margin-top:10px">'+
+    '<input id="planNew" type="text" placeholder="할 일 추가 (예: 한국사 숙제)" '+
+      'onkeydown="if(event.key===\'Enter\')addPlan()"></div>'+
+    '<button class="btn btn-outline" onclick="addPlan()">추가</button>'+
+    '<div id="planErr" class="login-err hidden"></div>'+
+    '<button class="btn" id="planSave" onclick="savePlannerNow()">저장</button>'+
+    '<button class="btn btn-outline" onclick="closeModal()">닫기</button></div>';
+  showModal(html);
+}
+
+function escapeHtml(t){
+  return String(t).replace(/[&<>"']/g, function(c){
+    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+  });
+}
+function addPlan(){
+  var el = document.getElementById('planNew');
+  var t = (el.value||'').trim();
+  if (!t) return;
+  planTasks.push({ text:t, status:0 });
+  drawPlanner();
+}
+function removePlan(i){ planTasks.splice(i,1); drawPlanner(); }
+function cyclePlan(i){
+  planTasks[i].status = ((planTasks[i].status||0) + 1) % 4;   // 미정→못함→진행중→완료
+  drawPlanner();
+}
+
+async function savePlannerNow(){
+  var btn = document.getElementById('planSave');
+  var err = document.getElementById('planErr');
+  btn.disabled = true; btn.textContent = '저장 중...';
+  try {
+    await FS.savePlanner(ME.name, planTasks, planProgress(planTasks));
+    ME.planner = { done: planTasks.filter(function(t){return t.status===3;}).length,
+                   total: planTasks.length };
+    closeModal(); renderView();
+  } catch(e){
+    btn.disabled = false; btn.textContent = '저장';
+    err.textContent = (e && e.code === 'permission-denied')
+      ? '오늘 플래너만 수정할 수 있습니다' : '저장하지 못했습니다';
+    err.classList.remove('hidden');
+  }
 }
 
 /* ═══ 엽전 화면 ═══════════════════════════════════════ */
@@ -1489,10 +1652,10 @@ function homeStudent(){
 
   '<div class="sec-label">오늘</div>'+
   '<div class="card">'+
-    '<div class="blk"><div class="blk-head">'+
+    '<div class="blk" onclick="openPlanner()" style="cursor:pointer"><div class="blk-head">'+
       '<div><div class="row-t">오늘의 플래너</div>'+
       '<div class="row-s">'+(has? p.done+' / '+p.total+'개 완료 · 100% 달성 시 +2냥'
-                                : '아직 준비 중입니다')+'</div></div>'+
+                                : '탭해서 오늘 할 일을 적어보세요')+'</div></div>'+
       '<div class="row-v" style="color:'+(has?(pct===100?'var(--green)':'var(--accent)'):'var(--ink-mute)')+'">'+
         (has?pct+'%':'–')+'</div>'+
     '</div><div class="bar"><i class="'+(has&&pct===100?'g':'')+'" style="width:'+(has?pct:0)+'%"></i></div></div>'+
@@ -1601,6 +1764,7 @@ async function applyStudent(m){
   ME.id=m.id; ME.name=m.name; ME.track=m.track; ME.coins=m.coins; ME.dorm=m.dorm;
   await loadCalendar();
   await loadAmToday();
+  await loadPlannerToday();
   ME.week = await buildWeek(m.name);
   streakCache = null;                 // 다른 학생으로 바뀌었을 수 있다
 }
