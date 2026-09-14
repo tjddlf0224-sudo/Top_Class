@@ -544,6 +544,24 @@ window.FS = {
     return list.sort((a,b) => b.date.localeCompare(a.date));
   },
 
+  /* 교사 지정 휴업일 — 나이스에는 수업일인데 자습을 안 한 날 */
+  async calendarOff(){
+    const snap = await getDocs(collection(db,'calendarOff'));
+    const out = {};
+    snap.forEach(d => { const v = d.data();
+      out[String(v.date || d.id)] = String(v.reason||'자습 없음'); });
+    return out;
+  },
+  async setCalendarOff(dateStr, reason, by){
+    await _authReady;
+    await setDoc(doc(db,'calendarOff',dateStr),
+      { date:dateStr, reason:String(reason), by:String(by), at: serverTimestamp() });
+  },
+  async clearCalendarOff(dateStr){
+    await _authReady;
+    await deleteDoc(doc(db,'calendarOff',dateStr));
+  },
+
   /* ── 상담 ──────────────────────────────────────────
      ⚠️ 학생 개인정보라 교사만 읽고 쓸 수 있다(보안규칙에서 강제).
      과거 기록은 GAS 편집기 일회성 스크립트로 옮긴다(migrate_counseling.gs). */
@@ -773,24 +791,33 @@ var AM_CLOSE_MIN = 8*60 + 30;   // 08:30 — 마감
    학생을 v2로 옮기는 날 이 값을 그 날짜로 바꿀 것(§8 출시일 체크리스트). */
 var ATT_V2_FROM = '2099-01-01';
 
-var CAL = null;   // 학사일정(휴업일) — v2/calendar.json
+var CAL = null;      // 나이스 학사일정 — v2/calendar.json
+var CAL_OFF = {};    // 교사가 지정한 휴업일 — Firestore calendarOff
 
-/** 나이스에서 뽑아둔 학사일정을 읽는다. 실패해도 앱은 돌아가야 한다. */
-async function loadCalendar(){
-  if (CAL) return CAL;
+/** 학사일정을 읽는다. 실패해도 앱은 돌아가야 한다.
+    나이스는 '학교가 등록한 휴업일'만 안다. 시험주간·꿈그린캠프처럼
+    수업일이지만 아침자습을 안 한 날은 교사가 따로 지정한다(calendarOff). */
+async function loadCalendar(force){
+  if (CAL && !force) return CAL;
   try {
     var r = await fetch('calendar.json', {cache:'no-cache'});
     CAL = await r.json();
   } catch(e) { CAL = { 휴업일:{} }; }
+  try { CAL_OFF = await FS.calendarOff(); } catch(e) { CAL_OFF = {}; }
   return CAL;
 }
 
-/** 그 날이 수업일인가 — 주말·공휴일·재량휴업일·방학 제외 */
+/** 그 날이 수업일인가 — 주말·공휴일·재량휴업일·방학·교사지정 제외 */
 function isSchoolDay(ds){
   if (isWeekend(ds)) return false;
+  if (CAL_OFF[ds]) return false;
   return !(CAL && CAL.휴업일 && CAL.휴업일[ds]);
 }
-function offReason(ds){ return (CAL && CAL.휴업일 && CAL.휴업일[ds]) || ''; }
+function offReason(ds){
+  return CAL_OFF[ds] || (CAL && CAL.휴업일 && CAL.휴업일[ds]) || '';
+}
+/** 교사가 지정한 날인지(나이스 휴업일과 구분해서 표시·해제하려고) */
+function isTeacherOff(ds){ return !!CAL_OFF[ds]; }
 
 /** 서버가 찍은 시각 → 출석/지각. 기숙사생은 08:30 전이면 지각이 없다. */
 function verdictFromAt(at, dorm){
@@ -1659,7 +1686,10 @@ async function renderAmTeacher(v){
   if(!isSchoolDay(amDate)){
     var why=offReason(amDate)||(isWeekend(amDate)?'주말':'휴업일');
     v.innerHTML=head+'<div class="empty"><div class="empty-ico">'+ic('calendar',44)+'</div>'+
-      '<span>'+why+' — 수업일이 아닙니다</span></div>';
+      '<span>'+escapeHtml(why)+' — 수업일이 아닙니다</span></div>'+
+      (isTeacherOff(amDate)
+        ? '<button class="btn btn-outline" onclick="clearOffDay()">수업일로 되돌리기</button>'
+        : '');
     fillIcoSlots(v); return;
   }
 
@@ -1706,8 +1736,52 @@ async function renderAmTeacher(v){
       '<div class="row-v" style="color:var(--ink-mute)">'+mem.length+'명</div>'+
     '</div></div>' + rows + '</div>' +
     '<div class="sec-label" style="color:var(--ink-mute);font-weight:500">'+
-      '학생을 탭하면 출결을 고칠 수 있습니다</div>';
+      '학생을 탭하면 출결을 고칠 수 있습니다</div>'+
+    // 시험주간·캠프처럼 나이스엔 수업일인데 자습을 안 한 날. 지정하면
+    // 그 날은 결석을 세지 않고 플래너 감점도 하지 않는다.
+    '<button class="btn btn-outline" onclick="markOffDay()">이 날은 자습 없었음으로 표시</button>';
   fillIcoSlots(v);
+}
+
+/** 자습 없던 날로 지정 — 그 날은 결석·플래너감점을 세지 않는다 */
+function markOffDay(){
+  showModal('<div class="modal-box">'+
+    '<div style="text-align:center;padding:4px 0 14px">'+
+      '<div style="font-size:1.25rem;font-weight:800">'+amDate+'</div>'+
+      '<div style="font-size:.82rem;color:var(--ink-mute);margin-top:4px">'+
+        '자습 없던 날로 표시합니다</div></div>'+
+    '<div class="field"><label>사유</label>'+
+      '<input id="offWhy" type="text" placeholder="예: 시험주간, 꿈그린캠프"></div>'+
+    '<div id="offErr" class="login-err hidden"></div>'+
+    '<button class="btn" id="offGo" onclick="applyOffDay()">표시</button>'+
+    '<button class="btn btn-outline" onclick="closeModal()">취소</button></div>');
+  setTimeout(function(){ var e=document.getElementById('offWhy'); if(e) e.focus(); }, 50);
+}
+async function applyOffDay(){
+  var why=(document.getElementById('offWhy').value||'').trim();
+  var err=document.getElementById('offErr');
+  if(!why){ err.textContent='사유를 입력해주세요'; err.classList.remove('hidden'); return; }
+  var btn=document.getElementById('offGo'); btn.disabled=true; btn.textContent='저장 중...';
+  try {
+    await FS.setCalendarOff(amDate, why, '교사');
+    await loadCalendar(true);
+    streakCache=null; closeModal(); renderView();
+  } catch(e){
+    btn.disabled=false; btn.textContent='표시';
+    err.textContent=(e && e.code==='permission-denied')?'교사로 로그인해야 합니다':'저장하지 못했습니다';
+    err.classList.remove('hidden');
+  }
+}
+async function clearOffDay(){
+  try { await FS.clearCalendarOff(amDate); await loadCalendar(true);
+        streakCache=null; renderView(); }
+  catch(e){
+    showModal('<div class="modal-box"><div style="text-align:center;padding:14px 0">'+
+      '<div style="font-size:2.2rem">⚠️</div><div style="font-weight:800;margin-top:8px">되돌리지 못했습니다</div>'+
+      '<div style="font-size:.85rem;color:var(--ink-mute);margin-top:6px">'+
+      (e && e.code==='permission-denied'?'교사로 로그인해야 합니다':'다시 시도해주세요')+
+      '</div></div><button class="btn" onclick="closeModal()">확인</button></div>');
+  }
 }
 
 /** 교사 정정 — 누른 학생의 그 날짜 출결을 바꾼다 */

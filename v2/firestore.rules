@@ -33,6 +33,7 @@ rules_version = '2';
 //
 // ── 2026-09-14 상담 기록 보호 ──────────────────────────────────
 //   - /counseling 추가 — 교사만 읽기·쓰기(학생 개인정보)
+//   - /calendarOff 추가 — 교사가 지정하는 휴업일(나이스가 모르는 반 사정)
 //   - ⚠️ 맨 아래 catch-all의 "전체 읽기 허용"을 걷어냈다. 규칙은 OR이라
 //     catch-all이 열려 있으면 상담 기록도 같이 읽혀서다.
 //     대신 실제로 읽히는 컬렉션을 명시했다. 구앱이 읽는
@@ -309,6 +310,18 @@ service cloud.firestore {
         && request.resource.data.name is string
         && request.resource.data.date is string;
       allow update, delete: if false;
+    }
+
+    // ── 교사 지정 휴업일 ────────────────────────────────
+    // 나이스 학사일정에는 수업일인데 장원급제반 아침자습을 안 한 날이 있다
+    // (시험주간·꿈그린캠프 등). 나이스는 학교가 등록한 '휴업일'만 알고,
+    // 반 단위 사정은 모른다. 이걸 못 적으면 그 날 전원이 결석 처리된다
+    // — 실제로 2026-06-29·07-06·07-09에 11~12명씩 잘못 깎였다.
+    match /calendarOff/{dateStr} {
+      allow read: if true;
+      allow write: if isTeacher()
+                   && ( request.resource == null
+                        || request.resource.data.keys().hasOnly(['date','reason','by','at']) );
     }
 
     // ── 상담 기록 ───────────────────────────────────────
