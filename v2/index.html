@@ -398,6 +398,7 @@ window.FS = {
     return { id: s.id, name: String(v.name||'').trim(),
              track: String(v.track||'공무원').trim(),
              coins: Number(v.coins)||0,
+             dorm: v.dorm === true,          // 기숙사생은 08:30 전이면 지각이 없다
              role: String(v.role||'').trim() };
   },
 
@@ -465,6 +466,44 @@ window.FS = {
     });
   },
 
+  /* ── 등교 출석 (아침) ───────────────────────────────
+     방과후(asCheckIn)와 같은 구조다. 서버 시각만 기록하고
+     출석/지각은 그 시각으로 계산한다 — 학생이 상태를 고를 수 없다.
+     결석은 저장하지 않는다: 수업일인데 기록이 없으면 결석. */
+  async amCheckIn(dateStr, name, dorm){
+    await _authReady;
+    const id = (dateStr+'_'+name).replace(/[^\wㄱ-ㅎ가-힣-]/g,'_');
+    await setDoc(doc(db,'amCheckIn',id), { at: serverTimestamp(), name, dorm: !!dorm });
+  },
+  /* 인증 가능 시간(KST 06:00~08:30)으로 범위를 잡는다.
+     KST 06:00은 UTC로 전날 21:00이지만, Date가 알아서 환산하므로
+     날짜 문자열을 다시 만들지 않는다(§13.8과 같은 함정). */
+  async amCheckIns(dateStr){
+    const from = new Date(dateStr + 'T06:00:00+09:00');
+    const to   = new Date(dateStr + 'T08:30:00+09:00');
+    const snap = await getDocs(query(collection(db,'amCheckIn'),
+      where('at','>=',from), where('at','<',to)));
+    const out = {};
+    snap.forEach(d => { const v = d.data(); if (v.at) out[v.name] = v; });
+    return out;
+  },
+
+  /* 교사 정정 — 학생이 못 찍었지만 실제로는 왔거나, 공결 처리할 때.
+     문서 ID가 '날짜_이름'이라 하루 한 건으로 자연히 정리된다. */
+  async amOverrides(dateStr){
+    const snap = await getDocs(query(collection(db,'amOverride'),
+      where('date','==',dateStr)));
+    const out = {};
+    snap.forEach(d => { const v = d.data(); out[v.name] = v; });
+    return out;
+  },
+  async setAmOverride(dateStr, name, status, by){
+    await _authReady;
+    const id = (dateStr+'_'+name).replace(/[^\wㄱ-ㅎ가-힣-]/g,'_');
+    await setDoc(doc(db,'amOverride',id),
+      { date:dateStr, name, status, by, at: serverTimestamp() });
+  },
+
   async checkIns(dateStr){
     const { from, to } = kstRange(dateStr);
     const snap = await getDocs(query(collection(db,'asCheckIn'),
@@ -518,7 +557,7 @@ var ROLE='student', TAB='home';
 /* 로그인한 학생. 값은 전부 Firestore에서 채운다(예전엔 맹진우 고정값이 박혀 있었고,
    그 탓에 누가 방과후 체크인을 해도 '맹진우' 이름으로 기록됐다).
    planner는 아직 시트에만 있어 Firestore에 없다 — null이면 화면에서 '–'로 표시한다. */
-var ME={id:'',name:'',track:'공무원',coins:0,week:[],planner:null};
+var ME={id:'',name:'',track:'공무원',coins:0,dorm:false,week:[],planner:null};
 var STUDENTS=[{n:'맹진우',t:'공기업',c:-3},{n:'안성현',t:'공기업',c:-24},{n:'전규비',t:'공무원',c:8},
   {n:'정여원',t:'공무원',c:11},{n:'명지희',t:'공기업',c:-3},{n:'박현서',t:'공기업',c:0}];
 
@@ -543,6 +582,153 @@ function renderView(){
   if(TAB==='home'){v.innerHTML=ROLE==='student'?homeStudent():homeTeacher();fillIcoSlots(v);return;}
   if(TAB==='after'){renderAfterSchool(v);return;}
   v.innerHTML=stub();fillIcoSlots(v);
+}
+
+/* ═══ 등교 출결 ═══════════════════════════════════════
+   기존 GAS 정책을 그대로 옮긴 것 (code.gs checkIn 참조)
+     06:00 이전   인증 불가
+     08:30 이후   인증 불가 → 결석
+     기숙사생     08:30 전이면 무조건 출석 (지각 없음)
+     일반생       08:10 전 출석 / 08:10~08:29 지각
+   상태는 학생이 고르지 않는다. 서버가 찍은 시각으로 계산하므로 위조 불가.
+   결석은 저장하지 않는다 — 수업일인데 기록이 없으면 결석(방과후와 같은 규칙). */
+var AM_OPEN_MIN  = 6*60;        // 06:00
+var AM_LATE_MIN  = 8*60 + 10;   // 08:10 — 일반생 지각 기준
+var AM_CLOSE_MIN = 8*60 + 30;   // 08:30 — 마감
+
+/* ⚠️ v2가 출결의 원본이 되는 날. 전환 전까지는 학생이 구앱으로 인증하므로
+   v2에 기록이 없는 게 당연하다 — 그걸 결석으로 세면 안 된다.
+   학생을 v2로 옮기는 날 이 값을 그 날짜로 바꿀 것(§8 출시일 체크리스트). */
+var ATT_V2_FROM = '2099-01-01';
+
+var CAL = null;   // 학사일정(휴업일) — v2/calendar.json
+
+/** 나이스에서 뽑아둔 학사일정을 읽는다. 실패해도 앱은 돌아가야 한다. */
+async function loadCalendar(){
+  if (CAL) return CAL;
+  try {
+    var r = await fetch('calendar.json', {cache:'no-cache'});
+    CAL = await r.json();
+  } catch(e) { CAL = { 휴업일:{} }; }
+  return CAL;
+}
+
+/** 그 날이 수업일인가 — 주말·공휴일·재량휴업일·방학 제외 */
+function isSchoolDay(ds){
+  if (isWeekend(ds)) return false;
+  return !(CAL && CAL.휴업일 && CAL.휴업일[ds]);
+}
+function offReason(ds){ return (CAL && CAL.휴업일 && CAL.휴업일[ds]) || ''; }
+
+/** 서버가 찍은 시각 → 출석/지각. 기숙사생은 08:30 전이면 지각이 없다. */
+function verdictFromAt(at, dorm){
+  if (!at || !at.seconds) return '출석';
+  var k = new Date(at.seconds*1000 + 9*3600*1000);     // KST 벽시계로 환산
+  var m = k.getUTCHours()*60 + k.getUTCMinutes();
+  if (dorm) return m < AM_CLOSE_MIN ? '출석' : '지각';
+  return m < AM_LATE_MIN ? '출석' : '지각';
+}
+
+/** 하루치 출결 판정. 판정할 근거가 없으면 null(보류)을 준다.
+    우선순위: 교사 정정 > v2 기록 > 구앱(시트) 이력 > 계산(결석) */
+function attStatusOf(ds, ctx){
+  if (ctx.ov && ctx.ov[ds])     return ctx.ov[ds].status;
+  if (ctx.am && ctx.am[ds])     return verdictFromAt(ctx.am[ds].at, ctx.dorm);
+  var leg = ctx.days && ctx.days[ds];
+  if (leg && leg.s)             return leg.s;
+  if (!isSchoolDay(ds))         return null;            // 휴업일
+  if (ds === ctx.today)         return null;            // 오늘은 아직 인증 전일 수 있다
+  // 기록이 없는 수업일 — 그 구간을 실제로 담당하는 소스가 있을 때만 결석으로 센다.
+  // 구앱 이력이 끝난 뒤 v2 전환 전까지는 아무도 담당하지 않으므로 보류한다.
+  if (ctx.legacyLast && ds <= ctx.legacyLast) return '결석';
+  if (ds >= ATT_V2_FROM)                      return '결석';
+  return null;
+}
+
+/** 오늘의 등교 인증 상태 — null이면 아직 안 읽음, {status,time} 또는 {status:null} */
+var amToday = null;
+
+/** 홈 상단의 등교 인증 버튼. 상태에 따라 문구와 동작이 달라진다. */
+function checkinBtn(){
+  var today = kstToday();
+  var m = kstMinutes();
+
+  if (!isSchoolDay(today)){
+    var why = offReason(today) || (isWeekend(today) ? '주말' : '휴업일');
+    return '<div class="checkin" style="background:var(--line-soft);color:var(--ink-soft);cursor:default">'+
+      '<div style="text-align:left"><div class="checkin-t">오늘은 쉬는 날</div>'+
+      '<div class="checkin-s">'+why+' · 인증하지 않아도 됩니다</div></div>'+ic('calendar',26)+'</div>';
+  }
+  if (amToday && amToday.status){
+    var good = amToday.status === '출석';
+    return '<div class="checkin" style="background:'+(good?'var(--green-soft)':'var(--rose-soft)')+
+      ';color:'+(good?'#16a34a':'var(--rose)')+';cursor:default">'+
+      '<div style="text-align:left"><div class="checkin-t">'+amToday.status+' 처리되었습니다</div>'+
+      '<div class="checkin-s">'+(amToday.time? amToday.time+' 인증':'교사 확인')+'</div></div>'+ic('check',26)+'</div>';
+  }
+  if (m < AM_OPEN_MIN)
+    return '<div class="checkin" style="background:var(--line-soft);color:var(--ink-soft);cursor:default">'+
+      '<div style="text-align:left"><div class="checkin-t">아직 인증 시간이 아닙니다</div>'+
+      '<div class="checkin-s">06:00부터 인증할 수 있어요</div></div>'+ic('clock',26)+'</div>';
+  if (m >= AM_CLOSE_MIN)
+    return '<div class="checkin" style="background:var(--rose-soft);color:var(--rose);cursor:default">'+
+      '<div style="text-align:left"><div class="checkin-t">인증이 마감되었습니다</div>'+
+      '<div class="checkin-s">08:30까지 인증하지 않아 결석 처리됩니다</div></div>'+ic('warn',26)+'</div>';
+
+  var late = ME.dorm ? false : (m >= AM_LATE_MIN);
+  return '<button class="checkin" onclick="doAmCheckIn()">'+
+    '<div style="text-align:left"><div class="checkin-t">등교 인증하기</div>'+
+    '<div class="checkin-s">'+(late? '지금 인증하면 지각입니다 (−1냥)'
+                                   : (ME.dorm? '08:30까지 인증하면 출석 +1냥'
+                                             : '08:10까지 인증하면 출석 +1냥'))+'</div></div>'+
+    ic('check',26)+'</button>';
+}
+
+/** 오늘 내 등교 인증 기록을 읽어 amToday에 담는다 */
+async function loadAmToday(){
+  var today = kstToday();
+  amToday = { status:null, time:'' };
+  if (!ME.name) return amToday;
+  try {
+    var ov = await FS.amOverrides(today);
+    if (ov[ME.name]){ amToday = { status: ov[ME.name].status, time:'' }; return amToday; }
+    var am = await FS.amCheckIns(today);
+    if (am[ME.name]){
+      var at = am[ME.name].at;
+      var k  = new Date(at.seconds*1000 + 9*3600*1000);
+      amToday = { status: verdictFromAt(at, am[ME.name].dorm),
+                  time: pad2(k.getUTCHours())+':'+pad2(k.getUTCMinutes()) };
+    }
+  } catch(e){ /* 조회 실패 시 버튼은 '인증하기'로 남는다 */ }
+  return amToday;
+}
+
+/** 등교 인증 — 시각은 서버가 찍고, 상태는 그 시각으로 계산한다 */
+async function doAmCheckIn(){
+  if (!ME.name) return;
+  var today = kstToday();
+  try {
+    await FS.amCheckIn(today, ME.name, ME.dorm);
+    await loadAmToday();
+    streakCache = null;
+    ME.week = await buildWeek(ME.name);
+    renderView();
+    var ok = amToday.status === '출석';
+    showModal('<div class="modal-box"><div style="text-align:center;padding:10px 0 6px">'+
+      '<div style="font-size:2.4rem;line-height:1">'+(ok?'✅':'⏰')+'</div>'+
+      '<div style="font-size:1.35rem;font-weight:800;margin-top:10px">'+amToday.status+' 처리되었습니다</div>'+
+      '<div style="font-size:.85rem;color:var(--ink-mute);margin-top:6px">'+amToday.time+'에 인증했어요</div>'+
+      '</div><button class="btn" onclick="closeModal()">확인</button></div>');
+  } catch(e){
+    var msg = (e && e.code === 'permission-denied')
+      ? '인증 가능 시간이 아닙니다 (06:00~08:30)'
+      : '인증에 실패했습니다. 잠시 후 다시 해주세요';
+    showModal('<div class="modal-box"><div style="text-align:center;padding:10px 0 6px">'+
+      '<div style="font-size:2.4rem;line-height:1">⚠️</div>'+
+      '<div style="font-size:1.35rem;font-weight:800;margin-top:10px">인증 실패</div>'+
+      '<div style="font-size:.85rem;color:var(--ink-mute);margin-top:6px">'+msg+'</div>'+
+      '</div><button class="btn" onclick="closeModal()">확인</button></div>');
+  }
 }
 
 /* ═══ 연속출석 스트릭 ═══════════════════════════════════
@@ -944,10 +1130,7 @@ function homeStudent(){
     '</div>'+
   '</div>'+
 
-  '<button class="checkin">'+
-    '<div style="text-align:left"><div class="checkin-t">등교 인증하기</div>'+
-    '<div class="checkin-s">08:10까지 인증하면 출석 +1냥</div></div>'+
-    ic('check',26)+'</button>'+
+  checkinBtn()+
 
   '<div class="sec-label">오늘</div>'+
   '<div class="card">'+
@@ -1042,7 +1225,7 @@ function logout(){document.getElementById('app').classList.add('hidden');
   document.getElementById('login').classList.remove('hidden');
   hideTeacherLogin();
   try{ localStorage.removeItem(SKEY); }catch(e){}   // 다음엔 다시 학번을 묻는다
-  ME={id:'',name:'',track:'공무원',coins:0,week:[],planner:null};
+  ME={id:'',name:'',track:'공무원',coins:0,dorm:false,week:[],planner:null};
   streakCache=null; sShowErr('');
   if(window.AUTH) AUTH.leave();      // 교사 세션을 끊고 다시 익명으로
   protoSync();}
@@ -1060,7 +1243,9 @@ function sShowErr(msg){
 
 /* 로그인 성공 시 ME를 실데이터로 채운다 */
 async function applyStudent(m){
-  ME.id=m.id; ME.name=m.name; ME.track=m.track; ME.coins=m.coins;
+  ME.id=m.id; ME.name=m.name; ME.track=m.track; ME.coins=m.coins; ME.dorm=m.dorm;
+  await loadCalendar();
+  await loadAmToday();
   ME.week = await buildWeek(m.name);
   streakCache = null;                 // 다른 학생으로 바뀌었을 수 있다
 }
@@ -1101,24 +1286,43 @@ async function autoLogin(){
 /* 이번 주(월~금) 출결 점 — 기록이 없는 지난 수업일은 결석으로 본다.
    '기록이 없으면 결석'은 방과후·스트릭과 같은 규칙이다(§10.5). */
 async function buildWeek(name){
+  await loadCalendar();
   var days = await FS.attendanceOf(name);
   var today = kstToday();
+  // 이번 주 v2 기록·교사 정정도 함께 본다 (구앱 이력만 보면 전환 후 빈칸이 된다)
+  var am = {}, ov = {};
+  var legacyLast = Object.keys(days).sort().pop() || '';
   var k = kstNow();
   var dow = k.getDay();                       // 0=일
   var mon = new Date(k.getFullYear(), k.getMonth(), k.getDate() - ((dow+6)%7));
-  var LBL=['월','화','수','목','금'], out=[];
+  var LBL=['월','화','수','목','금'], out=[], week=[];
   for(var i=0;i<5;i++){
     var d = new Date(mon.getFullYear(), mon.getMonth(), mon.getDate()+i);
     var ds = d.getFullYear()+'-'+pad2(d.getMonth()+1)+'-'+pad2(d.getDate());
-    var st = (days[ds]||{}).s, cls;
-    if(st==='출석')            cls='ok';
-    else if(st==='지각')       cls='late';
-    else if(st==='결석')       cls='no';
-    else if(st==='공결')       cls='late';    // 유지되되 출석은 아님
-    else if(ds===today)        cls='today';
-    else if(ds>today)          cls='';        // 아직 오지 않은 날
-    else                       cls='';        // 기록 없는 지난 날 = 휴업일이거나 미집계
-    out.push({d:LBL[i], s:cls});
+    week.push(ds);
+    out.push({d:LBL[i], s:''});
+  }
+  // 이번 주에 v2 기록이 있을 수 있으므로 날짜별로 한 번씩 읽는다(최대 5회)
+  try {
+    for (var j=0;j<week.length;j++){
+      if (week[j] > today) continue;                 // 아직 오지 않은 날
+      var a = await FS.amCheckIns(week[j]);
+      if (a[name]) am[week[j]] = a[name];
+      var o = await FS.amOverrides(week[j]);
+      if (o[name]) ov[week[j]] = o[name];
+    }
+  } catch(e){}
+
+  var ctx = { days:days, legacyLast:legacyLast, today:today, dorm:ME.dorm,
+              am:{}, ov:{} };
+  for (var key in am) ctx.am[key] = am[key];
+  for (var key2 in ov) ctx.ov[key2] = ov[key2];
+
+  for (var n=0;n<out.length;n++){
+    var ds2 = week[n];
+    var st = attStatusOf(ds2, ctx);
+    out[n].s = st==='출석' ? 'ok' : st==='지각' ? 'late' : st==='결석' ? 'no'
+             : st==='공결' ? 'late' : (ds2===today ? 'today' : '');
   }
   return out;
 }

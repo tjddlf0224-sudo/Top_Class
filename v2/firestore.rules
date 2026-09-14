@@ -19,6 +19,10 @@ rules_version = '2';
 //   - ⚠️ 구앱은 인증을 안 쓴다(request.auth == null). /schedule 쓰기와
 //     모든 읽기에는 인증을 걸지 않았다 — 걸면 학생들 구앱이 즉시 깨진다.
 //
+// ── 2026-09-14 등교 출결 v2 이전 ───────────────────────────────
+//   - /amCheckIn  추가 — 학생 등교 인증(KST 06:00~08:30)
+//   - /amOverride 추가 — 교사 등교 출결 정정(교사만)
+//
 // 참고: Firestore 규칙은 "먼저 매칭된 것이 이긴다"가 아니라 **하나라도 허용하면 통과**다.
 //       그래서 아래 구체 규칙들과 맨 끝 catch-all(write:false)이 공존해도 문제 없다.
 //
@@ -91,6 +95,42 @@ service cloud.firestore {
 
       // 한 번 찍으면 못 바꾼다. 정정은 교사가 asOverride에 따로 남긴다.
       allow update, delete: if false;
+    }
+
+    // ── 등교 출석 체크인 (아침) ─────────────────────────
+    // 기존 GAS 정책을 그대로 옮긴 것:
+    //   06:00 이전 불가 / 08:30 이후 불가(→ 결석) / 상태는 학생이 고르지 않는다.
+    // 출석·지각은 저장된 서버 시각으로 앱이 계산한다. 시각을 못 고르니 위조가 안 된다.
+    // 결석은 저장하지 않는다 — 수업일인데 기록이 없으면 결석(방과후와 같은 규칙).
+    //
+    // ⚠️ KST 06:00~08:30 == UTC 21:00~23:30 (하루 전 UTC 날짜다. 자정을 넘지 않아
+    //    분 단위 비교로 충분하다). 21:00 = 1260분, 23:30 = 1410분.
+    match /amCheckIn/{docId} {
+      allow read: if true;
+
+      allow create: if
+           signedIn()
+        && request.resource.data.at == request.time
+        && utcMinutes() >= 1260
+        && utcMinutes() <  1410
+        && request.resource.data.keys().hasOnly(['at','name','dorm'])
+        && request.resource.data.name is string
+        && request.resource.data.dorm is bool;
+
+      // 한 번 찍으면 못 바꾼다. 정정은 교사가 amOverride에 남긴다.
+      allow update, delete: if false;
+    }
+
+    // ── 등교 출석 교사 정정 ─────────────────────────────
+    // 학생이 못 찍었지만 실제로는 왔거나, 공결 처리할 때.
+    // 문서 ID가 '날짜_이름'이라 하루 한 건으로 자연히 정리된다.
+    match /amOverride/{docId} {
+      allow read: if true;
+      allow write: if isTeacher()
+                   && ( request.resource == null
+                        || ( request.resource.data.keys()
+                               .hasOnly(['date','name','status','by','at'])
+                             && request.resource.data.status in ['출석','지각','결석','공결'] ) );
     }
 
     // ── 교사 출석 정정 ─────────────────────────────────────
