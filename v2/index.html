@@ -366,9 +366,10 @@ window.AUTH = {
    date 문자열 대신 서버 시각(at)을 기준으로 삼아야 위조가 불가능하다. */
 function kstRange(dateStr){
   const from = new Date(dateStr + 'T18:30:00+09:00');
-  const d    = new Date(dateStr + 'T00:00:00+09:00');
-  d.setDate(d.getDate() + 1);
-  const to   = new Date(d.toISOString().slice(0,10) + 'T00:00:00+09:00');
+  // 다음날 0시(KST)까지. 날짜 문자열을 다시 만들지 말고 24시간을 더한다 —
+  // 예전엔 toISOString().slice(0,10)으로 날짜를 꺼냈는데, KST 자정 시각의
+  // UTC 날짜는 '전날'이라 +1일이 상쇄돼 조회 범위가 뒤집혔다(항상 0건).
+  const to   = new Date(new Date(dateStr + 'T00:00:00+09:00').getTime() + 24*60*60*1000);
   return { from, to };
 }
 
