@@ -899,9 +899,35 @@ match /{document=**} { allow read, write: if false; }         // 이후
 ### 20.5 과거 상담 기록 이전 — `migrate_counseling.gs`
 상담 기록은 **개인정보라 공개 저장소에 시드 파일로 넣을 수 없고**, v2에서 가져오게 하면 GAS 호출이 되살아난다. → **GAS 편집기 일회성 실행**(migrate_attendance.gs와 같은 방식). 파일은 `~/Top_Class/migrate_counseling.gs`, `.gitignore`의 `*.gs`로 제외됨. 새 OAuth 권한 없음(SpreadsheetApp + 기존 `_fsSet`만).
 
-### 20.6 남은 것
-- 규칙 게시: `/counseling` + catch-all 변경 **(게시 후 구앱 읽기 회귀 테스트 필수)**
-- `migrate_counseling.gs` 편집기에서 1회 실행
-- 교사 로그인 후 저잣거리 "기본 물품 한번에 등록"
+### 20.6 규칙 게시 후 회귀 테스트 (2026-09-14) — 전부 통과
+catch-all을 닫은 변경이라 구앱 회귀가 최대 위험이었다.
+
+| 검증 | 결과 |
+|---|---|
+| [비인증=구앱] members·schedule·teachers·examScores·examHistory_공기업·examHistory_공무원 읽기 | ✅ 6종 전부 정상 |
+| [비인증=구앱] schedule 쓰기·삭제 | ✅ 정상 |
+| [익명=v2] attendance·amCheckIn·planner·opening·ledger·marketItem·freezeBuy 읽기 | ✅ 7종 정상 |
+| [비인증] 상담 읽기 | ✅ 차단 |
+| [학생] 상담 읽기·쓰기 | ✅ 차단 |
+| [비인증] 등록 안 된 컬렉션(PointLog) 읽기 | ✅ 차단 |
+
+**⚠️ 게시 시 겪은 오류**: `match` 경로에 한글을 쓰면 `token recognition error at: '공'`이 난다. `match /examHistory_공기업/{docId}`가 불가능해서, 컬렉션 이름을 와일드카드로 받아 **문자열 리터럴과 비교**하는 방식으로 우회했다(문자열 안의 한글은 문제없음).
+```
+match /{coll}/{docId} {
+  allow read: if coll in ['teachers','examScores','attendance',
+                          'examHistory_공기업','examHistory_공무원'];
+}
+```
+
+### 20.7 상담 기록 이전 완료
+성일님이 `migrateCounseling` 편집기 실행 → **85건 이전, 0건 건너뜀**. 배포 불필요했고 새 OAuth 권한도 없었다.
+
+### 20.8 말투 현대화 — 보류 (2026-09-14)
+"디자인을 바꿨으니 말투도 바꾸자(~소 말고)" 요청이 있었으나, 확인 결과 **v2에는 하오체 어미가 없다**(처음부터 현대 존댓말로 작성됨). `~하오`·`~했소`는 **구앱 전용**이다.
+v2에 남은 건 옛투 **낱말**뿐: `집무실`, `저잣거리`, `입실하기`, `공직의 길을 걷는 자`, `엽전`/`냥`.
+선택지(①화면 이름만 ②엽전까지 ③반 이름까지)를 제시했고 사용자 결정은 **"우선 냅두자"** → 보류. 나중에 다시 꺼낼 때 이 목록부터 보면 된다.
+
+### 20.9 남은 것
+- 교사 로그인 후 저잣거리 **"기본 물품 한번에 등록"** (아직 안 함)
 - 스트릭을 `attStatusOf` 기반으로 전환
 - 전환일 3종: `opening` 전교생 생성 / `ATT_V2_FROM` 변경 / 은행 잔액 처리
