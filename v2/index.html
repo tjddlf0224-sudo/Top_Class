@@ -415,7 +415,8 @@ window.FS = {
       const n = String(v.name||'').trim();
       if (n && n !== '교사' && n !== '테스트' && v.role !== 'teacher')
         out.push({ id:d.id, name:n, track:String(v.track||'공무원').trim(),
-                   coins:Number(v.coins)||0 });
+                   coins:Number(v.coins)||0,
+                   dorm: v.dorm === true });   // 기숙사생은 08:30 전이면 지각이 없다
     });
     return out.sort((a,b)=>a.name.localeCompare(b.name,'ko'));
   },
@@ -581,6 +582,7 @@ function renderView(){
   var v=document.getElementById('view');
   if(TAB==='home'){v.innerHTML=ROLE==='student'?homeStudent():homeTeacher();fillIcoSlots(v);return;}
   if(TAB==='after'){renderAfterSchool(v);return;}
+  if(TAB==='att' && ROLE==='teacher'){renderAmTeacher(v);return;}
   v.innerHTML=stub();fillIcoSlots(v);
 }
 
@@ -726,6 +728,118 @@ async function doAmCheckIn(){
     showModal('<div class="modal-box"><div style="text-align:center;padding:10px 0 6px">'+
       '<div style="font-size:2.4rem;line-height:1">⚠️</div>'+
       '<div style="font-size:1.35rem;font-weight:800;margin-top:10px">인증 실패</div>'+
+      '<div style="font-size:.85rem;color:var(--ink-mute);margin-top:6px">'+msg+'</div>'+
+      '</div><button class="btn" onclick="closeModal()">확인</button></div>');
+  }
+}
+
+/* ═══ 교사 — 등교 출결 ═══════════════════════════════
+   결석은 저장돼 있지 않으므로 "수업일인데 기록 없음"으로 계산해 보여준다.
+   교사가 고치면 amOverride에 남고, 그게 모든 판정에서 최우선이 된다. */
+var amDate = null;                 // 교사가 보고 있는 날짜
+
+var AM_STATES = ['출석','지각','결석','공결'];
+function amColor(st){
+  return st==='출석' ? ['var(--green-soft)','#16a34a']
+       : st==='지각' ? ['#fef3c7','#b45309']
+       : st==='결석' ? ['var(--rose-soft)','var(--rose)']
+       : st==='공결' ? ['var(--line-soft)','var(--ink-soft)']
+       :               ['var(--line-soft)','var(--ink-mute)'];
+}
+
+async function renderAmTeacher(v){
+  if(!amDate) amDate=kstToday();
+  await loadCalendar();
+
+  var head='<div class="card pad" style="margin-bottom:14px">'+
+    '<label style="display:block;font-size:.78rem;font-weight:600;color:var(--ink-soft);margin-bottom:6px">날짜</label>'+
+    '<input type="date" value="'+amDate+'" onchange="amDate=this.value;renderView()" '+
+    'style="width:100%;padding:12px 14px;border:1.5px solid var(--line);border-radius:8px"></div>';
+
+  if(!isSchoolDay(amDate)){
+    var why=offReason(amDate)||(isWeekend(amDate)?'주말':'휴업일');
+    v.innerHTML=head+'<div class="empty"><div class="empty-ico">'+ic('calendar',44)+'</div>'+
+      '<span>'+why+' — 수업일이 아닙니다</span></div>';
+    fillIcoSlots(v); return;
+  }
+
+  v.innerHTML=head+'<div class="empty"><span>불러오는 중…</span></div>';
+
+  var mem = await FS.members();
+  var am  = await FS.amCheckIns(amDate);
+  var ov  = await FS.amOverrides(amDate);
+  // 구앱(시트) 이력도 함께 봐야 전환 전 날짜가 빈칸으로 보이지 않는다
+  var legacy = {}, legacyLast = '';
+  try {
+    var all = await FS.attendanceAll();
+    for (var nm in all.byName){
+      var ks = Object.keys(all.byName[nm]).sort();
+      if (ks.length && ks[ks.length-1] > legacyLast) legacyLast = ks[ks.length-1];
+      legacy[nm] = all.byName[nm];
+    }
+  } catch(e){}
+
+  var today = kstToday();
+  var sum = {출석:0, 지각:0, 결석:0, 공결:0, 미체크:0};
+  var rows = mem.map(function(m){
+    var ctx = { days: legacy[m.name]||{}, legacyLast: legacyLast, today: today, dorm: m.dorm,
+                am: am[m.name] ? (function(o){o[amDate]=am[m.name];return o;})({}) : {},
+                ov: ov[m.name] ? (function(o){o[amDate]=ov[m.name];return o;})({}) : {} };
+    var st = attStatusOf(amDate, ctx);
+    var label = st || '미체크';
+    sum[label] = (sum[label]||0) + 1;
+    var c = amColor(st);
+    var time = am[m.name] && am[m.name].at
+      ? (function(a){var k=new Date(a.seconds*1000+9*3600*1000);
+                     return pad2(k.getUTCHours())+':'+pad2(k.getUTCMinutes());})(am[m.name].at) : '';
+    return '<div class="row" onclick="openAmFix(\''+m.name+'\')" style="cursor:pointer">'+
+      '<div class="avatar">'+m.name.charAt(0)+'</div>'+
+      '<div class="row-main"><div class="row-t">'+m.name+'</div>'+
+      '<div class="row-s">'+m.track+'반'+(m.dorm?' · 기숙사':'')+(time?' · '+time+' 인증':'')+
+        (ov[m.name]?' · 교사 정정':'')+'</div></div>'+
+      '<span class="chip" style="background:'+c[0]+';color:'+c[1]+'">'+label+'</span></div>';
+  }).join('');
+
+  v.innerHTML = head +
+    '<div class="card"><div class="blk"><div class="blk-head">'+
+      '<div class="row-t">출석 '+sum.출석+' · 지각 '+sum.지각+' · 결석 '+sum.결석+'</div>'+
+      '<div class="row-v" style="color:var(--ink-mute)">'+mem.length+'명</div>'+
+    '</div></div>' + rows + '</div>' +
+    '<div class="sec-label" style="color:var(--ink-mute);font-weight:500">'+
+      '학생을 탭하면 출결을 고칠 수 있습니다</div>';
+  fillIcoSlots(v);
+}
+
+/** 교사 정정 — 누른 학생의 그 날짜 출결을 바꾼다 */
+function openAmFix(name){
+  var html='<div class="modal-box">'+
+    '<div style="text-align:center;padding:4px 0 14px">'+
+      '<div style="font-size:1.25rem;font-weight:800">'+name+'</div>'+
+      '<div style="font-size:.82rem;color:var(--ink-mute);margin-top:4px">'+amDate+' 출결 정정</div>'+
+    '</div>';
+  html += AM_STATES.map(function(st){
+    var c=amColor(st);
+    // 받침이 'ㄹ'이면 '로', 그 외 받침이면 '으로' (공결로 / 출석으로)
+    var cp = st.charCodeAt(st.length-1) - 0xAC00;
+    var josa = (cp >= 0 && cp % 28 === 8) ? '로' : '으로';
+    return '<button class="btn btn-outline" style="margin-bottom:8px;color:'+c[1]+'" '+
+      'onclick="applyAmFix(\''+name+'\',\''+st+'\')">'+st+josa+' 변경</button>';
+  }).join('');
+  html += '<button class="btn btn-outline" onclick="closeModal()">취소</button></div>';
+  showModal(html);
+}
+
+async function applyAmFix(name, status){
+  closeModal();
+  try {
+    await FS.setAmOverride(amDate, name, status, '교사');
+    renderView();
+  } catch(e){
+    var msg = (e && e.code === 'permission-denied')
+      ? '교사로 로그인해야 정정할 수 있습니다' : '저장하지 못했습니다';
+    showModal('<div class="modal-box"><div style="text-align:center;padding:10px 0 6px">'+
+      '<div style="font-size:2.4rem">⚠️</div>'+
+      '<div style="font-size:1.2rem;font-weight:800;margin-top:10px">정정 실패</div>'+
       '<div style="font-size:.85rem;color:var(--ink-mute);margin-top:6px">'+msg+'</div>'+
       '</div><button class="btn" onclick="closeModal()">확인</button></div>');
   }
