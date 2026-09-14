@@ -1,0 +1,20 @@
+{
+ "_주의": "저잣거리 초기 물품. 재고는 2026-09-14 시트 기준 '현재 남은 수량'이다. v2에서는 이 값을 시작점으로 삼고, 이후 재고 = stock - (v2 판매 합계)로 계산한다. 엽전 개시잔액(opening)과 같은 발상.",
+ "기준일": "2026-09-14",
+ "물품": [
+  { "name": "포카칩 오리지널",   "price": 10, "stock": 1  },
+  { "name": "포카칩 어니언맛",   "price": 10, "stock": 0  },
+  { "name": "미본 순쌀과자",     "price": 1,  "stock": 24 },
+  { "name": "홈런",              "price": 10, "stock": 0  },
+  { "name": "오사쯔",            "price": 10, "stock": 1  },
+  { "name": "ABC 초콜렛(낱개)",  "price": 1,  "stock": 43 },
+  { "name": "카스타드 오리지널", "price": 1,  "stock": 20 },
+  { "name": "자유시간mini",      "price": 1,  "stock": 61 },
+  { "name": "비쵸비",            "price": 3,  "stock": 5  },
+  { "name": "하리보",            "price": 2,  "stock": 11 },
+  { "name": "마이구미",          "price": 2,  "stock": 0  },
+  { "name": "마가렛트",          "price": 2,  "stock": 17 },
+  { "name": "찰떡파이",          "price": 2,  "stock": 10 },
+  { "name": "피크닉(사과)",      "price": 2,  "stock": 17 }
+ ]
+}

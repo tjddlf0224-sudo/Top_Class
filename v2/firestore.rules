@@ -29,6 +29,7 @@ rules_version = '2';
 //   - /planner 추가 — 학생 플래너. 날짜는 서버 at으로만 정해진다(소급 입력 차단)
 //   - /streakFreeze 제거 → /freezeBuy, /freezeUse 로 교체(이벤트 기록).
 //     이로써 v2에서 GAS로 나가는 쓰기 경로가 없어진다.
+//   - /marketItem, /marketBuy 추가 — 저잣거리. 재고도 계산으로 구한다
 //
 // 참고: Firestore 규칙은 "먼저 매칭된 것이 이긴다"가 아니라 **하나라도 허용하면 통과**다.
 //       그래서 아래 구체 규칙들과 맨 끝 catch-all(write:false)이 공존해도 문제 없다.
@@ -221,6 +222,44 @@ service cloud.firestore {
         && request.time < resource.data.at + duration.value(18, 'h');
 
       allow delete: if false;
+    }
+
+    // ── 저잣거리 ────────────────────────────────────────
+    // 물품은 교사가 관리한다. 재고를 문서에 들고 있지 않는다 —
+    // 재고 = stock(시작 수량) − 판매 기록 합계로 계산한다.
+    // 그래서 "재고는 줄었는데 엽전은 안 빠졌다" 같은 어긋남이 없고,
+    // 동시에 두 명이 사도 재고가 꼬이지 않는다(문서를 고치는 게 아니라 쌓기만 한다).
+    match /marketItem/{docId} {
+      allow read: if true;
+      allow write: if isTeacher()
+                   && ( request.resource == null
+                        || ( request.resource.data.keys()
+                               .hasOnly(['name','price','stock','note','at'])
+                             && request.resource.data.price is int
+                             && request.resource.data.price >= 0
+                             && request.resource.data.stock is int
+                             && request.resource.data.stock >= 0 ) );
+    }
+
+    // 판매 기록. 구앱과 마찬가지로 교사가 처리한다(학생이 직접 사지 않는다)
+    // — 물건을 실제로 건네주는 사람이 교사이기 때문.
+    // 엽전은 이 기록에서 계산된다: −(수량 × 가격).
+    match /marketBuy/{docId} {
+      allow read: if true;
+      allow create: if isTeacher()
+                    && request.resource.data.keys()
+                         .hasOnly(['student','item','qty','price','by','at'])
+                    && request.resource.data.qty is int
+                    && request.resource.data.qty > 0
+                    && request.resource.data.price is int
+                    && request.resource.data.price >= 0
+                    && request.resource.data.student is string
+                    && request.resource.data.item is string
+                    && request.resource.data.at == request.time;
+      // 취소는 반대 기록이 아니라 교사만 지울 수 있게 둔다 — 물건을 돌려받는
+      // 상황이라 기록을 남기는 것보다 없애는 쪽이 재고·엽전 계산에 자연스럽다.
+      allow update: if false;
+      allow delete: if isTeacher();
     }
 
     // ── 학생 명부 (엽전 잔액이 여기 있음) ───────────────────

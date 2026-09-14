@@ -263,7 +263,7 @@ main{padding:6px 18px calc(32px + var(--safe-bottom));}
 <!-- ═══ Firebase (조회·체크인 전부 여기로. GAS 안 거침) ═══ -->
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-app.js";
-import { getFirestore, doc, getDoc, setDoc, updateDoc, addDoc, collection, getDocs, query, where, serverTimestamp }
+import { getFirestore, doc, getDoc, setDoc, updateDoc, addDoc, deleteDoc, collection, getDocs, query, where, serverTimestamp }
   from "https://www.gstatic.com/firebasejs/12.12.1/firebase-firestore.js";
 import { getAuth, onAuthStateChanged, signInAnonymously, signInWithEmailAndPassword,
          signOut, setPersistence, browserLocalPersistence }
@@ -477,6 +477,43 @@ window.FS = {
     await addDoc(collection(db,'freezeUse'), { name, date: dateStr, at: serverTimestamp() });
   },
 
+  /* ── 저잣거리 ──────────────────────────────────────
+     재고를 문서에 들고 있지 않는다: 재고 = stock − 판매 합계.
+     문서를 고치는 게 아니라 기록을 쌓기만 하므로 동시 판매에도 꼬이지 않는다. */
+  async marketItems(){
+    const snap = await getDocs(collection(db,'marketItem'));
+    const out = [];
+    snap.forEach(d => { const v = d.data();
+      out.push({ id:d.id, name:String(v.name||''), price:Number(v.price)||0,
+                 stock:Number(v.stock)||0, note:String(v.note||'') }); });
+    return out.sort((a,b)=>a.name.localeCompare(b.name,'ko'));
+  },
+  async marketBuys(){
+    const snap = await getDocs(collection(db,'marketBuy'));
+    const out = [];
+    snap.forEach(d => { const v = d.data();
+      out.push({ id:d.id, student:String(v.student||''), item:String(v.item||''),
+                 qty:Number(v.qty)||0, price:Number(v.price)||0,
+                 at:(v.at&&v.at.seconds)?v.at.seconds:0 }); });
+    return out.sort((a,b)=>b.at-a.at);
+  },
+  async addMarketItem(item){
+    await _authReady;
+    await addDoc(collection(db,'marketItem'), {
+      name:String(item.name), price:Number(item.price)||0,
+      stock:Number(item.stock)||0, note:String(item.note||''), at: serverTimestamp() });
+  },
+  async sellMarket(student, item, qty, price, by){
+    await _authReady;
+    await addDoc(collection(db,'marketBuy'), {
+      student:String(student), item:String(item), qty:Number(qty),
+      price:Number(price), by:String(by), at: serverTimestamp() });
+  },
+  async cancelMarketBuy(id){
+    await _authReady;
+    await deleteDoc(doc(db,'marketBuy',id));
+  },
+
   async checkIns(dateStr){
     const { from, to } = kstRange(dateStr);
     const snap = await getDocs(query(collection(db,'asCheckIn'),
@@ -556,6 +593,7 @@ function renderView(){
   if(TAB==='after'){renderAfterSchool(v);return;}
   if(TAB==='att' && ROLE==='teacher'){renderAmTeacher(v);return;}
   if(TAB==='coin'){ROLE==='student'?renderCoinStudent(v):renderCoinTeacher(v);return;}
+  if(TAB==='market'){renderMarket(v);return;}
   v.innerHTML=stub();fillIcoSlots(v);
 }
 
@@ -832,6 +870,18 @@ async function loadWallet(m){
               .toISOString().slice(0,10);
   var att = coinFromAttendance(from, today, ctx);
 
+  // 저잣거리 구매 — 판매 기록에서 계산한다(원장에 따로 적지 않는다)
+  var marketCost = 0, marketItems2 = [];
+  try {
+    var buys = await FS.marketBuys();
+    buys.filter(function(b){ return b.student === name; }).forEach(function(b){
+      var c = b.qty * b.price;
+      marketCost -= c;
+      marketItems2.push({ date: new Date(b.at*1000 + 9*3600*1000).toISOString().slice(0,10),
+                          amount: -c, reason: '저잣거리: '+b.item+' ×'+b.qty, by: '계산' });
+    });
+  } catch(e){}
+
   // 프리즈 구매 비용 — 구매 기록 수로 계산한다(원장에 따로 적지 않는다)
   var fz = { bought:0 };
   try { fz = await FS.freezeOf(name); } catch(e){}
@@ -844,12 +894,13 @@ async function loadWallet(m){
   try { plannerByDate = await FS.plannerOf(name); } catch(e){}
   var pl = coinFromPlanner(from, today, plannerByDate, ctx);
 
-  var items = att.items.concat(pl.items).concat(freezeItems).concat(ledger.map(function(l){
+  var items = att.items.concat(pl.items).concat(freezeItems).concat(marketItems2)
+              .concat(ledger.map(function(l){
     return { date:l.date, amount:l.amount, reason:l.reason, by:l.by||'교사' };
   })).sort(function(a,b){ return a.date < b.date ? 1 : -1; });
 
   return { mode:'계산',
-           balance: open.coins + ledgerSum + att.total + pl.total + freezeCost,
+           balance: open.coins + ledgerSum + att.total + pl.total + freezeCost + marketCost,
            items: items, opening: open };
 }
 
@@ -955,6 +1006,171 @@ async function savePlannerNow(){
     err.textContent = (e && e.code === 'permission-denied')
       ? '오늘 플래너만 수정할 수 있습니다' : '저장하지 못했습니다';
     err.classList.remove('hidden');
+  }
+}
+
+/* ═══ 저잣거리 ═══════════════════════════════════════
+   재고를 문서에 들고 있지 않는다: 재고 = stock(시작 수량) − 판매 합계.
+   문서를 고치는 게 아니라 기록을 쌓기만 하므로 동시 판매에도 꼬이지 않고,
+   "재고는 줄었는데 엽전은 안 빠졌다"가 구조적으로 생기지 않는다.
+   구앱과 마찬가지로 판매는 교사가 처리한다(물건을 건네주는 사람이 교사라서). */
+var marketCache = null;
+
+async function loadMarket(force){
+  if (marketCache && !force) return marketCache;
+  var items = await FS.marketItems();
+  var buys  = await FS.marketBuys();
+  var sold  = {};
+  buys.forEach(function(b){ sold[b.item] = (sold[b.item]||0) + b.qty; });
+  items.forEach(function(it){ it.left = Math.max(0, it.stock - (sold[it.name]||0)); });
+  marketCache = { items: items, buys: buys };
+  return marketCache;
+}
+
+async function renderMarket(v){
+  v.innerHTML='<div class="empty"><span>불러오는 중…</span></div>';
+  var m = await loadMarket(true);
+  var teacher = (ROLE === 'teacher');
+
+  if (!m.items.length){
+    v.innerHTML = '<div class="empty"><div class="empty-ico">'+ic('market',44)+'</div>'+
+      '<span>아직 등록된 물품이 없어요'+(teacher?'<br>아래에서 물품을 추가해주세요':'')+'</span></div>'+
+      (teacher? '<button class="btn" onclick="seedMarket()">기본 물품 한번에 등록</button>'+
+                '<button class="btn btn-outline" onclick="openAddItem()">물품 직접 추가</button>' : '');
+    fillIcoSlots(v); return;
+  }
+
+  var html = '';
+  if (!teacher)
+    html += '<div class="hero"><div class="hero-lbl">내 엽전</div>'+
+      '<div class="hero-num" style="color:'+(ME.coins<0?'var(--rose)':'var(--ink)')+'">'+
+      ME.coins+'<small>냥</small></div></div>';
+
+  html += '<div class="sec-label">물품</div><div class="card">';
+  html += m.items.map(function(it){
+    var out = it.left <= 0;
+    var afford = teacher || (ME.coins >= it.price);
+    return '<div class="row"'+(teacher? ' onclick="openSell(\''+it.id+'\')" style="cursor:pointer"':' style="cursor:default"')+'>'+
+      '<div class="row-main"><div class="row-t" style="'+(out?'color:var(--ink-mute)':'')+'">'+
+        escapeHtml(it.name)+'</div>'+
+      '<div class="row-s">'+(out? '품절'
+        : '남은 수량 '+it.left+'개'+(!afford?' · 엽전 부족':''))+'</div></div>'+
+      '<span class="chip" style="background:'+(out?'var(--line-soft)':'var(--accent-soft,#eef0ff)')+
+        ';color:'+(out?'var(--ink-mute)':'var(--accent)')+'">'+it.price+'냥</span></div>';
+  }).join('') + '</div>';
+
+  if (teacher){
+    html += '<div class="sec-label" style="color:var(--ink-mute);font-weight:500">'+
+      '물품을 탭하면 학생에게 판매할 수 있습니다</div>'+
+      '<button class="btn btn-outline" onclick="openAddItem()">물품 추가</button>';
+    if (m.buys.length){
+      html += '<div class="sec-label">최근 판매</div><div class="card">';
+      html += m.buys.slice(0,10).map(function(b){
+        return '<div class="row" style="cursor:default">'+
+          '<div class="row-main"><div class="row-t">'+escapeHtml(b.student)+'</div>'+
+          '<div class="row-s">'+escapeHtml(b.item)+' ×'+b.qty+'</div></div>'+
+          '<span class="row-v" style="color:var(--rose)">-'+(b.qty*b.price)+'냥</span>'+
+          '<span onclick="cancelSell(\''+b.id+'\')" style="color:var(--ink-mute);padding:6px 8px">✕</span>'+
+          '</div>';
+      }).join('') + '</div>';
+    }
+  } else {
+    html += '<div class="sec-label" style="color:var(--ink-mute);font-weight:500">'+
+      '구매는 선생님께 말씀드리면 처리해주십니다</div>';
+  }
+  v.innerHTML = html; fillIcoSlots(v);
+}
+
+/** 시트에 있던 물품을 한 번에 등록 — 재고는 기준일 당시 남은 수량 */
+async function seedMarket(){
+  try {
+    var r = await fetch('market-seed.json', {cache:'no-cache'});
+    var d = await r.json();
+    for (var i=0;i<d.물품.length;i++) await FS.addMarketItem(d.물품[i]);
+    marketCache = null; renderView();
+  } catch(e){
+    showModal('<div class="modal-box"><div style="text-align:center;padding:14px 0">'+
+      '<div style="font-size:2.2rem">⚠️</div><div style="font-weight:800;margin-top:8px">등록 실패</div>'+
+      '<div style="font-size:.85rem;color:var(--ink-mute);margin-top:6px">'+
+      (e && e.code==='permission-denied'?'교사로 로그인해야 합니다':'다시 시도해주세요')+
+      '</div></div><button class="btn" onclick="closeModal()">확인</button></div>');
+  }
+}
+
+function openAddItem(){
+  showModal('<div class="modal-box">'+
+    '<div style="text-align:center;padding:4px 0 14px"><div style="font-size:1.25rem;font-weight:800">물품 추가</div></div>'+
+    '<div class="field"><label>물품명</label><input id="miName" type="text" placeholder="예: 하리보"></div>'+
+    '<div class="field"><label>가격(냥)</label><input id="miPrice" type="number" inputmode="numeric" placeholder="예: 2"></div>'+
+    '<div class="field"><label>수량</label><input id="miStock" type="number" inputmode="numeric" placeholder="예: 20"></div>'+
+    '<div id="miErr" class="login-err hidden"></div>'+
+    '<button class="btn" id="miGo" onclick="applyAddItem()">추가</button>'+
+    '<button class="btn btn-outline" onclick="closeModal()">취소</button></div>');
+}
+async function applyAddItem(){
+  var nm=(document.getElementById('miName').value||'').trim();
+  var pr=parseInt(document.getElementById('miPrice').value,10);
+  var st=parseInt(document.getElementById('miStock').value,10);
+  var err=document.getElementById('miErr');
+  var show=function(m){err.textContent=m;err.classList.remove('hidden');};
+  if(!nm) return show('물품명을 입력해주세요');
+  if(isNaN(pr)||pr<0) return show('가격을 올바르게 입력해주세요');
+  if(isNaN(st)||st<0) return show('수량을 올바르게 입력해주세요');
+  var btn=document.getElementById('miGo'); btn.disabled=true; btn.textContent='추가 중...';
+  try { await FS.addMarketItem({name:nm,price:pr,stock:st}); marketCache=null; closeModal(); renderView(); }
+  catch(e){ btn.disabled=false; btn.textContent='추가';
+    show(e && e.code==='permission-denied' ? '교사로 로그인해야 합니다' : '추가하지 못했습니다'); }
+}
+
+/** 판매 — 학생과 수량을 고른다 */
+async function openSell(itemId){
+  var m = await loadMarket();
+  var it = m.items.filter(function(x){return x.id===itemId;})[0];
+  if (!it) return;
+  if (it.left <= 0){
+    showModal('<div class="modal-box"><div style="text-align:center;padding:14px 0">'+
+      '<div style="font-size:2.2rem">📦</div><div style="font-weight:800;margin-top:8px">품절입니다</div>'+
+      '</div><button class="btn" onclick="closeModal()">확인</button></div>');
+    return;
+  }
+  var mem = await FS.members();
+  showModal('<div class="modal-box">'+
+    '<div style="text-align:center;padding:4px 0 14px">'+
+      '<div style="font-size:1.25rem;font-weight:800">'+escapeHtml(it.name)+'</div>'+
+      '<div style="font-size:.82rem;color:var(--ink-mute);margin-top:4px">'+
+        it.price+'냥 · 남은 수량 '+it.left+'개</div></div>'+
+    '<div class="field"><label>학생</label><select id="sellWho" '+
+      'style="width:100%;padding:12px 14px;border:1.5px solid var(--line);border-radius:8px">'+
+      mem.map(function(x){return '<option value="'+escapeHtml(x.name)+'">'+escapeHtml(x.name)+' ('+x.coins+'냥)</option>';}).join('')+
+      '</select></div>'+
+    '<div class="field"><label>수량</label><input id="sellQty" type="number" inputmode="numeric" value="1"></div>'+
+    '<div id="sellErr" class="login-err hidden"></div>'+
+    '<button class="btn" id="sellGo" onclick="applySell(\''+it.id+'\')">판매</button>'+
+    '<button class="btn btn-outline" onclick="closeModal()">취소</button></div>');
+}
+async function applySell(itemId){
+  var m = await loadMarket();
+  var it = m.items.filter(function(x){return x.id===itemId;})[0];
+  var who=document.getElementById('sellWho').value;
+  var qty=parseInt(document.getElementById('sellQty').value,10);
+  var err=document.getElementById('sellErr');
+  var show=function(t){err.textContent=t;err.classList.remove('hidden');};
+  if(isNaN(qty)||qty<=0) return show('수량을 올바르게 입력해주세요');
+  if(qty>it.left) return show('남은 수량('+it.left+'개)보다 많습니다');
+  var btn=document.getElementById('sellGo'); btn.disabled=true; btn.textContent='판매 중...';
+  try { await FS.sellMarket(who, it.name, qty, it.price, '교사');
+        marketCache=null; closeModal(); renderView(); }
+  catch(e){ btn.disabled=false; btn.textContent='판매';
+    show(e && e.code==='permission-denied' ? '교사로 로그인해야 합니다' : '판매하지 못했습니다'); }
+}
+async function cancelSell(id){
+  try { await FS.cancelMarketBuy(id); marketCache=null; renderView(); }
+  catch(e){
+    showModal('<div class="modal-box"><div style="text-align:center;padding:14px 0">'+
+      '<div style="font-size:2.2rem">⚠️</div><div style="font-weight:800;margin-top:8px">취소 실패</div>'+
+      '<div style="font-size:.85rem;color:var(--ink-mute);margin-top:6px">'+
+      (e && e.code==='permission-denied'?'교사로 로그인해야 합니다':'다시 시도해주세요')+
+      '</div></div><button class="btn" onclick="closeModal()">확인</button></div>');
   }
 }
 
