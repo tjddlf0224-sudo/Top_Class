@@ -544,6 +544,115 @@ window.FS = {
     return list.sort((a,b) => b.date.localeCompare(a.date));
   },
 
+  /* ── 상담 ──────────────────────────────────────────
+     ⚠️ 학생 개인정보라 교사만 읽고 쓸 수 있다(보안규칙에서 강제).
+     과거 기록은 GAS 편집기 일회성 스크립트로 옮긴다(migrate_counseling.gs). */
+  async counselAll(){
+    const snap = await getDocs(collection(db,'counseling'));
+    const out = [];
+    snap.forEach(d => { const v = d.data();
+      out.push({ id:d.id, date:String(v.date||''), name:String(v.name||''),
+                 done: v.done === true, memo:String(v.memo||'') }); });
+    return out.sort((a,b) => b.date.localeCompare(a.date));
+  },
+  async saveCounsel(dateStr, name, memo){
+    await _authReady;
+    const id = (dateStr+'_'+name).replace(/[^\wㄱ-ㅎ가-힣-]/g,'_');
+    // 구앱과 같은 규칙: 메모를 쓰면 곧 상담완료다(별도 체크 없음)
+    await setDoc(doc(db,'counseling',id),
+      { date:dateStr, name, memo:String(memo), done: String(memo).trim().length > 0,
+        at: serverTimestamp() });
+  },
+
+  /* ── 등교 출석 (아침) ───────────────────────────────
+     방과후(asCheckIn)와 같은 구조다. 서버 시각만 기록하고
+     출석/지각은 그 시각으로 계산한다 — 학생이 상태를 고를 수 없다.
+     결석은 저장하지 않는다: 수업일인데 기록이 없으면 결석. */
+  async amCheckIn(dateStr, name, dorm){
+    await _authReady;
+    const id = (dateStr+'_'+name).replace(/[^\wㄱ-ㅎ가-힣-]/g,'_');
+    await setDoc(doc(db,'amCheckIn',id), { at: serverTimestamp(), name, dorm: !!dorm });
+  },
+  /* 인증 가능 시간(KST 06:00~08:30)으로 범위를 잡는다.
+     KST 06:00은 UTC로 전날 21:00이지만 Date가 알아서 환산하므로
+     날짜 문자열을 다시 만들지 않는다(§13.8과 같은 함정). */
+  async amCheckIns(dateStr){
+    const from = new Date(dateStr + 'T06:00:00+09:00');
+    const to   = new Date(dateStr + 'T08:30:00+09:00');
+    const snap = await getDocs(query(collection(db,'amCheckIn'),
+      where('at','>=',from), where('at','<',to)));
+    const out = {};
+    snap.forEach(d => { const v = d.data(); if (v.at) out[v.name] = v; });
+    return out;
+  },
+
+  /* 교사 정정 — 학생이 못 찍었지만 실제로는 왔거나, 공결 처리할 때 */
+  async amOverrides(dateStr){
+    const snap = await getDocs(query(collection(db,'amOverride'),
+      where('date','==',dateStr)));
+    const out = {};
+    snap.forEach(d => { const v = d.data(); out[v.name] = v; });
+    return out;
+  },
+  async setAmOverride(dateStr, name, status, by){
+    await _authReady;
+    const id = (dateStr+'_'+name).replace(/[^\wㄱ-ㅎ가-힣-]/g,'_');
+    await setDoc(doc(db,'amOverride',id),
+      { date:dateStr, name, status, by, at: serverTimestamp() });
+  },
+
+  /* ── 엽전 원장 ─────────────────────────────────────
+     잔액 = 개시잔액 + 원장 합계 + 계산분(출결·플래너·프리즈·저잣거리).
+     계산할 수 있는 것은 원장에 쌓지 않는다 — 같은 사실을 두 군데 적으면
+     반드시 어긋난다. 원장에는 교사 지급·차감처럼 계산 불가능한 것만 들어간다. */
+  async openingOf(name){
+    const s = await getDoc(doc(db,'opening',name));
+    if (!s.exists()) return null;                 // 없으면 아직 전환 전 → 시트 값을 쓴다
+    const v = s.data();
+    return { date: String(v.date||''), coins: Number(v.coins)||0 };
+  },
+  async ledgerOf(name){
+    const snap = await getDocs(query(collection(db,'ledger'), where('name','==',name)));
+    const out = [];
+    snap.forEach(d => { const v = d.data();
+      out.push({ id:d.id, date:String(v.date||''), amount:Number(v.amount)||0,
+                 reason:String(v.reason||''), by:String(v.by||'') }); });
+    return out.sort((a,b)=> a.date < b.date ? 1 : -1);
+  },
+  async addLedger(name, amount, reason, by){
+    await _authReady;
+    await addDoc(collection(db,'ledger'),
+      { name, amount: Number(amount), reason: String(reason),
+        by: String(by), date: kstTodayISO(), at: serverTimestamp() });
+  },
+
+  /* ── 플래너 ────────────────────────────────────────
+     날짜는 저장된 서버 시각(at)으로만 센다 — 학생이 날짜를 못 고른다.
+     문서 ID에 날짜가 들어가지만 편의용 키일 뿐 판단 근거가 아니다. */
+  async plannerOf(name){
+    const snap = await getDocs(query(collection(db,'planner'), where('name','==',name)));
+    const byDate = {};
+    snap.forEach(d => {
+      const v = d.data();
+      if (!v.at || !v.at.seconds) return;
+      const k = new Date(v.at.seconds*1000 + 9*60*60*1000).toISOString().slice(0,10);
+      const prog = Number(v.progress)||0;
+      if (!byDate[k] || prog > byDate[k].progress)
+        byDate[k] = { id:d.id, progress:prog, tasks:String(v.tasks||'[]') };
+    });
+    return byDate;
+  },
+  async savePlanner(name, tasks, progress){
+    await _authReady;
+    const id  = (kstTodayISO()+'_'+name).replace(/[^\wㄱ-ㅎ가-힣-]/g,'_');
+    const ref = doc(db,'planner',id);
+    const cur = await getDoc(ref);
+    const body = { tasks: JSON.stringify(tasks), progress: Number(progress)||0 };
+    if (cur.exists()) await updateDoc(ref, body);
+    else              await setDoc(ref, Object.assign({ name, at: serverTimestamp() }, body));
+    return id;
+  },
+
   async checkIns(dateStr){
     const { from, to } = kstRange(dateStr);
     const snap = await getDocs(query(collection(db,'asCheckIn'),
@@ -625,6 +734,7 @@ function renderView(){
   if(TAB==='coin'){ROLE==='student'?renderCoinStudent(v):renderCoinTeacher(v);return;}
   if(TAB==='market'){renderMarket(v);return;}
   if(TAB==='exam'){ROLE==='student'?renderExamStudent(v):renderExamTeacher(v);return;}
+  if(TAB==='counsel' && ROLE==='teacher'){renderCounsel(v);return;}
   v.innerHTML=stub();fillIcoSlots(v);
 }
 
@@ -1038,6 +1148,97 @@ async function savePlannerNow(){
       ? '오늘 플래너만 수정할 수 있습니다' : '저장하지 못했습니다';
     err.classList.remove('hidden');
   }
+}
+
+/* ═══ 상담 ═══════════════════════════════════════════
+   ⚠️ 학생 개인정보라 교사 전용이다(보안규칙에서도 교사만 읽힌다).
+   구앱과 같은 규칙: 메모를 쓰면 곧 상담완료 — 별도 체크 없음. */
+var counselCache = null;
+
+async function renderCounsel(v){
+  v.innerHTML='<div class="empty"><span>불러오는 중…</span></div>';
+  var mem, recs;
+  try {
+    mem  = await FS.members();
+    recs = await FS.counselAll();
+  } catch(e){
+    v.innerHTML='<div class="empty"><div class="empty-ico">'+ic('chat',44)+'</div>'+
+      '<span>교사로 로그인해야 볼 수 있습니다</span></div>';
+    fillIcoSlots(v); return;
+  }
+  counselCache = recs;
+
+  // 학생별 최근 상담일
+  var last = {};
+  recs.forEach(function(r){ if (!last[r.name]) last[r.name] = r; });
+
+  var html = '<div class="sec-label">학생별 상담</div><div class="card">';
+  html += mem.map(function(m){
+    var r = last[m.name];
+    var days = r ? Math.floor((new Date(kstToday()) - new Date(r.date)) / 86400000) : null;
+    var warn = (days === null || days > 30);
+    return '<div class="row" onclick="openCounsel(\''+escapeHtml(m.name)+'\')" style="cursor:pointer">'+
+      '<div class="avatar">'+m.name.charAt(0)+'</div>'+
+      '<div class="row-main"><div class="row-t">'+escapeHtml(m.name)+'</div>'+
+      '<div class="row-s" style="'+(warn?'color:var(--rose)':'')+'">'+
+        (r ? r.date+' · '+days+'일 전' : '상담 기록 없음')+'</div></div>'+
+      (r ? '<span class="chip" style="background:var(--green-soft);color:#16a34a">완료</span>' : '')+
+      '</div>';
+  }).join('') + '</div>';
+
+  if (recs.length){
+    html += '<div class="sec-label">최근 기록</div><div class="card">';
+    html += recs.slice(0,15).map(function(r){
+      return '<div class="row" onclick="openCounsel(\''+escapeHtml(r.name)+'\')" style="cursor:pointer">'+
+        '<div class="row-main"><div class="row-t">'+escapeHtml(r.name)+
+          ' <span style="font-weight:500;color:var(--ink-mute)">'+r.date+'</span></div>'+
+        '<div class="row-s">'+escapeHtml(r.memo).slice(0,60)+(r.memo.length>60?'…':'')+'</div></div></div>';
+    }).join('') + '</div>';
+  }
+  v.innerHTML = html; fillIcoSlots(v);
+}
+
+function openCounsel(name){
+  var mine = (counselCache||[]).filter(function(r){ return r.name === name; });
+  var today = kstToday();
+  var todayRec = mine.filter(function(r){ return r.date === today; })[0];
+
+  var html = '<div class="modal-box">'+
+    '<div style="text-align:center;padding:4px 0 14px">'+
+      '<div style="font-size:1.25rem;font-weight:800">'+escapeHtml(name)+'</div>'+
+      '<div style="font-size:.82rem;color:var(--ink-mute);margin-top:4px">'+today+' 상담</div></div>'+
+    '<div class="field"><label>상담 내용</label>'+
+      '<textarea id="cMemo" rows="5" placeholder="상담 내용을 적으면 상담완료로 기록됩니다" '+
+      'style="width:100%;padding:12px 14px;border:1.5px solid var(--line);border-radius:8px;'+
+      'font-family:inherit;font-size:.92rem;resize:vertical">'+
+      escapeHtml(todayRec ? todayRec.memo : '')+'</textarea></div>'+
+    '<div id="cErr" class="login-err hidden"></div>'+
+    '<button class="btn" id="cGo" onclick="applyCounsel(\''+escapeHtml(name)+'\')">저장</button>'+
+    '<button class="btn btn-outline" onclick="closeModal()">닫기</button>';
+
+  var past = mine.filter(function(r){ return r.date !== today; });
+  if (past.length){
+    html += '<div class="sec-label">지난 상담</div><div class="card">';
+    html += past.slice(0,8).map(function(r){
+      return '<div class="row" style="cursor:default"><div class="row-main">'+
+        '<div class="row-t">'+r.date+'</div>'+
+        '<div class="row-s">'+escapeHtml(r.memo)+'</div></div></div>';
+    }).join('') + '</div>';
+  }
+  html += '</div>';
+  showModal(html);
+}
+
+async function applyCounsel(name){
+  var memo = (document.getElementById('cMemo').value||'').trim();
+  var err  = document.getElementById('cErr');
+  if (!memo){ err.textContent='상담 내용을 입력해주세요'; err.classList.remove('hidden'); return; }
+  var btn = document.getElementById('cGo'); btn.disabled=true; btn.textContent='저장 중...';
+  try { await FS.saveCounsel(kstToday(), name, memo); closeModal(); renderView(); }
+  catch(e){ btn.disabled=false; btn.textContent='저장';
+    err.textContent = (e && e.code==='permission-denied')
+      ? '교사로 로그인해야 합니다' : '저장하지 못했습니다';
+    err.classList.remove('hidden'); }
 }
 
 /* ═══ 성적 ═══════════════════════════════════════════

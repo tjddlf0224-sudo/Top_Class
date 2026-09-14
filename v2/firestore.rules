@@ -31,6 +31,14 @@ rules_version = '2';
 //     이로써 v2에서 GAS로 나가는 쓰기 경로가 없어진다.
 //   - /marketItem, /marketBuy 추가 — 저잣거리. 재고도 계산으로 구한다
 //
+// ── 2026-09-14 상담 기록 보호 ──────────────────────────────────
+//   - /counseling 추가 — 교사만 읽기·쓰기(학생 개인정보)
+//   - ⚠️ 맨 아래 catch-all의 "전체 읽기 허용"을 걷어냈다. 규칙은 OR이라
+//     catch-all이 열려 있으면 상담 기록도 같이 읽혀서다.
+//     대신 실제로 읽히는 컬렉션을 명시했다. 구앱이 읽는
+//     teachers·examScores·examHistory_공기업·examHistory_공무원이
+//     빠지면 학생들 앱이 깨지므로 절대 지우지 말 것.
+//
 // 참고: Firestore 규칙은 "먼저 매칭된 것이 이긴다"가 아니라 **하나라도 허용하면 통과**다.
 //       그래서 아래 구체 규칙들과 맨 끝 catch-all(write:false)이 공존해도 문제 없다.
 //
@@ -301,11 +309,36 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
-    // ── 그 외 전부 (기존 그대로) ───────────────────────────
-    // 읽기만 허용. 쓰기는 GAS(서비스 계정)가 규칙을 우회하므로 정상 동작.
+    // ── 상담 기록 ───────────────────────────────────────
+    // ⚠️ 학생 개인정보다. 아래 catch-all에서 전체 읽기 허용을 걷어냈기 때문에
+    //    여기서 교사에게만 열어줄 수 있다(규칙은 OR이라 어딘가 하나라도
+    //    read를 허용하면 통과한다 — 그래서 catch-all을 좁히는 게 먼저였다).
+    // 같은 이유로 저장소(공개 GitHub Pages)에 시드 파일로 넣지 않는다.
+    // 과거 기록 이전은 GAS 편집기 일회성 스크립트로 한다(migrate_counseling.gs).
+    match /counseling/{docId} {
+      allow read:  if isTeacher();
+      allow write: if isTeacher()
+                   && ( request.resource == null
+                        || request.resource.data.keys()
+                             .hasOnly(['date','name','done','memo','at']) );
+    }
+
+    // ── 읽기만 열어두는 것들 ────────────────────────────
+    // 예전엔 맨 아래 catch-all이 "전부 읽기 허용"이었다. 상담 기록을 보호하려면
+    // 그걸 걷어내야 해서, 실제로 읽히는 컬렉션을 여기에 명시한다.
+    // ⚠️ 아래 5개는 구앱(index.html)이 읽는다 — 빠지면 학생들 앱이 깨진다.
+    //    teachers·examScores·examHistory_* 는 구앱 전용, attendance는 v2 전용.
+    match /teachers/{docId}          { allow read: if true; }
+    match /examScores/{docId}        { allow read: if true; }
+    match /examHistory_공기업/{docId} { allow read: if true; }
+    match /examHistory_공무원/{docId} { allow read: if true; }
+    match /attendance/{docId}        { allow read: if true; }
+
+    // ── 그 외 전부 ─────────────────────────────────────
+    // 읽기도 쓰기도 막는다. 새 컬렉션을 만들면 위에 명시적으로 열어야 한다.
+    // (쓰기는 GAS 서비스 계정이 규칙을 우회하므로 기존 동작에 영향 없음)
     match /{document=**} {
-      allow read;
-      allow write: if false;
+      allow read, write: if false;
     }
   }
 }
