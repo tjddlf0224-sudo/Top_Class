@@ -262,6 +262,9 @@ function parseList(v){
   try { const p = JSON.parse(v); return Array.isArray(p) ? p : []; } catch(e){ return []; }
 }
 
+/* 엽전이 오가는 쓰기만 GAS를 거친다(시트가 엽전의 원본). 조회·그 외 쓰기는 Firestore 직통. */
+const GAS_URL = "https://script.google.com/macros/s/AKfycbzRaCwLXFf8GvXknjWnZ003q9PrJWcCtBa8DHWy64HvMyBuIQSvDz7oa82vTsppX5G-/exec";
+
 const db = getFirestore(initializeApp({
   apiKey:"AIzaSyDRViuzADHxHnvv78jfnvPbAJ5hH3wzpCw",
   authDomain:"topclass-be740.firebaseapp.com",
@@ -301,8 +304,7 @@ window.FS = {
       const n = String(v.name||'').trim();
       if (n && n !== '교사' && n !== '테스트' && v.role !== 'teacher')
         out.push({ id:d.id, name:n, track:String(v.track||'공무원').trim(),
-                   coins:Number(v.coins)||0, freezes:Number(v.freezes)||0,
-                   freezeDates:parseList(v.freezeDates) });
+                   coins:Number(v.coins)||0 });
     });
     return out.sort((a,b)=>a.name.localeCompare(b.name,'ko'));
   },
@@ -323,18 +325,32 @@ window.FS = {
     return { byName, schoolDays };
   },
 
-  /* 스트릭 프리즈 구매 — 엽전 10냥 차감 + 프리즈 +1.
-     이 정확한 조합일 때만 보안규칙이 통과시킨다(엽전 조작 차단). */
-  async buyFreeze(memberId, coins, freezes){
-    await updateDoc(doc(db,'members',memberId),
-      { coins: coins - 10, freezes: freezes + 1 });
+  /* 스트릭 프리즈 보유·사용기록 — members가 아니라 별도 컬렉션에 둔다.
+     members는 GAS가 엽전을 바꿀 때마다 덮어써서 v2 전용 필드가 지워진다. */
+  async freezeOf(name){
+    const s = await getDoc(doc(db,'streakFreeze',name));
+    if (!s.exists()) return { count:0, dates:[] };
+    const v = s.data();
+    return { count: Number(v.count)||0, dates: parseList(v.dates) };
   },
 
-  /* 프리즈 사용 — 끊긴 날짜를 메운다. 프리즈가 정확히 1 줄어야 규칙 통과. */
-  async useFreeze(memberId, freezes, freezeDates, dateStr){
-    await updateDoc(doc(db,'members',memberId), {
-      freezes: freezes - 1,
-      freezeDates: JSON.stringify(freezeDates.concat([dateStr]))
+  /* 프리즈 구매 — 엽전이 오가므로 GAS를 거친다(시트가 엽전의 원본).
+     Firestore에 직접 차감하면 GAS가 다음 동기화 때 되돌려 버린다. */
+  async buyFreeze(name){
+    const r = await fetch(GAS_URL, { method:'POST', mode:'cors',
+      body: JSON.stringify({ action:'buyStreakFreeze', name }) });
+    const j = await r.json();
+    if (j.status !== 'success') throw new Error(j.message || '구매 실패');
+    return j.data;
+  },
+
+  /* 프리즈 사용 — streakFreeze만 건드리므로 Firestore 직통(빠른 경로).
+     보유가 정확히 1 줄어야 보안규칙이 통과시킨다. */
+  async useFreeze(name, count, dates, dateStr){
+    await updateDoc(doc(db,'streakFreeze',name), {
+      count: count - 1,
+      dates: JSON.stringify(dates.concat([dateStr])),
+      updatedAt: new Date().toISOString()
     });
   },
 
@@ -492,7 +508,8 @@ async function loadStreak(force){
   if (streakCache && !force) return streakCache;
   var att = await FS.attendanceAll();
   var mem = (await FS.members()).find(function(m){ return m.name === ME.name; });
-  var freezeSet = new Set((mem && mem.freezeDates) || []);
+  var fz  = await FS.freezeOf(ME.name);          // 보유·사용기록은 streakFreeze에서
+  var freezeSet = new Set(fz.dates);
   var myDays = att.byName[ME.name] || {};
   var today  = kstToday();
 
@@ -502,8 +519,9 @@ async function loadStreak(force){
     brokenAt: r.brokenAt,
     longest:  Math.max(r.streak, calcLongest(myDays, att.schoolDays, freezeSet, today)),
     atRisk:   calcAtRisk(myDays, today, r.streak),
-    freezes:  (mem && mem.freezes) || 0,
-    member:   mem
+    freezes:  fz.count,
+    freezeDates: fz.dates,
+    coins:    mem ? mem.coins : 0
   };
   return streakCache;
 }
@@ -554,8 +572,12 @@ async function openStreakModal(){
 
   html += '<div class="sec-label" style="margin:14px 2px 8px">기록</div><div class="card">'+
     '<div class="row" style="cursor:default"><div class="row-main"><div class="row-t">스트릭 프리즈</div>'+
-      '<div class="row-s">하루 빠져도 연속을 지켜줘요<br>저잣거리에서 '+FREEZE_COST+'냥에 살 수 있어요</div></div>'+
-      '<div class="row-v">'+s.freezes+'개</div></div>';
+      '<div class="row-s">하루 빠져도 연속을 지켜줘요 · '+FREEZE_COST+'냥</div></div>'+
+      '<div class="row-v">'+s.freezes+'개</div></div>'+
+    '<div class="row" style="cursor:default"><div class="row-main"><div class="row-t">프리즈 사기</div>'+
+      '<div class="row-s">내 엽전 '+s.coins+'냥</div></div>'+
+      '<button class="btn btn-sm" id="btn-buy-freeze" onclick="buyFreezeNow()"'+
+        (s.coins < FREEZE_COST ? ' disabled' : '')+'>'+FREEZE_COST+'냥에 사기</button></div>';
 
   if (s.brokenAt && s.freezes > 0)
     html += '<div class="row" style="cursor:default"><div class="row-main">'+
@@ -577,17 +599,39 @@ async function openStreakModal(){
 
 async function useFreezeNow(dateStr){
   var s = streakCache;
-  if (!s || !s.member || s.freezes <= 0) return;
+  if (!s || s.freezes <= 0) return;
   try {
-    await FS.useFreeze(s.member.id, s.member.freezes, s.member.freezeDates, dateStr);
-    closeModal();
-    await loadStreak(true);
-    await refreshStreakChip();
-    renderView();
-    openStreakModal();
+    await FS.useFreeze(ME.name, s.freezes, s.freezeDates, dateStr);
+    await afterFreezeChange();
   } catch(e){
     alert('되살리지 못했습니다.\n' + (e.message || e));
   }
+}
+
+/** 프리즈 구매 — GAS 경유(엽전 차감이 시트 원본에 반영돼야 하므로) */
+async function buyFreezeNow(){
+  var s = streakCache;
+  if (!s) return;
+  if (s.coins < FREEZE_COST) { alert('엽전이 부족해요. (보유 ' + s.coins + '냥, 필요 ' + FREEZE_COST + '냥)'); return; }
+  var btn = document.getElementById('btn-buy-freeze');
+  if (btn) { btn.disabled = true; btn.textContent = '구매 중...'; }
+  try {
+    await FS.buyFreeze(ME.name);
+    await afterFreezeChange();
+  } catch(e){
+    alert('구매하지 못했습니다.\n' + (e.message || e));
+    if (btn) { btn.disabled = false; btn.textContent = FREEZE_COST + '냥에 사기'; }
+  }
+}
+
+/** 프리즈 보유량이 바뀐 뒤 화면 갱신 */
+async function afterFreezeChange(){
+  closeModal();
+  await loadStreak(true);
+  await refreshStreakChip();
+  renderView();
+  syncHeroStreak();
+  openStreakModal();
 }
 
 /* 공용 모달 */
