@@ -35,10 +35,13 @@
     <meta name="apple-mobile-web-app-title" content="장원급제반">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="theme-color" content="#F0EAE0">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
-    <script src="./docx.bundle.js"></script>
+    <!-- ★ 속도: Chart.js·docx.bundle.js(725KB)는 head에서 제거 — 차트/보고서를 실제로 열 때만 동적 로드(loadChartLib/loadDocxLib) -->
+    <!-- ★ 속도: 웹폰트는 렌더를 막지 않게 로드(먼저 시스템 글꼴로 그리고 도착하면 교체). CSS @import는 폰트가 올 때까지 화면 전체를 막았음 -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nanum+Myeongjo:wght@400;700;800&family=Noto+Sans+KR:wght@300;400;500;700&display=swap" media="print" onload="this.media='all'">
+    <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nanum+Myeongjo:wght@400;700;800&family=Noto+Sans+KR:wght@300;400;500;700&display=swap"></noscript>
     <style>
-@import url('https://fonts.googleapis.com/css2?family=Nanum+Myeongjo:wght@400;700;800&family=Noto+Sans+KR:wght@300;400;500;700&display=swap');
 
 :root {
     /* ── 한지 모던 팔레트 ──
@@ -2191,44 +2194,54 @@ async function prefetchAll() {
     const name  = currentUser?.name;
     const isTeacher = currentUser?.role === 'teacher';
 
-    // 공통 (교사 + 학생 모두)
-    const commonFetches = [
-        fetchToCache('getAdminData',       {}),
-        fetchToCache('getAllMemberPoints',  {}),
-        fetchToCache('getClassStats',       {}),
-        fetchToCache('getExamDdays',        {}),
-    ];
+    // ★ 속도: 프리페치를 2단계로 나눈다.
+    //   예전엔 로그인 직후 10건을 한꺼번에 쐈는데, 아침 8시에 13명이 동시에 로그인하면
+    //   130건이 GAS 동시실행 한도(약 30)에 몰려 큐잉 → "로드 실패"의 재현 조건이었다.
+    //   1단계: 홈 화면이 바로 쓰는 것만 병렬 / 2단계: 나머지는 2건씩 순차(러시 완화).
+    //   각 항목은 thunk(함수)로 두어 실행 시점을 통제한다.
 
-    // 교사 전용: 오늘 + 최근 7일치 출결·플래너·상담 + 전체 학생 성적 미리 캐시
-    let teacherFetches = [];
+    // 1단계 — 홈 화면·잔액 표시에 필요한 최소 세트
+    const phase1 = [
+        () => fetchToCache('getAdminData',      {}),
+        () => fetchToCache('getAllMemberPoints', {}),
+        () => fetchToCache('getExamDdays',       {}),
+    ];
+    if (!isTeacher && name) phase1.push(() => fetchToCache('getMyPointLog', { name }));
+    await Promise.allSettled(phase1.map(fn => fn()));
+
+    // 2단계 — 탭을 열 때 쓰는 것들. 홈이 이미 그려진 뒤라 급하지 않다.
+    const phase2 = [ () => fetchToCache('getClassStats', {}) ];
+
     if (isTeacher) {
         const days = recentDates(7);
-
         // (제거) 전체 학생 getMyExamScores 프리페치 — 학생 수만큼 요청을 한꺼번에 쏴서
         // GAS 동시실행 한도(전체 사용자 공유)를 스스로 소진, 아침 로그인 실패의 원인이었음.
         // 성적은 성적 화면에서 학생별로 필요할 때 조회(5분 캐시)로 충분.
-
         // ★ 날짜별 21건 개별 호출 대신 범위 API 3건으로 축소 (구버전 백엔드면 자동 무시)
-        teacherFetches = [
-            fetchToCache('getCoinPresets', {}),
-            fetchToCache('getBankAll',     {}),
-            primeDailyCache('getAdminAttendance',  'getAdminAttendanceRange', days),
-            primeDailyCache('getAdminPlanner',     'getAdminPlannerRange',    days),
-            primeDailyCache('getCounselingByDate', 'getCounselingRange',      days),
-        ];
+        // 대시보드가 먼저 쓰는 범위 조회를 앞에 둔다.
+        phase2.unshift(
+            () => primeDailyCache('getAdminAttendance',  'getAdminAttendanceRange', days),
+            () => primeDailyCache('getAdminPlanner',     'getAdminPlannerRange',    days),
+            () => primeDailyCache('getCounselingByDate', 'getCounselingRange',      days),
+        );
+        phase2.push(
+            () => fetchToCache('getCoinPresets', {}),
+            () => fetchToCache('getBankAll',     {}),
+        );
+    } else if (name) {
+        // getMyStreak(시트 전체 스캔, 가장 느림)은 맨 뒤 — 🔥배지는 늦게 떠도 무방
+        phase2.push(
+            () => fetchToCache('getMyExamScores', { name }),
+            () => fetchToCache('getMyHistory',    { name }),
+            () => fetchToCache('getBank',         { name }),
+            () => fetchToCache('getMyStreak',     { name }),
+        );
     }
 
-    // 학생 전용
-    const studentFetches = !isTeacher && name ? [
-        fetchToCache('getMyHistory',    { name }),
-        fetchToCache('getMyPointLog',   { name }),
-        fetchToCache('getMyExamScores', { name }),
-        fetchToCache('getBank',         { name }),
-        fetchToCache('getMyStreak',     { name }),
-    ] : [];
-
-    // 모두 병렬 실행 (실패해도 조용히 무시)
-    await Promise.allSettled([...commonFetches, ...teacherFetches, ...studentFetches]);
+    // 2건씩 순차 실행 (실패해도 조용히 무시)
+    for (let i = 0; i < phase2.length; i += 2) {
+        await Promise.allSettled(phase2.slice(i, i + 2).map(fn => fn()));
+    }
 }
 
 /**
@@ -6730,6 +6743,8 @@ function scoreColor(score) {
 
 /** 탭2: 성장 곡선 차트 */
 function renderGrowthChart() {
+    // ★ Chart.js는 첫 차트를 열 때 로드 — 로드 끝나면 이 함수를 다시 호출
+    if (!window.Chart) { loadChartLib().then(renderGrowthChart).catch(e => showToast('차트 라이브러리 로드 실패: ' + e.message)); return; }
     const exams     = (myExamData && myExamData.exams) ? myExamData.exams : [];
     const canvas    = document.getElementById('growthChart');
     const isGongiup = isGongiupTrack();
@@ -7477,6 +7492,8 @@ function renderAdminExamScoresList() {
 
 /** 관리 탭 성장 차트 */
 function renderAdminGrowthChart() {
+    // ★ Chart.js는 첫 차트를 열 때 로드 — 로드 끝나면 이 함수를 다시 호출
+    if (!window.Chart) { loadChartLib().then(renderAdminGrowthChart).catch(e => showToast('차트 라이브러리 로드 실패: ' + e.message)); return; }
     const exams     = (adminExamData && adminExamData.exams) ? adminExamData.exams : [];
     const canvas    = document.getElementById('adminGrowthChart');
     const selName   = document.getElementById('exam-admin-student-select')?.value;
@@ -9131,8 +9148,10 @@ async function generateParentReport() {
 }
 
 async function buildParentReportDocx(name) {
+    // ★ 725KB 라이브러리는 여기서 처음 필요하므로 이 시점에 로드 (앱 시작 시 받지 않음)
+    try { await loadDocxLib(); } catch(e) { /* 아래 null 체크에서 안내 */ }
     const docxLib = window.docx;
-    if (!docxLib) { throw new Error('Word 라이브러리 로드 실패. 페이지를 새로고침 해주세요.'); }
+    if (!docxLib) { throw new Error('Word 라이브러리 로드 실패. 네트워크를 확인하고 다시 시도해주세요.'); }
     const {
         Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell,
         AlignmentType, BorderStyle, WidthType, ShadingType, VerticalAlign,
@@ -9601,6 +9620,41 @@ async function buildParentReportDocx(name) {
    ========================================================= */
 
 const QR_BASE_URL = 'https://tjddlf0224-sudo.github.io/Top_Class/grant.html';
+
+/** 외부 스크립트 1회 로드 (같은 URL 중복 로드 방지, 실패 시 대체 URL) */
+function _loadScriptOnce(src, fallbackSrc) {
+    window.__scriptLoads = window.__scriptLoads || {};
+    if (window.__scriptLoads[src]) return window.__scriptLoads[src];
+    window.__scriptLoads[src] = new Promise((resolve, reject) => {
+        const s = document.createElement('script');
+        s.src = src;
+        s.onload = resolve;
+        s.onerror = () => {
+            delete window.__scriptLoads[src];
+            if (!fallbackSrc) return reject(new Error('스크립트 로드 실패: ' + src));
+            const s2 = document.createElement('script');
+            s2.src = fallbackSrc; s2.onload = resolve;
+            s2.onerror = () => reject(new Error('스크립트 로드 실패: ' + fallbackSrc));
+            document.head.appendChild(s2);
+        };
+        document.head.appendChild(s);
+    });
+    return window.__scriptLoads[src];
+}
+
+/** Chart.js — 성적 성장 차트를 열 때만 로드 (앱 시작 시 59KB CDN 대기 제거) */
+function loadChartLib() {
+    if (window.Chart) return Promise.resolve();
+    return _loadScriptOnce(
+        'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js',
+        'https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js');
+}
+
+/** docx — 학부모 보고서 저장 버튼을 누를 때만 로드 (앱 시작 시 725KB 다운로드 제거) */
+function loadDocxLib() {
+    if (window.docx) return Promise.resolve();
+    return _loadScriptOnce('./docx.bundle.js');
+}
 
 /** QRCode.js 라이브러리 동적 로드 */
 function loadQRLib() {
