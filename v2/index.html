@@ -2366,35 +2366,94 @@ function homeStudent(){
   '</div>';
 }
 
+/* 교사 홈 — 틀만 먼저 그리고 조회가 끝나면 채운다.
+   renderView가 문자열을 받아 넣는 구조라 비동기 값은 자리를 잡아두고 나중에 주입한다. */
 function homeTeacher(){
-  setTimeout(renderQuietBanner, 0);      // 조회가 끝나면 배너를 채운다
+  setTimeout(renderQuietBanner, 0);
+  setTimeout(fillTeacherHome, 0);
   return ''+
   '<div id="quietBox"></div>'+
-  '<div class="notice accent">'+ic('memo',15)+'<span>승인 대기 중인 엽전 요청 2건 →</span></div>'+
 
   '<div class="hero">'+
-    '<div class="hero-lbl">오늘 출석</div>'+
-    '<div class="hero-num">9<small>/13명</small></div>'+
+    '<div class="hero-lbl">오늘 출결 <span id="thDate" style="font-weight:500;color:var(--ink-mute)"></span></div>'+
+    '<div class="hero-num" id="thPresent">–</div>'+
     '<div class="hero-inline">'+
-      '<div>지각<b style="color:var(--orange)">2명</b></div>'+
-      '<div>결석<b style="color:var(--rose)">2명</b></div>'+
-      '<div>이번 주 상담<b>5건</b></div>'+
+      '<div>지각<b id="thLate" style="color:var(--orange)">–</b></div>'+
+      '<div>결석<b id="thAbsent" style="color:var(--rose)">–</b></div>'+
+      '<div>이번 주 상담<b id="thCounsel">–</b></div>'+
     '</div>'+
   '</div>'+
 
   '<div class="sec-label">학생</div>'+
-  '<div class="card">'+STUDENTS.map(function(s){
-    return '<div class="row"><div class="avatar">'+s.n.charAt(0)+'</div>'+
-      '<div class="row-main"><div class="row-t">'+s.n+'</div>'+
-      '<div class="row-s">'+s.t+'반</div></div>'+
-      '<div class="row-v" style="color:'+(s.c<0?'var(--rose)':'var(--ink-soft)')+'">'+s.c+'냥</div></div>';
-  }).join('')+'</div>'+
+  '<div class="card" id="thRoster">'+
+    '<div class="blk"><div class="row-s">불러오는 중…</div></div>'+
+  '</div>'+
 
   '<div class="sec-label">관리</div>'+
   '<div class="quick">'+
-    quick('coin','y','엽전 지급')+quick('market','o','저잣거리')+
-    quick('calendar','s','방과후 출석',"go('after')")+quick('gear','r','집무실')+
+    quick('coin','y','엽전 지급',"go('coin')")+quick('market','o','저잣거리',"go('market')")+
+    quick('calendar','s','방과후 출석',"go('after')")+quick('chat','r','상담',"go('counsel')")+
   '</div>';
+}
+
+/** 교사 홈의 실데이터 채우기 */
+async function fillTeacherHome(){
+  if (!document.getElementById('thRoster')) return;
+  await loadCalendar();
+  var today = kstToday();
+  var set = function(id, v){ var e=document.getElementById(id); if(e) e.textContent=v; };
+
+  set('thDate', isSchoolDay(today) ? '' : '· '+(offReason(today)||'휴업일'));
+
+  var mem = [];
+  try { mem = await FS.members(); } catch(e){}
+  if (!mem.length){
+    var r0=document.getElementById('thRoster');
+    if(r0) r0.innerHTML='<div class="blk"><div class="row-s">명부를 불러오지 못했습니다</div></div>';
+    return;
+  }
+
+  // 오늘 출결
+  var att = { byName:{} }, am = {}, ov = {};
+  try { att = await FS.attendanceAll(); } catch(e){}
+  try { am  = await FS.amCheckIns(today); } catch(e){}
+  try { ov  = await FS.amOverrides(today); } catch(e){}
+  var legacyLast = '';
+  for (var nm in att.byName){
+    var ks = Object.keys(att.byName[nm]).sort();
+    if (ks.length && ks[ks.length-1] > legacyLast) legacyLast = ks[ks.length-1];
+  }
+
+  var cnt = { 출석:0, 지각:0, 결석:0, 공결:0, 미체크:0 };
+  var rows = mem.map(function(m){
+    var ctx = { days: att.byName[m.name]||{}, legacyLast: legacyLast, today: today, dorm: m.dorm,
+                am: am[m.name] ? _one(today, am[m.name]) : {},
+                ov: ov[m.name] ? _one(today, ov[m.name]) : {} };
+    var st = attStatusOf(today, ctx);
+    var label = st || (isSchoolDay(today) ? '미체크' : '—');
+    if (cnt[label] !== undefined) cnt[label]++;
+    var c = amColor(st);
+    return '<div class="row" onclick="amDate=\''+today+'\';go(\'att\')" style="cursor:pointer">'+
+      '<div class="avatar">'+m.name.charAt(0)+'</div>'+
+      '<div class="row-main"><div class="row-t">'+escapeHtml(m.name)+'</div>'+
+      '<div class="row-s">'+m.track+'반'+(m.dorm?' · 기숙사':'')+'</div></div>'+
+      '<span class="chip" style="background:'+c[0]+';color:'+c[1]+';margin-right:8px">'+label+'</span>'+
+      '<span class="row-v" style="color:'+(m.coins<0?'var(--rose)':'var(--ink-soft)')+'">'+m.coins+'냥</span></div>';
+  });
+
+  set('thPresent', cnt.출석 + ' / ' + mem.length + '명');
+  set('thLate',   cnt.지각 + '명');
+  set('thAbsent', cnt.결석 + '명');
+  document.getElementById('thRoster').innerHTML = rows.join('');
+
+  // 이번 주 상담 — 교사만 읽힌다. 실패하면 '–'로 둔다.
+  try {
+    var recs = await FS.counselAll();
+    var k = kstNow();
+    var mon = new Date(k.getFullYear(), k.getMonth(), k.getDate() - ((k.getDay()+6)%7));
+    var monDs = mon.getFullYear()+'-'+pad2(mon.getMonth()+1)+'-'+pad2(mon.getDate());
+    set('thCounsel', recs.filter(function(r){ return r.date >= monDs; }).length + '건');
+  } catch(e){ set('thCounsel', '–'); }
 }
 
 function quick(icon,color,lbl,onclick){
