@@ -70,6 +70,8 @@ input::placeholder{color:#b4b4c8;}
 .btn-sm{width:auto;padding:8px 14px;font-size:0.8rem;margin:0;}
 .login-divider{display:flex;align-items:center;gap:12px;margin:24px 0 16px;color:var(--ink-mute);font-size:0.76rem;}
 .login-divider::before,.login-divider::after{content:'';flex:1;height:1px;background:var(--line);}
+.login-err{background:var(--rose-soft);color:var(--rose);font-size:0.8rem;font-weight:600;
+  padding:10px 12px;border-radius:8px;margin-bottom:10px;}
 
 /* ── 헤더 + 탭바 ──────────────────────────── */
 .header{background:var(--surface);padding:0 18px;padding-top:calc(14px + var(--safe-top));
@@ -203,16 +205,25 @@ main{padding:6px 18px calc(32px + var(--safe-bottom));}
     <div class="login-title">장원급제반</div>
     <div class="login-sub">청양고등학교 · 공직의 길을 걷는 자</div>
   </div>
-  <div class="field"><label>학번</label><input type="text" placeholder="예: 20301" inputmode="numeric"></div>
-  <div class="field"><label>이름</label><input type="text" placeholder="이름을 입력하세요"></div>
+  <div class="field"><label>학번</label><input id="sNo" type="text" placeholder="예: 20301" inputmode="numeric"></div>
+  <div class="field"><label>이름</label><input id="sName" type="text" placeholder="이름을 입력하세요"></div>
   <button class="btn" onclick="enterApp('student')">입실하기</button>
   <div class="login-divider">또는</div>
-  <button class="btn btn-outline" onclick="enterApp('teacher')">
-    <span class="ico-slot" data-ico="person" data-sz="17"></span>교사로 입실
+
+  <!-- 교사 로그인 — 학생에게는 접혀 있다가 눌렀을 때만 펼쳐진다 -->
+  <button class="btn btn-outline" id="tOpen" onclick="showTeacherLogin()">
+    <span class="ico-slot" data-ico="person" data-sz="17"></span>교사 로그인
   </button>
-  <button class="btn btn-outline" onclick="enterApp('teacher')">
-    <span class="ico-slot" data-ico="cap" data-sz="17"></span>방과후 강사 로그인
-  </button>
+  <div id="tLogin" class="hidden">
+    <div class="field"><label>이메일</label>
+      <input id="tEmail" type="email" autocomplete="username" placeholder="이메일 주소"></div>
+    <div class="field"><label>비밀번호</label>
+      <input id="tPw" type="password" autocomplete="current-password" placeholder="비밀번호"
+             onkeydown="if(event.key==='Enter')teacherLogin()"></div>
+    <div id="tErr" class="login-err hidden"></div>
+    <button class="btn" id="tGo" onclick="teacherLogin()">로그인</button>
+    <button class="btn btn-outline" onclick="hideTeacherLogin()">취소</button>
+  </div>
 </div>
 
 <!-- ══════════ 앱 ══════════ -->
@@ -251,6 +262,9 @@ main{padding:6px 18px calc(32px + var(--safe-bottom));}
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-app.js";
 import { getFirestore, doc, getDoc, setDoc, updateDoc, collection, getDocs, query, where, serverTimestamp }
   from "https://www.gstatic.com/firebasejs/12.12.1/firebase-firestore.js";
+import { getAuth, onAuthStateChanged, signInAnonymously, signInWithEmailAndPassword,
+         signOut, setPersistence, browserLocalPersistence }
+  from "https://www.gstatic.com/firebasejs/12.12.1/firebase-auth.js";
 
 /* GAS가 배열·객체를 JSON 문자열로 저장하므로(schedule/attendance 동일 패턴) 읽을 때 되돌린다 */
 function parseObj(v){
@@ -265,14 +279,87 @@ function parseList(v){
 /* 엽전이 오가는 쓰기만 GAS를 거친다(시트가 엽전의 원본). 조회·그 외 쓰기는 Firestore 직통. */
 const GAS_URL = "https://script.google.com/macros/s/AKfycbzRaCwLXFf8GvXknjWnZ003q9PrJWcCtBa8DHWy64HvMyBuIQSvDz7oa82vTsppX5G-/exec";
 
-const db = getFirestore(initializeApp({
+const fbApp = initializeApp({
   apiKey:"AIzaSyDRViuzADHxHnvv78jfnvPbAJ5hH3wzpCw",
   authDomain:"topclass-be740.firebaseapp.com",
   projectId:"topclass-be740",
   storageBucket:"topclass-be740.firebasestorage.app",
   messagingSenderId:"662651378616",
   appId:"1:662651378616:web:6eceb1505265c0700bcd4d"
-}));
+});
+const db   = getFirestore(fbApp);
+const auth = getAuth(fbApp);
+
+/* ═══ 신원 확인 ═══════════════════════════════════════
+   학생 = 익명 인증. 화면에는 아무것도 드러나지 않고, 보안규칙이
+          "이 앱에서 온 요청"만 받아들이게 하는 용도다.
+   교사 = 이메일·비밀번호. 출석 정정처럼 교사만 해야 하는 쓰기를
+          규칙에서 실제로 막으려면 익명끼리는 구분이 안 된다.
+
+   ⚠️ 이메일/비밀번호 제공업체가 켜져 있으면 누구나 스스로 계정을
+      만들 수 있다. 따라서 "이메일 계정이 있다 = 교사"가 아니며,
+      아래 UID 화이트리스트(또는 admins 문서)로만 교사를 판정한다.
+   ⚠️ 구앱(index.html)은 인증을 전혀 쓰지 않는다. 구앱이 건드리는
+      schedule 쓰기와 모든 읽기 권한은 규칙에서 손대지 말 것. */
+const TEACHER_UID = 'c5BpZGuLVtZmKep0xq3DVeCUBij1';
+
+let _isTeacher = false;
+
+/* 화이트리스트 UID이거나, 콘솔에서 만든 admins/{uid} 문서가 있으면 교사.
+   admins 경로를 같이 두는 이유: 방과후 강사를 추가할 때 규칙을 다시
+   게시하지 않고 문서 하나만 만들면 되게 하려는 것. */
+async function verifyTeacher(u){
+  if (!u || u.isAnonymous) return false;
+  if (u.uid === TEACHER_UID) return true;
+  try { return (await getDoc(doc(db,'admins',u.uid))).exists(); } catch(e){ return false; }
+}
+
+/* 앱이 뜨자마자 조용히 익명 로그인한다.
+   이미 교사로 로그인한 기기라면 그 세션이 그대로 살아난다. */
+function _boot(){
+  return setPersistence(auth, browserLocalPersistence)
+    .catch(function(){})            // 사파리 프라이빗 모드 등에서 실패해도 진행
+    .then(function(){
+      return new Promise(function(res){
+        const off = onAuthStateChanged(auth, function(u){ off(); res(u); });
+      });
+    })
+    .then(function(u){
+      if (u) return u;
+      return signInAnonymously(auth).then(function(c){ return c.user; })
+                                    .catch(function(){ return null; });
+    })
+    .then(async function(u){ _isTeacher = await verifyTeacher(u); return u; });
+}
+let _authReady = _boot();
+
+window.AUTH = {
+  /* 인증이 끝날 때까지 기다린다. 쓰기 전에 반드시 거칠 것 */
+  ready(){ return _authReady; },
+  user(){ return auth.currentUser; },
+  isTeacher(){ return _isTeacher; },
+
+  async signInTeacher(email, pw){
+    const c = await signInWithEmailAndPassword(auth, email, pw);
+    if (!(await verifyTeacher(c.user))) {
+      await signOut(auth);                       // 교사가 아니면 익명으로 되돌린다
+      _authReady = _boot();
+      const e = new Error('교사 계정이 아닙니다'); e.code = 'app/not-teacher'; throw e;
+    }
+    _isTeacher = true;
+    _authReady = Promise.resolve(c.user);
+    return c.user;
+  },
+
+  /* 로그아웃 — 교사 세션을 끊고 다시 익명으로 돌아간다.
+     학생 화면이 인증 없는 상태로 남으면 체크인이 규칙에 막힌다. */
+  async leave(){
+    _isTeacher = false;
+    try { await signOut(auth); } catch(e){}
+    _authReady = _boot();
+    return _authReady;
+  }
+};
 
 /* 방과후 체크인은 그날 18:30~24:00(한국시간)에만 가능하므로,
    특정 날짜의 기록은 그 구간의 타임스탬프 범위로 조회하면 된다.
@@ -347,6 +434,7 @@ window.FS = {
   /* 프리즈 사용 — streakFreeze만 건드리므로 Firestore 직통(빠른 경로).
      보유가 정확히 1 줄어야 보안규칙이 통과시킨다. */
   async useFreeze(name, count, dates, dateStr){
+    await _authReady;                 // 규칙이 로그인한 요청만 받는다
     await updateDoc(doc(db,'streakFreeze',name), {
       count: count - 1,
       dates: JSON.stringify(dates.concat([dateStr])),
@@ -363,6 +451,7 @@ window.FS = {
     return out;
   },
   async checkIn(dateStr, subject, name, track){
+    await _authReady;                 // 규칙이 로그인한 요청만 받는다
     const id = (dateStr+'_'+subject+'_'+name).replace(/[^\wㄱ-ㅎ가-힣-]/g,'_');
     await setDoc(doc(db,'asCheckIn',id),
       { at: serverTimestamp(), subject, name, track });
@@ -914,7 +1003,62 @@ function syncHeroStreak(){
   if (el && streakCache) el.textContent = streakCache.streak + '일';
 }
 function logout(){document.getElementById('app').classList.add('hidden');
-  document.getElementById('login').classList.remove('hidden');protoSync();}
+  document.getElementById('login').classList.remove('hidden');
+  hideTeacherLogin();
+  if(window.AUTH) AUTH.leave();      // 교사 세션을 끊고 다시 익명으로
+  protoSync();}
+
+/* ═══ 교사 로그인 ═══════════════════════════════════════
+   익명 인증만으로는 규칙에서 교사를 구분할 수 없어서,
+   교사만 이메일·비밀번호로 들어온다. 한 번 로그인하면
+   그 기기에서는 계속 유지된다(browserLocalPersistence). */
+function showTeacherLogin(){
+  document.getElementById('tOpen').classList.add('hidden');
+  document.getElementById('tLogin').classList.remove('hidden');
+  document.getElementById('tEmail').focus();
+}
+function hideTeacherLogin(){
+  var box=document.getElementById('tLogin'); if(!box) return;
+  box.classList.add('hidden');
+  document.getElementById('tOpen').classList.remove('hidden');
+  document.getElementById('tPw').value='';
+  tShowErr('');
+}
+function tShowErr(msg){
+  var e=document.getElementById('tErr'); if(!e) return;
+  e.textContent=msg;
+  e.classList.toggle('hidden',!msg);
+}
+/* 파이어베이스 오류코드를 학교에서 알아볼 수 있는 말로 */
+function tAuthMsg(err){
+  var c=(err&&err.code)||'';
+  if(c==='app/not-teacher')                 return '교사 계정이 아닙니다';
+  if(c.indexOf('invalid-credential')>=0 ||
+     c.indexOf('wrong-password')>=0 ||
+     c.indexOf('user-not-found')>=0)        return '이메일 또는 비밀번호가 맞지 않습니다';
+  if(c.indexOf('invalid-email')>=0)         return '이메일 형식이 아닙니다';
+  if(c.indexOf('too-many-requests')>=0)     return '시도가 너무 잦습니다. 잠시 후 다시 해주세요';
+  if(c.indexOf('network')>=0)               return '인터넷 연결을 확인해주세요';
+  return '로그인에 실패했습니다';
+}
+async function teacherLogin(){
+  var btn=document.getElementById('tGo');
+  var email=(document.getElementById('tEmail').value||'').trim();
+  var pw=document.getElementById('tPw').value||'';
+  if(!email||!pw){ tShowErr('이메일과 비밀번호를 입력해주세요'); return; }
+  if(!window.AUTH){ tShowErr('연결 준비 중입니다. 잠시 후 다시 해주세요'); return; }
+  tShowErr('');
+  btn.disabled=true; btn.textContent='확인 중...';
+  try{
+    await AUTH.signInTeacher(email,pw);
+    document.getElementById('tPw').value='';
+    enterApp('teacher');
+  }catch(e){
+    tShowErr(tAuthMsg(e));
+  }finally{
+    btn.disabled=false; btn.textContent='로그인';
+  }
+}
 function protoSync(){
   var on=document.getElementById('login').classList.contains('hidden')?(ROLE==='student'?0:1):2;
   var b=document.querySelectorAll('#proto button');

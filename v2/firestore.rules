@@ -12,6 +12,13 @@ rules_version = '2';
 //   - /members    추가 — 스트릭 프리즈 구매만 좁게 허용
 //   - 그 외는 기존과 동일하게 읽기만 허용, 쓰기는 GAS(서비스 계정)만
 //
+// ── 2026-09-14 교사 로그인 도입 ────────────────────────────────
+//   - /admins    추가 — 교사 UID 명단(콘솔에서만 생성)
+//   - isTeacher() 로 /asOverride 를 교사 전용으로 잠금(전에는 완전 개방)
+//   - /asCheckIn, /streakFreeze 쓰기에 signedIn() 요구
+//   - ⚠️ 구앱은 인증을 안 쓴다(request.auth == null). /schedule 쓰기와
+//     모든 읽기에는 인증을 걸지 않았다 — 걸면 학생들 구앱이 즉시 깨진다.
+//
 // 참고: Firestore 규칙은 "먼저 매칭된 것이 이긴다"가 아니라 **하나라도 허용하면 통과**다.
 //       그래서 아래 구체 규칙들과 맨 끝 catch-all(write:false)이 공존해도 문제 없다.
 //
@@ -24,6 +31,33 @@ service cloud.firestore {
     // UTC 자정 기준 경과 분(0~1439)
     function utcMinutes() {
       return request.time.hours() * 60 + request.time.minutes();
+    }
+
+    // ── 신원 ────────────────────────────────────────────
+    // 학생 = 익명 인증(앱이 열릴 때 조용히 로그인). 화면 변화 없음.
+    // 교사 = 이메일·비밀번호 계정 중 아래 화이트리스트에 있는 사람만.
+    //
+    // ⚠️ 이메일/비밀번호 제공업체가 켜져 있으면 누구나 스스로 계정을
+    //    만들 수 있다. "이메일 계정이 있다"는 교사의 근거가 못 된다.
+    //    반드시 UID로 못박거나 admins 문서로 확인할 것.
+    // ⚠️ 구앱(index.html)은 인증을 쓰지 않아 request.auth 가 null이다.
+    //    그래서 구앱이 건드리는 /schedule 과 읽기 권한에는
+    //    signedIn()/isTeacher()를 절대 걸면 안 된다.
+    function signedIn() {
+      return request.auth != null;
+    }
+    function isTeacher() {
+      return request.auth != null
+        && ( request.auth.uid == 'c5BpZGuLVtZmKep0xq3DVeCUBij1'
+             // 방과후 강사를 추가할 땐 규칙 재게시 없이 문서 하나만 만들면 된다
+             || exists(/databases/$(database)/documents/admins/$(request.auth.uid)) );
+    }
+
+    // ── 교사 명단 ───────────────────────────────────────
+    // 문서 ID = 교사의 UID. 생성은 Firebase 콘솔에서만(클라이언트 쓰기 금지).
+    match /admins/{uid} {
+      allow read: if true;
+      allow write: if false;
     }
 
     // ── 방과후 시간표 (기존 그대로 — 절대 건드리지 말 것) ──────
@@ -43,8 +77,10 @@ service cloud.firestore {
       allow read: if true;
 
       allow create: if
+           // 앱(익명 인증)을 거친 요청만 — 외부에서 직접 못 만든다
+           signedIn()
            // 시각은 서버 시계만 인정 — 날짜·시각 위조 불가
-           request.resource.data.at == request.time
+        && request.resource.data.at == request.time
            // 수업 시작 이후 ~ 그날 자정 이전에만
         && utcMinutes() >= 570
         && utcMinutes() <  900
@@ -57,14 +93,15 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
-    // ── 교사 출석 정정 (신규) ──────────────────────────────
+    // ── 교사 출석 정정 ─────────────────────────────────────
     // 학생이 못 찍었지만 실제로는 참석한 경우 교사가 덮어쓰는 기록.
-    // ⚠️ 진짜 로그인이 없어 "교사임"을 규칙으로 검증할 수 없다.
-    //    엽전에 영향이 없는 순수 기록이라 악용 유인은 낮아 일단 열어둔다.
+    // 교사 로그인(2026-09-14)이 생겨서 이제 규칙으로 막을 수 있다.
     match /asOverride/{docId} {
       allow read: if true;
-      allow write: if request.resource == null
-                   || request.resource.data.keys().hasOnly(['status','by','at','subject','name']);
+      allow write: if isTeacher()
+                   && ( request.resource == null
+                        || request.resource.data.keys()
+                             .hasOnly(['status','by','at','subject','name']) );
     }
 
     // ── 학생 명부 (엽전 잔액이 여기 있음) ───────────────────
@@ -85,7 +122,8 @@ service cloud.firestore {
     match /streakFreeze/{name} {
       allow read: if true;
       allow update: if
-           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['count','dates','updatedAt'])
+           signedIn()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['count','dates','updatedAt'])
         && request.resource.data.count == resource.data.count - 1
         && request.resource.data.count >= 0;
       allow create, delete: if false;   // 문서 생성은 구매 시 GAS만

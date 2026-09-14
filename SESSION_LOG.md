@@ -3,7 +3,7 @@
 이 파일은 Claude와 진행한 작업 세션의 전체 맥락을 기록한다.
 **앞으로 새 요청을 받으면 이 파일을 먼저 읽어 맥락을 파악한 뒤 응답/실행하고, 작업이 끝나면 이 파일을 다시 업데이트한다.**
 
-최종 갱신: 2026-09-14 — **⚠️ §7(v2 리디자인)·§8(출시일 체크리스트)·§11(구앱 속도 개선) 먼저 읽을 것. §6의 ClassHub 멀티테넌트 계획은 보류됨.**
+최종 갱신: 2026-09-14 — **⚠️ §7(v2 리디자인)·§8(출시일 체크리스트)·§11(구앱 속도 개선)·§12(수업일 판별 나이스 API)·§13(교사 로그인) 먼저 읽을 것. §6의 ClassHub 멀티테넌트 계획은 보류됨.**
 
 ---
 
@@ -469,3 +469,60 @@ CF Workers 이관은 **기각**(사용자: "그럼 냅두자"). 근거: 사용�
 1. 쓰기 테스트는 **반드시 테스트 계정(9999)** 으로만. 잔액이 모자라면 GAS `adminAction/grantPoint`로 넣고 끝나고 회수.
 2. 실데이터를 바꾸는 요청은 **응답 status를 반드시 확인**하고, 실패 시 즉시 보고.
 3. 되돌릴 수 없는 경로(규칙상 역방향이 막힌 쓰기)는 테스트 전에 복구 수단을 먼저 확보할 것. Firestore에 직접 쓴 값은 `setDorm` 같은 no-op GAS 액션으로 시트에서 재푸시하면 복구됨.
+
+## 12. 수업일/공휴일을 GAS 없이 알아내기 (2026-09-14 조사, 브라우저에서 실측)
+
+사용자 요청 "공휴일 gas 없이 알아낼 방법 찾아봐" + "학교 홈페이지나 학교알리미에서 수업일 체크는?"에 대한 실측 결과.
+
+| 방법 | 결과 |
+|---|---|
+| 구글 공휴일 iCal(GAS가 쓰던 것) 브라우저 직접 fetch | ❌ CORS 차단 |
+| 구글 캘린더 API v3 + Firebase 키 | ❌ 403 (프로젝트에서 API 차단됨) |
+| Nager.Date `date.nager.at/api/v3/PublicHolidays/2026/KR` | ✅ 키 없음, CORS OK. 공휴일만(재량휴업일·방학 없음) |
+| **나이스 교육정보 개방포털 SchoolSchedule** | ✅ **키 없이 CORS OK. 청양고 학사일정 209건 전부 수집됨** |
+
+### 12.1 나이스 API (채택 후보)
+- 학교 식별: `ATPT_OFCDC_SC_CODE=N10`(충남), `SD_SCHUL_CODE=8140267`(청양고등학교)
+- 엔드포인트: `https://open.neis.go.kr/hub/SchoolSchedule?Type=json&ATPT_OFCDC_SC_CODE=N10&SD_SCHUL_CODE=8140267&AA_FROM_YMD=YYYYMMDD&AA_TO_YMD=YYYYMMDD`
+- 판별 필드 `SBTR_DD_SC_NM`: `공휴일` / `휴업일` / `해당없음`. 재량휴업일(5/4, 8/31)·방학(7/22~8/9, 12/29~2/28)·수능일(11/19 휴업일)·대체공휴일(8/17, 10/5 등) 전부 포함 → 공휴일 API보다 정확.
+- ⚠️ **키 없으면 호출당 5건 제한, pIndex 페이징 안 됨** → 2일 단위 구간 조회 183회로 1년치 전부 수집(잘린 구간 0). 앱에선 월 1회 정도 갱신하면 되고, 한 달치는 15회 호출.
+- 무료 인증키(open.neis.go.kr 회원가입, 즉시 발급)를 넣으면 pSize=1000으로 1회 호출. 키 발급은 계정 생성이라 사용자가 직접 해야 함. 키를 공개 페이지에 넣어도 무료 조회 전용 키라 큰 문제 없음(퍼블릭 학교 급식앱들이 다 그렇게 씀).
+- 대안 설계: 나이스에서 받아 Firestore `calendar/{yyyy-mm}` 문서에 캐시(교사가 앱을 열 때 갱신) + 교사가 수동으로 특정 날짜를 수업일/휴업일로 덮어쓰기(학교 일정과 장원급제반 운영이 다를 때: 예 시험기간 자습 미운영).
+- 토요휴업일도 `휴업일`로 들어오지만 주말은 이미 요일로 제외됨.
+
+## 13. 교사 신원 확인 — Firebase Auth 도입 (2026-09-14)
+
+"교사 신원 확인은 gas 없이도 되는 거 아냐?" → 맞음. **Firebase Authentication은 GAS와 무관한 별개 서비스**이고 Spark(무료) 플랜에서 익명·이메일 로그인은 무제한 무료.
+
+### 13.1 콘솔 설정 (사용자가 직접 완료)
+- Authentication → 로그인 방법: **익명**, **이메일/비밀번호** 둘 다 사용 설정됨
+- 교사 계정: 이메일 1개 생성됨, **UID `c5BpZGuLVtZmKep0xq3DVeCUBij1`**
+  - ⚠️ 이 저장소는 GitHub Pages로 **공개**되므로 교사 로그인 이메일 주소는 여기 적지 않는다(비밀번호 추측의 표적이 됨). UID는 자격증명이 아니라 식별자라 공개돼도 무방.
+
+### 13.2 설계
+- **학생 = 익명 인증.** 앱이 뜨자마자 조용히 `signInAnonymously`. 화면 변화 0 (사용자의 "인증 강화 하지 말 것" 원칙 유지).
+- **교사 = 이메일·비밀번호.** `browserLocalPersistence`라 기기당 한 번만 로그인하면 계속 유지.
+- ⚠️ **이메일/비밀번호 제공업체가 켜져 있으면 누구나 `createUserWithEmailAndPassword`로 스스로 계정을 만들 수 있다.** 따라서 "이메일 계정 보유 = 교사"가 아니며, UID 화이트리스트(또는 `admins/{uid}` 문서)로만 판정한다. 클라이언트·규칙 양쪽 다 이 방식.
+- 로그인 화면의 "교사로 입실"/"방과후 강사 로그인" 두 버튼(둘 다 동작이 같았음)을 **"교사 로그인" 하나로 합치고**, 누르면 이메일/비밀번호 패널이 펼쳐지게 함.
+- 교사 로그아웃 시 `signOut` → **즉시 익명 재로그인**. 안 그러면 학생 화면이 인증 없는 상태가 돼 체크인이 규칙에 막힌다.
+
+### 13.3 코드 변경 (v2/index.html, +164줄)
+- 모듈: `firebase-auth.js` import, `initializeApp`을 `fbApp`으로 분리해 `getAuth(fbApp)` 추가
+- `TEACHER_UID` 상수, `verifyTeacher(u)` (UID 일치 또는 `admins/{uid}` 존재), `_boot()`, `window.AUTH = {ready, user, isTeacher, signInTeacher, leave}`
+- `FS.checkIn` / `FS.useFreeze` 맨 앞에 `await _authReady` — 인증 완료 전 쓰기가 규칙에 막히는 것 방지
+- `showTeacherLogin/hideTeacherLogin/tShowErr/tAuthMsg/teacherLogin`, `logout()`에서 `AUTH.leave()`
+- 학생 입력칸에 id 부여(`sNo`,`sName`) — 나중에 실제 로그인 배선용
+
+### 13.4 규칙 변경 (v2/firestore.rules)
+- `signedIn()`, `isTeacher()` 함수 추가 / `/admins/{uid}` 읽기전용 추가
+- `/asOverride` **교사 전용으로 잠금** (전에는 완전 개방이었음)
+- `/asCheckIn` create, `/streakFreeze` update에 `signedIn()` 요구
+- **`/schedule`·`/members`·catch-all 읽기는 한 글자도 안 건드림** — 구앱(index.html)은 Firebase Auth를 안 써서 `request.auth == null`이고, 구앱이 Firestore에 쓰는 건 `setDoc(doc(db,'schedule','afterschool'))` 단 하나(index.html:10624). 여기에 인증을 걸면 **학생들이 쓰는 구앱이 그 자리에서 깨진다.**
+
+### 13.5 검증 결과 (localhost:8777, 실데이터 무변경)
+익명 로그인 성공 / 콘솔 에러 0 / 교사 패널 펼침·접힘 정상 / 빈 입력·없는 계정 오류문구 정상 / **로그인 실패 후에도 익명 인증 유지** / 로그아웃 후 익명 재로그인 OK / 읽기 정상(schedule 3건, members 13명, attendance 14명·수업일 107일). 쓰기 테스트는 하지 않음(§10.7).
+
+### 13.6 남은 것
+- 성일님: 바뀐 `v2/firestore.rules` 콘솔에 게시 + 실제 교사 계정으로 로그인 1회 테스트
+- **출시 전 반드시 제거**: 하단 프로토타입 전환 pill(`#proto`)의 `setRole('teacher')` — 로그인 없이 교사 화면이 열린다. 규칙이 실제 쓰기는 막지만 화면은 보인다.
+- 보류: 학생 이름-기기 바인딩(`students/{익명UID}`)으로 "남의 이름으로 출석 체크" 차단 — 이번엔 범위에서 뺌
