@@ -219,7 +219,9 @@ main{padding:6px 18px calc(32px + var(--safe-bottom));}
   </button>
   <div id="tLogin" class="hidden">
     <div class="field"><label>이메일</label>
-      <input id="tEmail" type="email" autocomplete="username" placeholder="이메일 주소"></div>
+      <input id="tEmail" type="email" autocomplete="username" placeholder="이메일 주소"
+             autocapitalize="none" autocorrect="off" spellcheck="false" inputmode="email"
+             onkeydown="if(event.key==='Enter')document.getElementById('tPw').focus()"></div>
     <div class="field"><label>비밀번호</label>
       <input id="tPw" type="password" autocomplete="current-password" placeholder="비밀번호"
              onkeydown="if(event.key==='Enter')teacherLogin()"></div>
@@ -2622,9 +2624,13 @@ function tShowErr(msg){
 function tAuthMsg(err){
   var c=(err&&err.code)||'';
   if(c==='app/not-teacher')                 return '교사 계정이 아닙니다';
+  // Firebase는 "계정 없음"과 "비밀번호 틀림"을 구분해 알려주지 않는다
+  // (이메일 존재 여부 노출 방지). 그래서 두 경우를 한 문구로 안내한다.
   if(c.indexOf('invalid-credential')>=0 ||
      c.indexOf('wrong-password')>=0 ||
-     c.indexOf('user-not-found')>=0)        return '이메일 또는 비밀번호가 맞지 않습니다';
+     c.indexOf('user-not-found')>=0)
+    return '이메일 또는 비밀번호가 맞지 않습니다. 앞뒤 공백을 확인하고, '+
+           '계속 안 되면 Firebase 콘솔에서 비밀번호를 재설정해주세요';
   if(c.indexOf('invalid-email')>=0)         return '이메일 형식이 아닙니다';
   if(c.indexOf('too-many-requests')>=0)     return '시도가 너무 잦습니다. 잠시 후 다시 해주세요';
   if(c.indexOf('network')>=0)               return '인터넷 연결을 확인해주세요';
