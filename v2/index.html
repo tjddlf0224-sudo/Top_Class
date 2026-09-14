@@ -753,14 +753,12 @@ function fillIcoSlots(root){
     el.innerHTML=ic(el.getAttribute('data-ico'),parseInt(el.getAttribute('data-sz'),10)||18);el.__f=1;}
 }
 
-/* ═══ 데모 데이터 (실데이터 기반) ═══ */
+/* ═══ 상태 ═══ */
 var ROLE='student', TAB='home';
 /* 로그인한 학생. 값은 전부 Firestore에서 채운다(예전엔 맹진우 고정값이 박혀 있었고,
    그 탓에 누가 방과후 체크인을 해도 '맹진우' 이름으로 기록됐다).
    planner는 아직 시트에만 있어 Firestore에 없다 — null이면 화면에서 '–'로 표시한다. */
 var ME={id:'',name:'',track:'공무원',coins:0,dorm:false,week:[],planner:null};
-var STUDENTS=[{n:'맹진우',t:'공기업',c:-3},{n:'안성현',t:'공기업',c:-24},{n:'전규비',t:'공무원',c:8},
-  {n:'정여원',t:'공무원',c:11},{n:'명지희',t:'공기업',c:-3},{n:'박현서',t:'공기업',c:0}];
 
 var TABS={
   student:[['home','홈','clipboard'],['exam','성적','chart'],['market','저잣거리','market'],
