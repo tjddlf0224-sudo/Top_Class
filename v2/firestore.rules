@@ -38,6 +38,8 @@ rules_version = '2';
 //     대신 실제로 읽히는 컬렉션을 명시했다. 구앱이 읽는
 //     teachers·examScores·examHistory_공기업·examHistory_공무원이
 //     빠지면 학생들 앱이 깨지므로 절대 지우지 말 것.
+//   - ⚠️ match 경로에 한글을 쓰면 "token recognition error"가 난다.
+//     examHistory_공기업/공무원은 경로 대신 문자열 비교로 처리했다.
 //
 // 참고: Firestore 규칙은 "먼저 매칭된 것이 이긴다"가 아니라 **하나라도 허용하면 통과**다.
 //       그래서 아래 구체 규칙들과 맨 끝 catch-all(write:false)이 공존해도 문제 없다.
@@ -328,11 +330,13 @@ service cloud.firestore {
     // 그걸 걷어내야 해서, 실제로 읽히는 컬렉션을 여기에 명시한다.
     // ⚠️ 아래 5개는 구앱(index.html)이 읽는다 — 빠지면 학생들 앱이 깨진다.
     //    teachers·examScores·examHistory_* 는 구앱 전용, attendance는 v2 전용.
-    match /teachers/{docId}          { allow read: if true; }
-    match /examScores/{docId}        { allow read: if true; }
-    match /examHistory_공기업/{docId} { allow read: if true; }
-    match /examHistory_공무원/{docId} { allow read: if true; }
-    match /attendance/{docId}        { allow read: if true; }
+    // ⚠️ match 경로에는 한글을 쓸 수 없다(examHistory_공기업 등에서 토큰 오류).
+    //    그래서 컬렉션 이름을 와일드카드로 받아 문자열로 비교한다.
+    //    문자열 리터럴 안의 한글은 문제없다.
+    match /{coll}/{docId} {
+      allow read: if coll in ['teachers', 'examScores', 'attendance',
+                              'examHistory_공기업', 'examHistory_공무원'];
+    }
 
     // ── 그 외 전부 ─────────────────────────────────────
     // 읽기도 쓰기도 막는다. 새 컬렉션을 만들면 위에 명시적으로 열어야 한다.
