@@ -27,6 +27,8 @@ rules_version = '2';
 //   - /opening 추가 — 계산 시작 기준점(교사만 생성, 수정·삭제 불가)
 //   - /ledger  추가 — 계산할 수 없는 엽전 이동(교사만, 추가만 가능)
 //   - /planner 추가 — 학생 플래너. 날짜는 서버 at으로만 정해진다(소급 입력 차단)
+//   - /streakFreeze 제거 → /freezeBuy, /freezeUse 로 교체(이벤트 기록).
+//     이로써 v2에서 GAS로 나가는 쓰기 경로가 없어진다.
 //
 // 참고: Firestore 규칙은 "먼저 매칭된 것이 이긴다"가 아니라 **하나라도 허용하면 통과**다.
 //       그래서 아래 구체 규칙들과 맨 끝 catch-all(write:false)이 공존해도 문제 없다.
@@ -231,19 +233,33 @@ service cloud.firestore {
       allow write: if false;
     }
 
-    // ── 스트릭 프리즈 (v2) ─────────────────────────────────
-    // 구매(보유 +1)는 엽전이 오가므로 GAS만 가능 — 규칙상 클라이언트는 늘릴 수 없다.
-    // 사용(되살리기)만 앱에서 직접: 보유가 정확히 1 줄고 메운 날짜 목록이 함께 바뀔 때.
-    // dates의 '내용'은 규칙으로 검증할 수 없지만, 쓸 수 있는 횟수가 구매 수량에
-    // 묶여 있고 구매는 엽전을 소모하므로 경제적으로 조작이 불가능하다.
-    match /streakFreeze/{name} {
+    // ── 스트릭 프리즈 ───────────────────────────────────
+    // 구매·사용을 각각 문서 하나로 남긴다(이벤트). 한 동작 = 한 번의 쓰기라
+    // "엽전은 빠졌는데 프리즈는 안 늘었다" 같은 어긋남이 생길 수 없다.
+    // (예전엔 GAS가 엽전을 깎고 streakFreeze.count를 올리는 2단계였다.)
+    //
+    // 보유 수나 잔액을 규칙으로 검사하지 않는다 — 규칙은 컬렉션을 셀 수 없다.
+    // 대신 앱이 "사용은 구매한 횟수만큼만" 인정하도록 계산한다(오래된 순으로 잘라냄).
+    // 초과로 만든 사용 기록은 계산에서 버려지므로 기록을 늘려도 얻는 게 없다.
+    // 구매 기록을 늘리면 그만큼 엽전이 깎이므로(-10 × 구매수, 계산) 이득이 없다.
+    match /freezeBuy/{docId} {
       allow read: if true;
-      allow update: if
+      allow create: if
            signedIn()
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['count','dates','updatedAt'])
-        && request.resource.data.count == resource.data.count - 1
-        && request.resource.data.count >= 0;
-      allow create, delete: if false;   // 문서 생성은 구매 시 GAS만
+        && request.resource.data.at == request.time
+        && request.resource.data.keys().hasOnly(['name','at'])
+        && request.resource.data.name is string;
+      allow update, delete: if false;
+    }
+    match /freezeUse/{docId} {
+      allow read: if true;
+      allow create: if
+           signedIn()
+        && request.resource.data.at == request.time
+        && request.resource.data.keys().hasOnly(['name','date','at'])
+        && request.resource.data.name is string
+        && request.resource.data.date is string;
+      allow update, delete: if false;
     }
 
     // ── 그 외 전부 (기존 그대로) ───────────────────────────

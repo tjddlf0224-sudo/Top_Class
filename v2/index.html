@@ -279,8 +279,9 @@ function parseList(v){
   try { const p = JSON.parse(v); return Array.isArray(p) ? p : []; } catch(e){ return []; }
 }
 
-/* 엽전이 오가는 쓰기만 GAS를 거친다(시트가 엽전의 원본). 조회·그 외 쓰기는 Firestore 직통. */
-const GAS_URL = "https://script.google.com/macros/s/AKfycbzRaCwLXFf8GvXknjWnZ003q9PrJWcCtBa8DHWy64HvMyBuIQSvDz7oa82vTsppX5G-/exec";
+/* ⚠️ v2는 GAS를 전혀 호출하지 않는다. 조회도 쓰기도 전부 Firestore 직통이다.
+   (마지막까지 남아 있던 프리즈 구매까지 2026-09-14에 Firestore로 옮겼다.)
+   GAS는 구앱 전용으로만 남아 있고, 구앱이 은퇴하면 트리거·푸시만 남는다. */
 
 const fbApp = initializeApp({
   apiKey:"AIzaSyDRViuzADHxHnvv78jfnvPbAJ5hH3wzpCw",
@@ -443,126 +444,37 @@ window.FS = {
     return { byName, schoolDays };
   },
 
-  /* 스트릭 프리즈 보유·사용기록 — members가 아니라 별도 컬렉션에 둔다.
-     members는 GAS가 엽전을 바꿀 때마다 덮어써서 v2 전용 필드가 지워진다. */
+  /* ── 스트릭 프리즈 ─────────────────────────────────
+     구매와 사용을 각각 문서 하나로 남긴다. 한 동작 = 한 번의 쓰기라
+     "엽전은 빠졌는데 프리즈는 안 늘었다"가 구조적으로 불가능하다.
+     (예전엔 GAS가 엽전을 깎고 streakFreeze.count를 올리는 2단계였다.)
+
+     보유 수를 어디에도 저장하지 않는다 — 구매 기록 수 - 사용 기록 수로 센다.
+     사용은 "구매한 횟수만큼만" 인정한다(오래된 순). 규칙은 컬렉션을 셀 수 없어
+     초과 사용을 막지 못하지만, 계산에서 버리므로 늘려도 얻는 게 없다. */
   async freezeOf(name){
-    const s = await getDoc(doc(db,'streakFreeze',name));
-    if (!s.exists()) return { count:0, dates:[] };
-    const v = s.data();
-    return { count: Number(v.count)||0, dates: parseList(v.dates) };
+    const [b, u] = await Promise.all([
+      getDocs(query(collection(db,'freezeBuy'), where('name','==',name))),
+      getDocs(query(collection(db,'freezeUse'), where('name','==',name)))
+    ]);
+    const buys = [], uses = [];
+    b.forEach(d => { const v = d.data(); if (v.at && v.at.seconds) buys.push(v.at.seconds); });
+    u.forEach(d => { const v = d.data(); if (v.at && v.at.seconds)
+      uses.push({ at: v.at.seconds, date: String(v.date||'') }); });
+    buys.sort((x,y) => x - y);
+    uses.sort((x,y) => x.at - y.at);
+    const valid = uses.slice(0, buys.length);      // 산 만큼만 인정
+    return { bought: buys.length, used: valid.length,
+             count: buys.length - valid.length,
+             dates: valid.map(x => x.date) };
   },
-
-  /* 프리즈 구매 — 엽전이 오가므로 GAS를 거친다(시트가 엽전의 원본).
-     Firestore에 직접 차감하면 GAS가 다음 동기화 때 되돌려 버린다. */
   async buyFreeze(name){
-    const r = await fetch(GAS_URL, { method:'POST', mode:'cors',
-      body: JSON.stringify({ action:'buyStreakFreeze', name }) });
-    const j = await r.json();
-    if (j.status !== 'success') throw new Error(j.message || '구매 실패');
-    return j.data;
-  },
-
-  /* 프리즈 사용 — streakFreeze만 건드리므로 Firestore 직통(빠른 경로).
-     보유가 정확히 1 줄어야 보안규칙이 통과시킨다. */
-  async useFreeze(name, count, dates, dateStr){
-    await _authReady;                 // 규칙이 로그인한 요청만 받는다
-    await updateDoc(doc(db,'streakFreeze',name), {
-      count: count - 1,
-      dates: JSON.stringify(dates.concat([dateStr])),
-      updatedAt: new Date().toISOString()
-    });
-  },
-
-  /* ── 등교 출석 (아침) ───────────────────────────────
-     방과후(asCheckIn)와 같은 구조다. 서버 시각만 기록하고
-     출석/지각은 그 시각으로 계산한다 — 학생이 상태를 고를 수 없다.
-     결석은 저장하지 않는다: 수업일인데 기록이 없으면 결석. */
-  async amCheckIn(dateStr, name, dorm){
     await _authReady;
-    const id = (dateStr+'_'+name).replace(/[^\wㄱ-ㅎ가-힣-]/g,'_');
-    await setDoc(doc(db,'amCheckIn',id), { at: serverTimestamp(), name, dorm: !!dorm });
+    await addDoc(collection(db,'freezeBuy'), { name, at: serverTimestamp() });
   },
-  /* 인증 가능 시간(KST 06:00~08:30)으로 범위를 잡는다.
-     KST 06:00은 UTC로 전날 21:00이지만, Date가 알아서 환산하므로
-     날짜 문자열을 다시 만들지 않는다(§13.8과 같은 함정). */
-  async amCheckIns(dateStr){
-    const from = new Date(dateStr + 'T06:00:00+09:00');
-    const to   = new Date(dateStr + 'T08:30:00+09:00');
-    const snap = await getDocs(query(collection(db,'amCheckIn'),
-      where('at','>=',from), where('at','<',to)));
-    const out = {};
-    snap.forEach(d => { const v = d.data(); if (v.at) out[v.name] = v; });
-    return out;
-  },
-
-  /* 교사 정정 — 학생이 못 찍었지만 실제로는 왔거나, 공결 처리할 때.
-     문서 ID가 '날짜_이름'이라 하루 한 건으로 자연히 정리된다. */
-  async amOverrides(dateStr){
-    const snap = await getDocs(query(collection(db,'amOverride'),
-      where('date','==',dateStr)));
-    const out = {};
-    snap.forEach(d => { const v = d.data(); out[v.name] = v; });
-    return out;
-  },
-  async setAmOverride(dateStr, name, status, by){
+  async useFreeze(name, dateStr){
     await _authReady;
-    const id = (dateStr+'_'+name).replace(/[^\wㄱ-ㅎ가-힣-]/g,'_');
-    await setDoc(doc(db,'amOverride',id),
-      { date:dateStr, name, status, by, at: serverTimestamp() });
-  },
-
-  /* ── 엽전 원장 ─────────────────────────────────────
-     잔액 = 개시잔액 + 원장 합계 + 출결 계산분.
-     출결(출석/지각/결석/주간개근)은 기록에서 계산되므로 원장에 쌓지 않는다 —
-     같은 사실을 두 군데 적으면 반드시 어긋난다.
-     원장에는 "계산할 수 없는 것"만 들어간다: 교사 지급·차감, 구매 등. */
-  async openingOf(name){
-    const s = await getDoc(doc(db,'opening',name));
-    if (!s.exists()) return null;                 // 없으면 아직 전환 전 → 시트 값을 쓴다
-    const v = s.data();
-    return { date: String(v.date||''), coins: Number(v.coins)||0 };
-  },
-  async ledgerOf(name){
-    const snap = await getDocs(query(collection(db,'ledger'), where('name','==',name)));
-    const out = [];
-    snap.forEach(d => { const v = d.data();
-      out.push({ id:d.id, date:String(v.date||''), amount:Number(v.amount)||0,
-                 reason:String(v.reason||''), by:String(v.by||'') }); });
-    return out.sort((a,b)=> a.date < b.date ? 1 : -1);
-  },
-  async addLedger(name, amount, reason, by){
-    await _authReady;
-    await addDoc(collection(db,'ledger'),
-      { name, amount: Number(amount), reason: String(reason),
-        by: String(by), date: kstTodayISO(), at: serverTimestamp() });
-  },
-
-  /* ── 플래너 ────────────────────────────────────────
-     날짜는 저장된 서버 시각(at)으로만 센다 — 학생이 날짜를 못 고른다.
-     문서 ID에 날짜가 들어가지만 그건 편의용 키일 뿐 판단 근거가 아니다. */
-  async plannerOf(name){
-    const snap = await getDocs(query(collection(db,'planner'), where('name','==',name)));
-    const byDate = {};
-    snap.forEach(d => {
-      const v = d.data();
-      if (!v.at || !v.at.seconds) return;
-      const k = new Date(v.at.seconds*1000 + 9*60*60*1000).toISOString().slice(0,10);
-      const prog = Number(v.progress)||0;
-      // 같은 날 문서가 여러 개면 진도가 높은 쪽을 그 날의 기록으로 본다
-      if (!byDate[k] || prog > byDate[k].progress)
-        byDate[k] = { id:d.id, progress:prog, tasks:String(v.tasks||'[]') };
-    });
-    return byDate;
-  },
-  async savePlanner(name, tasks, progress){
-    await _authReady;
-    const id  = (kstTodayISO()+'_'+name).replace(/[^\wㄱ-ㅎ가-힣-]/g,'_');
-    const ref = doc(db,'planner',id);
-    const cur = await getDoc(ref);
-    const body = { tasks: JSON.stringify(tasks), progress: Number(progress)||0 };
-    if (cur.exists()) await updateDoc(ref, body);
-    else              await setDoc(ref, Object.assign({ name, at: serverTimestamp() }, body));
-    return id;
+    await addDoc(collection(db,'freezeUse'), { name, date: dateStr, at: serverTimestamp() });
   },
 
   async checkIns(dateStr){
@@ -920,15 +832,24 @@ async function loadWallet(m){
               .toISOString().slice(0,10);
   var att = coinFromAttendance(from, today, ctx);
 
+  // 프리즈 구매 비용 — 구매 기록 수로 계산한다(원장에 따로 적지 않는다)
+  var fz = { bought:0 };
+  try { fz = await FS.freezeOf(name); } catch(e){}
+  var freezeCost = -FREEZE_COST * (fz.bought || 0);
+  var freezeItems = [];
+  for (var fi=0; fi<(fz.bought||0); fi++)
+    freezeItems.push({ date:'', amount:-FREEZE_COST, reason:'스트릭 프리즈 구매', by:'계산' });
+
   var plannerByDate = {};
   try { plannerByDate = await FS.plannerOf(name); } catch(e){}
   var pl = coinFromPlanner(from, today, plannerByDate, ctx);
 
-  var items = att.items.concat(pl.items).concat(ledger.map(function(l){
+  var items = att.items.concat(pl.items).concat(freezeItems).concat(ledger.map(function(l){
     return { date:l.date, amount:l.amount, reason:l.reason, by:l.by||'교사' };
   })).sort(function(a,b){ return a.date < b.date ? 1 : -1; });
 
-  return { mode:'계산', balance: open.coins + ledgerSum + att.total + pl.total,
+  return { mode:'계산',
+           balance: open.coins + ledgerSum + att.total + pl.total + freezeCost,
            items: items, opening: open };
 }
 
@@ -1338,6 +1259,7 @@ async function loadStreak(force){
     longest:  Math.max(r.streak, calcLongest(myDays, att.schoolDays, freezeSet, today)),
     atRisk:   calcAtRisk(myDays, today, r.streak),
     freezes:  fz.count,
+    freezeBought: fz.bought,
     freezeDates: fz.dates,
     coins:    ME.coins
   };
@@ -1419,14 +1341,14 @@ async function useFreezeNow(dateStr){
   var s = streakCache;
   if (!s || s.freezes <= 0) return;
   try {
-    await FS.useFreeze(ME.name, s.freezes, s.freezeDates, dateStr);
+    await FS.useFreeze(ME.name, dateStr);
     await afterFreezeChange();
   } catch(e){
     alert('되살리지 못했습니다.\n' + (e.message || e));
   }
 }
 
-/** 프리즈 구매 — GAS 경유(엽전 차감이 시트 원본에 반영돼야 하므로) */
+/** 프리즈 구매 — Firestore 직통. 엽전은 구매 기록 수로 계산된다(-10 x 구매수). */
 async function buyFreezeNow(){
   var s = streakCache;
   if (!s) return;
