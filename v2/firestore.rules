@@ -23,6 +23,10 @@ rules_version = '2';
 //   - /amCheckIn  추가 — 학생 등교 인증(KST 06:00~08:30)
 //   - /amOverride 추가 — 교사 등교 출결 정정(교사만)
 //
+// ── 2026-09-14 엽전 계산 방식(B단계) ───────────────────────────
+//   - /opening 추가 — 계산 시작 기준점(교사만 생성, 수정·삭제 불가)
+//   - /ledger  추가 — 계산할 수 없는 엽전 이동(교사만, 추가만 가능)
+//
 // 참고: Firestore 규칙은 "먼저 매칭된 것이 이긴다"가 아니라 **하나라도 허용하면 통과**다.
 //       그래서 아래 구체 규칙들과 맨 끝 catch-all(write:false)이 공존해도 문제 없다.
 //
@@ -142,6 +146,40 @@ service cloud.firestore {
                    && ( request.resource == null
                         || request.resource.data.keys()
                              .hasOnly(['status','by','at','subject','name']) );
+    }
+
+    // ── 엽전 개시잔액 ───────────────────────────────────
+    // v2가 엽전을 계산하기 시작하는 기준점. "그 날짜에 이 학생은 N냥이었다".
+    // 한 번 정하면 바꾸지 않는다 — 기준점이 움직이면 잔액이 통째로 흔들리고,
+    // 언제 무엇이 바뀌었는지 추적할 수 없게 된다. 고칠 일이 있으면 원장에 넣는다.
+    // 이 문서가 없는 학생은 아직 전환 전 → 앱이 시트 값(members.coins)을 쓴다.
+    match /opening/{name} {
+      allow read: if true;
+      allow create: if isTeacher()
+                    && request.resource.data.keys().hasOnly(['date','coins','by','at'])
+                    && request.resource.data.coins is int
+                    && request.resource.data.date is string;
+      allow update, delete: if false;
+    }
+
+    // ── 엽전 원장 ───────────────────────────────────────
+    // "계산할 수 없는" 엽전 이동만 들어간다: 교사 지급·차감 등.
+    // 출결로 생기는 엽전(출석·지각·결석·주간개근)은 여기 넣지 않는다 —
+    // 기록에서 계산하므로, 원장에도 쌓으면 같은 사실이 두 번 반영된다.
+    //
+    // 추가만 가능하다. 잘못 넣었으면 반대 기록을 넣어 상쇄한다(회계 원칙).
+    // 지울 수 있게 하면 "왜 잔액이 달라졌는지" 추적이 불가능해진다.
+    match /ledger/{docId} {
+      allow read: if true;
+      allow create: if isTeacher()
+                    && request.resource.data.keys()
+                         .hasOnly(['name','amount','reason','by','date','at'])
+                    && request.resource.data.amount is int
+                    && request.resource.data.amount != 0
+                    && request.resource.data.name is string
+                    && request.resource.data.reason is string
+                    && request.resource.data.at == request.time;
+      allow update, delete: if false;
     }
 
     // ── 학생 명부 (엽전 잔액이 여기 있음) ───────────────────

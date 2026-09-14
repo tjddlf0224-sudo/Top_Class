@@ -263,7 +263,7 @@ main{padding:6px 18px calc(32px + var(--safe-bottom));}
 <!-- ═══ Firebase (조회·체크인 전부 여기로. GAS 안 거침) ═══ -->
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-app.js";
-import { getFirestore, doc, getDoc, setDoc, updateDoc, collection, getDocs, query, where, serverTimestamp }
+import { getFirestore, doc, getDoc, setDoc, updateDoc, addDoc, collection, getDocs, query, where, serverTimestamp }
   from "https://www.gstatic.com/firebasejs/12.12.1/firebase-firestore.js";
 import { getAuth, onAuthStateChanged, signInAnonymously, signInWithEmailAndPassword,
          signOut, setPersistence, browserLocalPersistence }
@@ -367,6 +367,12 @@ window.AUTH = {
 /* 방과후 체크인은 그날 18:30~24:00(한국시간)에만 가능하므로,
    특정 날짜의 기록은 그 구간의 타임스탬프 범위로 조회하면 된다.
    date 문자열 대신 서버 시각(at)을 기준으로 삼아야 위조가 불가능하다. */
+/* 한국시간 기준 오늘 날짜 — 모듈 안에서도 써야 해서 따로 둔다 */
+function kstTodayISO(){
+  const k = new Date(Date.now() + 9*60*60*1000);
+  return k.toISOString().slice(0,10);
+}
+
 function kstRange(dateStr){
   const from = new Date(dateStr + 'T18:30:00+09:00');
   // 다음날 0시(KST)까지. 날짜 문자열을 다시 만들지 말고 24시간을 더한다 —
@@ -505,6 +511,32 @@ window.FS = {
       { date:dateStr, name, status, by, at: serverTimestamp() });
   },
 
+  /* ── 엽전 원장 ─────────────────────────────────────
+     잔액 = 개시잔액 + 원장 합계 + 출결 계산분.
+     출결(출석/지각/결석/주간개근)은 기록에서 계산되므로 원장에 쌓지 않는다 —
+     같은 사실을 두 군데 적으면 반드시 어긋난다.
+     원장에는 "계산할 수 없는 것"만 들어간다: 교사 지급·차감, 구매 등. */
+  async openingOf(name){
+    const s = await getDoc(doc(db,'opening',name));
+    if (!s.exists()) return null;                 // 없으면 아직 전환 전 → 시트 값을 쓴다
+    const v = s.data();
+    return { date: String(v.date||''), coins: Number(v.coins)||0 };
+  },
+  async ledgerOf(name){
+    const snap = await getDocs(query(collection(db,'ledger'), where('name','==',name)));
+    const out = [];
+    snap.forEach(d => { const v = d.data();
+      out.push({ id:d.id, date:String(v.date||''), amount:Number(v.amount)||0,
+                 reason:String(v.reason||''), by:String(v.by||'') }); });
+    return out.sort((a,b)=> a.date < b.date ? 1 : -1);
+  },
+  async addLedger(name, amount, reason, by){
+    await _authReady;
+    await addDoc(collection(db,'ledger'),
+      { name, amount: Number(amount), reason: String(reason),
+        by: String(by), date: kstTodayISO(), at: serverTimestamp() });
+  },
+
   async checkIns(dateStr){
     const { from, to } = kstRange(dateStr);
     const snap = await getDocs(query(collection(db,'asCheckIn'),
@@ -583,6 +615,7 @@ function renderView(){
   if(TAB==='home'){v.innerHTML=ROLE==='student'?homeStudent():homeTeacher();fillIcoSlots(v);return;}
   if(TAB==='after'){renderAfterSchool(v);return;}
   if(TAB==='att' && ROLE==='teacher'){renderAmTeacher(v);return;}
+  if(TAB==='coin'){ROLE==='student'?renderCoinStudent(v):renderCoinTeacher(v);return;}
   v.innerHTML=stub();fillIcoSlots(v);
 }
 
@@ -733,6 +766,209 @@ async function doAmCheckIn(){
   }
 }
 
+/* ═══ 엽전 계산 ═══════════════════════════════════════
+   잔액 = 개시잔액 + 원장 합계 + 출결 계산분
+
+   출결로 생기는 엽전(출석 +1 / 지각 −1 / 결석 −2 / 주간개근 +5)은
+   기록에서 계산한다. 원장에 따로 쌓지 않는 이유: 같은 사실을 두 군데
+   적으면 언젠가 반드시 어긋나고, 어느 쪽이 맞는지 알 수 없게 된다.
+   출결을 고치면(amOverride) 엽전도 자동으로 따라 바뀐다 — 구앱에서
+   '출결정정: 결석→출석' 같은 보정 기록을 따로 넣던 일이 없어진다.
+
+   ⚠️ 개시잔액(opening)이 없으면 아직 전환 전이다. 이때는 계산하지 않고
+      시트에서 온 members.coins를 그대로 쓴다 — 전환 전까지 아무것도
+      달라지지 않게 하려는 것. 전환일에 opening 문서를 만들면 자동으로
+      계산 방식으로 넘어간다. */
+var COIN_RULE = { 출석:+1, 지각:-1, 결석:-2, 공결:0, 주간개근:+5 };
+
+/** 두 날짜 사이의 평일을 훑는다(양끝 포함) */
+function eachWeekday(fromDs, toDs, fn){
+  // UTC 정오를 기준점으로 하루씩 더한다 — 기기 시간대·서머타임에 흔들리지 않는다
+  var cur = new Date(fromDs + 'T12:00:00Z');
+  var end = new Date(toDs   + 'T12:00:00Z');
+  for (var i=0; i<500 && cur <= end; i++){
+    var ds = cur.toISOString().slice(0,10);
+    if (!isWeekend(ds)) fn(ds);
+    cur = new Date(cur.getTime() + 24*60*60*1000);
+  }
+}
+
+/** 출결에서 생긴 엽전 — 개시일 다음날부터 오늘까지 */
+function coinFromAttendance(fromDs, toDs, ctx){
+  var total = 0, items = [];
+  var weekBuf = [];      // 한 주(월~금)의 수업일 판정을 모아 개근을 본다
+
+  var flushWeek = function(){
+    if (weekBuf.length && weekBuf.every(function(x){ return x.st === '출석'; })){
+      total += COIN_RULE.주간개근;
+      items.push({ date: weekBuf[weekBuf.length-1].ds, amount: COIN_RULE.주간개근,
+                   reason: '주간개근', by: '계산' });
+    }
+    weekBuf = [];
+  };
+
+  eachWeekday(fromDs, toDs, function(ds){
+    if (dowOf(ds) === 1) flushWeek();            // 월요일이면 지난 주를 마감
+    if (!isSchoolDay(ds)) return;               // 휴업일은 개근 판정에서도 빠진다
+
+    var st = attStatusOf(ds, ctx);
+    if (st === null) return;                    // 판정 보류(오늘·데이터 공백)
+
+    var amt = COIN_RULE[st];
+    if (amt) {
+      total += amt;
+      items.push({ date: ds, amount: amt, reason: st, by: '계산' });
+    }
+    weekBuf.push({ ds: ds, st: st });
+  });
+  // 마지막 주는 그 주가 끝났을 때만 개근을 센다(진행 중인 주는 아직 모른다)
+  var lastMonday = (function(){
+    var k = kstNow();
+    var d = new Date(k.getFullYear(), k.getMonth(), k.getDate() - ((k.getDay()+6)%7));
+    return d.getFullYear()+'-'+pad2(d.getMonth()+1)+'-'+pad2(d.getDate());
+  })();
+  if (weekBuf.length && weekBuf[0].ds < lastMonday) flushWeek();
+
+  return { total: total, items: items };
+}
+
+/** 한 학생의 엽전 잔액과 내역.
+    반환 mode: '계산' = v2가 계산한 값 / '시트' = 아직 전환 전이라 GAS 값 */
+async function loadWallet(m){
+  await loadCalendar();
+  var name = m.name;
+  var open = await FS.openingOf(name);
+
+  if (!open){
+    return { mode:'시트', balance: m.coins, items: [], opening: null };
+  }
+
+  var ledger = await FS.ledgerOf(name);
+  var ledgerSum = ledger.reduce(function(a,b){ return a + b.amount; }, 0);
+
+  // 출결 판정에 필요한 재료
+  var days = await FS.attendanceOf(name);
+  var legacyLast = Object.keys(days).sort().pop() || '';
+  var today = kstToday();
+  var am = {}, ov = {};
+  var dates = []; eachWeekday(open.date, today, function(ds){ dates.push(ds); });
+  for (var i=0;i<dates.length;i++){
+    try {
+      var a = await FS.amCheckIns(dates[i]); if (a[name]) am[dates[i]] = a[name];
+      var o = await FS.amOverrides(dates[i]); if (o[name]) ov[dates[i]] = o[name];
+    } catch(e){}
+  }
+  var ctx = { days:days, legacyLast:legacyLast, today:today,
+              dorm:!!m.dorm, am:am, ov:ov };
+
+  // 개시일 다음날부터 센다 — 개시잔액에 그날까지가 이미 반영돼 있다
+  var from = new Date(new Date(open.date+'T12:00:00Z').getTime() + 24*60*60*1000)
+              .toISOString().slice(0,10);
+  var att = coinFromAttendance(from, today, ctx);
+
+  var items = att.items.concat(ledger.map(function(l){
+    return { date:l.date, amount:l.amount, reason:l.reason, by:l.by||'교사' };
+  })).sort(function(a,b){ return a.date < b.date ? 1 : -1; });
+
+  return { mode:'계산', balance: open.coins + ledgerSum + att.total,
+           items: items, opening: open };
+}
+
+/* ═══ 엽전 화면 ═══════════════════════════════════════ */
+function coinRow(it){
+  var plus = it.amount > 0;
+  return '<div class="row" style="cursor:default">'+
+    '<div class="row-main"><div class="row-t">'+it.reason+'</div>'+
+    '<div class="row-s">'+it.date+(it.by && it.by!=='계산' ? ' · '+it.by : '')+'</div></div>'+
+    '<span class="row-v" style="color:'+(plus?'var(--green)':'var(--rose)')+';font-weight:700">'+
+      (plus?'+':'')+it.amount+'냥</span></div>';
+}
+
+async function renderCoinStudent(v){
+  if(!ME.name){ v.innerHTML='<div class="empty"><span>로그인이 필요합니다</span></div>'; return; }
+  v.innerHTML='<div class="empty"><span>불러오는 중…</span></div>';
+  var w = await loadWallet(ME);
+  ME.coins = w.balance;
+
+  var html='<div class="hero"><div class="hero-lbl">내 엽전</div>'+
+    '<div class="hero-num" style="color:'+(w.balance<0?'var(--rose)':'var(--ink)')+'">'+
+      w.balance+'<small>냥</small></div></div>';
+
+  if (w.mode === '시트'){
+    html+='<div class="notice">'+ic('clock',15)+
+      '<span>아직 이전 방식으로 계산된 잔액입니다</span></div>'+
+      '<div class="empty"><div class="empty-ico">'+ic('coin',44)+'</div>'+
+      '<span>엽전 내역은 전환 후에 볼 수 있어요</span></div>';
+    v.innerHTML=html; fillIcoSlots(v); return;
+  }
+
+  html+='<div class="sec-label">내역</div><div class="card">';
+  if(!w.items.length){
+    html+='<div class="blk"><div class="row-s">아직 내역이 없어요</div></div>';
+  } else {
+    html+='<div class="blk"><div class="blk-head">'+
+      '<div class="row-t">'+w.opening.date+' 기준 '+w.opening.coins+'냥에서 시작</div></div></div>';
+    html+=w.items.map(coinRow).join('');
+  }
+  html+='</div>';
+  v.innerHTML=html; fillIcoSlots(v);
+}
+
+async function renderCoinTeacher(v){
+  v.innerHTML='<div class="empty"><span>불러오는 중…</span></div>';
+  var mem = await FS.members();
+  var rows = [];
+  for (var i=0;i<mem.length;i++){
+    var m = mem[i];
+    var w = await loadWallet(m);
+    rows.push({ m:m, bal:w.balance, mode:w.mode });
+  }
+  var html = '<div class="sec-label">엽전 지급·차감</div><div class="card">';
+  html += rows.map(function(r){
+    return '<div class="row" onclick="openGrant(\''+r.m.name+'\')" style="cursor:pointer">'+
+      '<div class="avatar">'+r.m.name.charAt(0)+'</div>'+
+      '<div class="row-main"><div class="row-t">'+r.m.name+'</div>'+
+      '<div class="row-s">'+r.m.track+'반'+(r.mode==='시트'?' · 전환 전':'')+'</div></div>'+
+      '<span class="row-v" style="color:'+(r.bal<0?'var(--rose)':'var(--ink)')+'">'+r.bal+'냥</span></div>';
+  }).join('') + '</div>'+
+  '<div class="sec-label" style="color:var(--ink-mute);font-weight:500">'+
+    '학생을 탭하면 엽전을 주거나 뺄 수 있습니다</div>';
+  v.innerHTML=html; fillIcoSlots(v);
+}
+
+/** 교사 지급·차감 */
+function openGrant(name){
+  showModal('<div class="modal-box">'+
+    '<div style="text-align:center;padding:4px 0 14px">'+
+      '<div style="font-size:1.25rem;font-weight:800">'+name+'</div>'+
+      '<div style="font-size:.82rem;color:var(--ink-mute);margin-top:4px">엽전 지급·차감</div></div>'+
+    '<div class="field"><label>수량 (뺄 때는 −)</label>'+
+      '<input id="gAmt" type="number" inputmode="numeric" placeholder="예: 3 또는 -2"></div>'+
+    '<div class="field"><label>사유</label>'+
+      '<input id="gWhy" type="text" placeholder="예: 청소 도움"></div>'+
+    '<div id="gErr" class="login-err hidden"></div>'+
+    '<button class="btn" id="gGo" onclick="applyGrant(\''+name+'\')">저장</button>'+
+    '<button class="btn btn-outline" onclick="closeModal()">취소</button></div>');
+  setTimeout(function(){ var e=document.getElementById('gAmt'); if(e) e.focus(); }, 50);
+}
+
+async function applyGrant(name){
+  var amt = parseInt((document.getElementById('gAmt').value||'').trim(), 10);
+  var why = (document.getElementById('gWhy').value||'').trim();
+  var err = document.getElementById('gErr');
+  var show = function(m){ err.textContent=m; err.classList.remove('hidden'); };
+  if (!amt || isNaN(amt)) return show('수량을 입력해주세요 (0은 안 됩니다)');
+  if (!why)               return show('사유를 입력해주세요');
+  var btn=document.getElementById('gGo'); btn.disabled=true; btn.textContent='저장 중...';
+  try {
+    await FS.addLedger(name, amt, why, '교사');
+    closeModal(); renderView();
+  } catch(e){
+    btn.disabled=false; btn.textContent='저장';
+    show(e && e.code==='permission-denied' ? '교사로 로그인해야 합니다' : '저장하지 못했습니다');
+  }
+}
+
 /* ═══ 교사 — 등교 출결 ═══════════════════════════════
    결석은 저장돼 있지 않으므로 "수업일인데 기록 없음"으로 계산해 보여준다.
    교사가 고치면 amOverride에 남고, 그게 모든 판정에서 최우선이 된다. */
@@ -859,7 +1095,12 @@ var FREEZE_COST = 10;
 var streakCache = null;   // { streak, longest, atRisk, brokenAt, freezes, member }
 
 function ymd(d){ return d.getFullYear()+'-'+pad2(d.getMonth()+1)+'-'+pad2(d.getDate()); }
-function isWeekend(ds){ var w = new Date(ds+'T00:00:00+09:00').getDay(); return w===0||w===6; }
+/** 날짜 문자열의 요일 (0=일 ~ 6=토).
+    ⚠️ new Date(ds+'T00:00:00+09:00')에 getDay()를 쓰면 기기 시간대에 따라
+       하루가 밀린다(UTC 기기에서 월요일이 일요일로 나옴). UTC 정오를 기준점으로
+       삼으면 어느 시간대에서도 같은 날짜가 나온다. */
+function dowOf(ds){ return new Date(ds+'T12:00:00Z').getUTCDay(); }
+function isWeekend(ds){ var w = dowOf(ds); return w===0||w===6; }
 
 /** 하루의 판정: 'up'(증가) | 'keep'(유지) | 'skip'(무관) | 'break'(끊김) */
 function dayVerdict(status, ds, todayStr, schoolDays, freezeSet){
