@@ -544,6 +544,22 @@ window.FS = {
     return list.sort((a,b) => b.date.localeCompare(a.date));
   },
 
+  /* 최근 N일치 등교기록·정정을 한 번에 — 날짜별로 조회하면 수십 번 읽는다 */
+  async amSince(fromDs){
+    const from = new Date(fromDs + 'T00:00:00+09:00');
+    const [c, o] = await Promise.all([
+      getDocs(query(collection(db,'amCheckIn'), where('at','>=',from))),
+      getDocs(query(collection(db,'amOverride'), where('date','>=',fromDs)))
+    ]);
+    const am = {}, ov = {};
+    c.forEach(d => { const v=d.data(); if(!v.at||!v.at.seconds) return;
+      const k = new Date(v.at.seconds*1000 + 9*60*60*1000).toISOString().slice(0,10);
+      (am[k] = am[k] || {})[v.name] = v; });
+    o.forEach(d => { const v=d.data(); if(!v.date) return;
+      (ov[String(v.date)] = ov[String(v.date)] || {})[v.name] = v; });
+    return { am, ov };
+  },
+
   /* 교사 지정 휴업일 — 나이스에는 수업일인데 자습을 안 한 날 */
   async calendarOff(){
     const snap = await getDocs(collection(db,'calendarOff'));
@@ -1743,6 +1759,89 @@ async function renderAmTeacher(v){
   fillIcoSlots(v);
 }
 
+/* ── 자습 없는 날 자동 감지 ──────────────────────────
+   나이스는 시험주간·캠프를 모른다. 그런 날 교사가 표시를 안 하면 전원이
+   결석 처리되고 엽전이 깎인다(실제로 2026-06-29·07-06·07-09에 그랬다).
+   서버가 없어 푸시는 못 보내지만, 교사가 앱을 열 때 짚어주면 그 자리에서
+   바로 처리할 수 있다. */
+var QUIET_RATIO = 0.7;      // 명부의 70% 이상 결석이면 물어본다
+var QUIET_LOOKBACK = 21;    // 최근 3주
+var QKEY = 'tc_quiet_ok';   // "수업일 맞다"고 넘긴 날 (이 기기에서만 기억)
+
+function quietDismissed(){
+  try { return JSON.parse(localStorage.getItem(QKEY) || '[]'); } catch(e){ return []; }
+}
+function dismissQuiet(ds){
+  try {
+    var a = quietDismissed(); if (a.indexOf(ds) < 0) a.push(ds);
+    localStorage.setItem(QKEY, JSON.stringify(a.slice(-60)));
+  } catch(e){}
+}
+
+/** 최근 수업일 중 '대부분 결석'인 날을 찾는다 */
+async function scanQuietDays(){
+  await loadCalendar();
+  var today = kstToday();
+  var from  = shiftDay(today, -QUIET_LOOKBACK);
+  var mem   = await FS.members();
+  if (!mem.length) return [];
+
+  var att = await FS.attendanceAll();
+  var legacyLast = '';
+  for (var nm in att.byName){
+    var ks = Object.keys(att.byName[nm]).sort();
+    if (ks.length && ks[ks.length-1] > legacyLast) legacyLast = ks[ks.length-1];
+  }
+  var recent = { am:{}, ov:{} };
+  try { recent = await FS.amSince(from); } catch(e){}
+
+  var skip = quietDismissed(), out = [];
+  eachWeekday(from, today, function(ds){
+    if (ds === today) return;                 // 오늘은 아직 진행 중
+    if (!isSchoolDay(ds)) return;             // 이미 휴업일로 알고 있는 날
+    if (skip.indexOf(ds) >= 0) return;        // 교사가 "수업일 맞다"고 넘긴 날
+
+    var absent = 0;
+    mem.forEach(function(m){
+      var ctx = { days: att.byName[m.name] || {}, legacyLast: legacyLast, today: today,
+                  dorm: m.dorm,
+                  am: (recent.am[ds] && recent.am[ds][m.name]) ? _one(ds, recent.am[ds][m.name]) : {},
+                  ov: (recent.ov[ds] && recent.ov[ds][m.name]) ? _one(ds, recent.ov[ds][m.name]) : {} };
+      if (attStatusOf(ds, ctx) === '결석') absent++;
+    });
+    if (absent >= Math.ceil(mem.length * QUIET_RATIO))
+      out.push({ date: ds, absent: absent, total: mem.length });
+  });
+  return out.sort(function(a,b){ return b.date.localeCompare(a.date); });
+}
+function _one(ds, v){ var o = {}; o[ds] = v; return o; }
+
+/** 교사 홈에 배너로 띄운다 */
+async function renderQuietBanner(){
+  var box = document.getElementById('quietBox');
+  if (!box) return;
+  var all = await scanQuietDays();
+  if (!all.length){ box.innerHTML = ''; return; }
+  // 과거 구간엔 결석이 몰린 날이 수십 개라 한꺼번에 띄우면 압도적이다.
+  // 최근 것부터 3개만 묻고 나머지는 숫자로만 알린다.
+  var days = all.slice(0, 3), rest = all.length - days.length;
+  box.innerHTML = days.map(function(d){
+    return '<div class="notice" style="background:#fef3c7;color:#b45309;align-items:flex-start">'+
+      ic('warn',15)+'<span><b>'+d.date.slice(5).replace('-','월 ')+'일</b>에 '+
+      d.absent+'/'+d.total+'명이 결석했습니다.<br>자습이 없던 날이었나요?'+
+      '<div style="display:flex;gap:8px;margin-top:8px">'+
+        '<button class="btn btn-sm" onclick="quietMarkOff(\''+d.date+'\')">자습 없었음</button>'+
+        '<button class="btn btn-sm btn-outline" onclick="quietKeep(\''+d.date+'\')">수업일 맞음</button>'+
+      '</div></span></div>';
+  }).join('') + (rest > 0
+    ? '<div class="notice" style="background:var(--line-soft);color:var(--ink-mute)">'+
+      ic('calendar',15)+'<span>결석이 몰린 날이 '+rest+'일 더 있습니다 · 출결 탭에서 날짜별로 확인하세요</span></div>'
+    : '');
+  fillIcoSlots(box);
+}
+function quietMarkOff(ds){ amDate = ds; markOffDay(); }
+function quietKeep(ds){ dismissQuiet(ds); renderQuietBanner(); }
+
 /** 자습 없던 날로 지정 — 그 날은 결석·플래너감점을 세지 않는다 */
 function markOffDay(){
   showModal('<div class="modal-box">'+
@@ -2268,7 +2367,9 @@ function homeStudent(){
 }
 
 function homeTeacher(){
+  setTimeout(renderQuietBanner, 0);      // 조회가 끝나면 배너를 채운다
   return ''+
+  '<div id="quietBox"></div>'+
   '<div class="notice accent">'+ic('memo',15)+'<span>승인 대기 중인 엽전 요청 2건 →</span></div>'+
 
   '<div class="hero">'+
