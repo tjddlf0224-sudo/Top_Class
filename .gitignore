@@ -8,3 +8,6 @@ backup/
 
 # 나이스 오픈API 인증키 (개인 발급 — 공개 금지)
 .neis_key
+
+# 계정·비밀번호 (공개 저장소이므로 절대 추적하지 말 것)
+CREDENTIALS.md
