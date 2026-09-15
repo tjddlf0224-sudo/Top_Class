@@ -1225,7 +1225,24 @@ counsel-app은 npm 번들러라 `import { LocalNotifications } from '@capacitor/
 
 **알림이 실제로 울리는지는 미검증** — Simulator.app이 없어 UI를 조작할 수 없었다. 플러그인 등록·권한까지는 확인했으니, 실기기에서 한 번 켜보면 된다.
 
-### 28.4 남은 것
+### 28.4 🔑 안드로이드 릴리스 서명 + AAB (2026-09-15)
+사용자 지적: **"apk말고 aab로 하지 않아?"** — 맞다. Play는 2021년부터 **AAB만 받는다.** APK는 폰에 직접 설치해 테스트할 때만 쓴다.
+
+상담일지 앱과 같은 방식(`android/key.properties` + `android/keystore.jks`, 둘 다 gitignore)으로 서명 설정.
+
+| | |
+|---|---|
+| 키스토어 | `~/Top_Class-App/android/keystore.jks` (alias `topclass`, RSA 2048, 10000일) |
+| 비밀번호 | `android/key.properties` (28자 랜덤, 생성 시 기록됨) |
+| SHA1 | `87:E8:A5:D3:06:A0:B2:8C:40:68:D8:7C:F8:9D:B6:B1:F8:5B:9D:5D` |
+| 산출물 | `app/build/outputs/bundle/release/app-release.aab` (4.8MB) |
+
+검증: AAB 안에 `META-INF/TOPCLASS.RSA` 존재, **서명자 지문이 업로드 키와 일치**, 패키지 `com.tjddlf0224.topclass`, versionCode 1 / versionName 1.0.0.
+
+**⚠️ `keystore.jks`와 `key.properties`를 잃으면 Play 앱 업데이트가 막힌다. 따로 백업할 것.**
+버전을 올릴 땐 `android/app/build.gradle`의 `versionCode`(정수, 매번 +1)와 `versionName`을 같이 고친다.
+
+### 28.5 남은 것
 - **iOS 서명·실행** — Apple 계정이 필요해 내가 못 한다. `npx cap open ios` → Xcode에서 팀 선택 후 실기기 실행
 - 실기기에서 알림 켜고 다음 날 아침 07:50에 오는지 확인
 - 스토어 제출: **무인증 로그인(학번+이름)이 심사에서 지적될 수 있음**(§8.4)
