@@ -267,8 +267,8 @@ main{padding:6px 18px calc(32px + var(--safe-bottom));}
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-app.js";
 import { getFirestore, doc, getDoc, setDoc, updateDoc, addDoc, deleteDoc, collection, getDocs, query, where, serverTimestamp }
   from "https://www.gstatic.com/firebasejs/12.12.1/firebase-firestore.js";
-import { getAuth, onAuthStateChanged, signInAnonymously, signInWithEmailAndPassword,
-         signOut, setPersistence, browserLocalPersistence }
+import { initializeAuth, onAuthStateChanged, signInAnonymously, signInWithEmailAndPassword,
+         signOut, browserLocalPersistence, indexedDBLocalPersistence }
   from "https://www.gstatic.com/firebasejs/12.12.1/firebase-auth.js";
 
 /* GAS가 배열·객체를 JSON 문자열로 저장하므로(schedule/attendance 동일 패턴) 읽을 때 되돌린다 */
@@ -294,7 +294,16 @@ const fbApp = initializeApp({
   appId:"1:662651378616:web:6eceb1505265c0700bcd4d"
 });
 const db   = getFirestore(fbApp);
-const auth = getAuth(fbApp);
+
+/* ⚠️ getAuth()가 아니라 initializeAuth()를 쓴다.
+   getAuth()는 팝업 리다이렉트 리졸버를 함께 붙이는데, 그게 authDomain에서
+   인증 iframe을 불러온다. 설치된 앱(WKWebView, origin이 capacitor://localhost)에서는
+   그 iframe이 끝내 응답하지 않아 **인증 초기화가 통째로 멈춘다**.
+   실측: getAuth는 setPersistence조차 타임아웃, initializeAuth는 3초 만에 익명 로그인 성공.
+   우리는 팝업 로그인(구글·애플)을 쓰지 않으므로 리졸버가 필요 없다. */
+const auth = initializeAuth(fbApp, {
+  persistence: [indexedDBLocalPersistence, browserLocalPersistence]
+});
 
 /* ═══ 신원 확인 ═══════════════════════════════════════
    학생 = 익명 인증. 화면에는 아무것도 드러나지 않고, 보안규칙이
@@ -323,12 +332,9 @@ async function verifyTeacher(u){
 /* 앱이 뜨자마자 조용히 익명 로그인한다.
    이미 교사로 로그인한 기기라면 그 세션이 그대로 살아난다. */
 function _boot(){
-  return setPersistence(auth, browserLocalPersistence)
-    .catch(function(){})            // 사파리 프라이빗 모드 등에서 실패해도 진행
-    .then(function(){
-      return new Promise(function(res){
-        const off = onAuthStateChanged(auth, function(u){ off(); res(u); });
-      });
+  // 저장소는 initializeAuth에서 이미 지정했다(IndexedDB 우선, 안 되면 localStorage).
+  return new Promise(function(res){
+      const off = onAuthStateChanged(auth, function(u){ off(); res(u); });
     })
     .then(function(u){
       if (u) return u;
@@ -337,7 +343,16 @@ function _boot(){
     })
     .then(async function(u){ _isTeacher = await verifyTeacher(u); return u; });
 }
-let _authReady = _boot();
+
+/* 인증이 끝내 응답하지 않아도 앱이 멈추면 안 된다 — 조회는 대부분 공개 읽기라
+   인증 없이도 화면은 뜬다(쓰기만 규칙에 막힌다). */
+function _bootGuarded(){
+  return Promise.race([
+    _boot(),
+    new Promise(function(res){ setTimeout(function(){ res(null); }, 12000); })
+  ]);
+}
+let _authReady = _bootGuarded();
 
 window.AUTH = {
   /* 인증이 끝날 때까지 기다린다. 쓰기 전에 반드시 거칠 것 */
@@ -349,7 +364,7 @@ window.AUTH = {
     const c = await signInWithEmailAndPassword(auth, email, pw);
     if (!(await verifyTeacher(c.user))) {
       await signOut(auth);                       // 교사가 아니면 익명으로 되돌린다
-      _authReady = _boot();
+      _authReady = _bootGuarded();
       const e = new Error('교사 계정이 아닙니다'); e.code = 'app/not-teacher'; throw e;
     }
     _isTeacher = true;
@@ -362,7 +377,7 @@ window.AUTH = {
   async leave(){
     _isTeacher = false;
     try { await signOut(auth); } catch(e){}
-    _authReady = _boot();
+    _authReady = _bootGuarded();
     return _authReady;
   }
 };
