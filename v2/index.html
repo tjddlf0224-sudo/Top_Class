@@ -1759,6 +1759,135 @@ async function renderAmTeacher(v){
   fillIcoSlots(v);
 }
 
+/* ═══ 로컬 알림 ═══════════════════════════════════════
+   v2는 서버가 없어 푸시를 못 보낸다. 대신 기기에 미리 예약해두는
+   로컬 알림을 쓴다(상담일지 앱과 같은 방식).
+
+   ⚠️ 설치된 앱(Capacitor)에서만 동작한다. 웹에서는 조용히 넘어간다.
+   ⚠️ 번들러가 없으므로 import가 아니라 네이티브 브리지가 붙여주는
+      window.Capacitor.Plugins 로 접근한다.
+
+   요일 반복(repeats)이 아니라 '날짜 지정'으로 예약한다. 공휴일·재량휴업일·
+   시험주간에 알림이 울리면 안 되는데 반복 예약은 달력을 모르기 때문이다.
+   앱을 열 때마다 앞으로 3주치를 다시 깐다(iOS 대기 알림 상한 64개). */
+var NOTI_KEY        = 'tc_noti';
+var NOTI_AM_HOUR    = 7, NOTI_AM_MIN = 50;   // 등교 인증(08:10 마감 전)
+var NOTI_DAYS_AHEAD = 21;
+var NOTI_ID_BASE    = 71000;
+var NOTI_ID_MAX     = 60;
+
+function isNativeApp(){
+  return !!(window.Capacitor && window.Capacitor.isNativePlatform
+            && window.Capacitor.isNativePlatform());
+}
+function capLN(){
+  return (window.Capacitor && window.Capacitor.Plugins
+          && window.Capacitor.Plugins.LocalNotifications) || null;
+}
+function notiOn(){
+  try { return localStorage.getItem(NOTI_KEY) === '1'; } catch(e){ return false; }
+}
+function setNotiOn(v){
+  try { localStorage.setItem(NOTI_KEY, v ? '1' : '0'); } catch(e){}
+}
+/** 학생 홈의 알림 줄 — 켜져 있으면 상태를, 아니면 켜기를 권한다 */
+function notiBanner(){
+  if (notiOn())
+    return '<div class="notice" style="background:var(--green-soft);color:#16a34a;cursor:pointer" '+
+      'onclick="toggleNotis()">'+ic('bell',15)+
+      '<span>알림 켜짐 · 아침 '+pad2(NOTI_AM_HOUR)+':'+pad2(NOTI_AM_MIN)+
+      ', 방과후 18:30 (탭하면 끄기)</span></div>';
+  return '<div class="notice" style="cursor:pointer" onclick="toggleNotis()">'+ic('bell',15)+
+    '<span>알림 켜고 등교·방과후 소식 받기 →</span></div>';
+}
+
+function notiIds(){
+  var a=[]; for (var i=0;i<NOTI_ID_MAX;i++) a.push({ id: NOTI_ID_BASE + i }); return a;
+}
+
+/** 앞으로 3주치 알림을 다시 깐다. 켜져 있고 설치된 앱일 때만. */
+async function scheduleLocalNotis(){
+  var LN = capLN();
+  if (!LN || !isNativeApp() || !notiOn() || !ME.name) return 'skip';
+  try { await LN.cancel({ notifications: notiIds() }); } catch(e){}   // 우리 것만 지운다
+
+  await loadCalendar(true);
+  var sched = { weekly:[], exceptions:[] };
+  try { sched = await FS.schedule(); } catch(e){}
+
+  var list = [], n = 0, today = kstToday();
+  for (var d = 1; d <= NOTI_DAYS_AHEAD && n < NOTI_ID_MAX - 1; d++){
+    var ds = shiftDay(today, d);
+    if (!isSchoolDay(ds)) continue;            // 주말·공휴일·휴업일·자습없는날 제외
+
+    list.push({
+      id: NOTI_ID_BASE + (n++),
+      title: '등교 인증하세요',
+      body: '08:10까지 인증하면 출석 +1냥이에요.',
+      schedule: { at: new Date(ds+'T'+pad2(NOTI_AM_HOUR)+':'+pad2(NOTI_AM_MIN)+':00+09:00'),
+                  allowWhileIdle: true }
+    });
+
+    var mine = classesOn(sched, ds).filter(function(c){
+      var t = classTrack(c); return t === '공통' || t === ME.track;
+    });
+    if (mine.length && n < NOTI_ID_MAX){
+      list.push({
+        id: NOTI_ID_BASE + (n++),
+        title: '방과후 출석체크',
+        body: mine[0].subject + ' 시작 — 자정까지 체크하지 않으면 결석이에요.',
+        schedule: { at: new Date(ds+'T18:30:00+09:00'), allowWhileIdle: true }
+      });
+    }
+  }
+  if (!list.length) return 'none';
+  try { await LN.schedule({ notifications: list }); return 'ok:' + list.length; }
+  catch(e){ return 'error:' + ((e && e.message) || e); }
+}
+
+function notiModal(emoji, title, body){
+  showModal('<div class="modal-box"><div style="text-align:center;padding:12px 0">'+
+    '<div style="font-size:2.2rem">'+emoji+'</div>'+
+    '<div style="font-size:1.15rem;font-weight:800;margin-top:10px">'+title+'</div>'+
+    '<div style="font-size:.85rem;color:var(--ink-mute);margin-top:8px;line-height:1.5">'+body+'</div>'+
+    '</div><button class="btn" onclick="closeModal()">확인</button></div>');
+}
+
+/** 알림 켜기 — 권한부터 묻는다 */
+async function enableNotis(){
+  var LN = capLN();
+  if (!LN || !isNativeApp()){
+    notiModal('📱','앱에서만 됩니다',
+      '알림은 홈 화면에 설치한 앱에서만 받을 수 있어요.<br>브라우저로 열었을 때는 동작하지 않습니다.');
+    return;
+  }
+  try {
+    var p = await LN.checkPermissions();
+    if (p.display !== 'granted') p = await LN.requestPermissions();
+    if (p.display !== 'granted'){
+      notiModal('🔕','알림이 꺼져 있어요','설정 → 알림에서 이 앱의 알림을 켜주세요.');
+      return;
+    }
+    setNotiOn(true);
+    await scheduleLocalNotis();
+    renderView();
+    notiModal('🔔','알림을 켰어요',
+      '수업일 아침 '+pad2(NOTI_AM_HOUR)+':'+pad2(NOTI_AM_MIN)+'에 등교 인증을,<br>'+
+      '방과후 수업이 있는 날 18:30에 출석체크를 알려드려요.<br>'+
+      '<span style="color:var(--ink-mute)">쉬는 날에는 울리지 않습니다.</span>');
+  } catch(e){
+    notiModal('⚠️','알림을 켜지 못했어요','잠시 후 다시 시도해주세요.');
+  }
+}
+
+async function disableNotis(){
+  var LN = capLN();
+  setNotiOn(false);
+  if (LN){ try { await LN.cancel({ notifications: notiIds() }); } catch(e){} }
+  renderView();
+}
+function toggleNotis(){ notiOn() ? disableNotis() : enableNotis(); }
+
 /* ── 자습 없는 날 자동 감지 ──────────────────────────
    나이스는 시험주간·캠프를 모른다. 그런 날 교사가 표시를 안 하면 전원이
    결석 처리되고 엽전이 깎인다(실제로 2026-06-29·07-06·07-09에 그랬다).
@@ -2185,7 +2314,7 @@ function classTrack(c){
 /** 그 날짜에 실제로 열리는 수업 목록 (반복수업 + 특강 − 휴강) */
 function classesOn(sched, dateStr){
   var WD=['일','월','화','수','목','금','토'];
-  var wd=WD[new Date(dateStr+'T00:00:00+09:00').getDay()];
+  var wd=WD[dowOf(dateStr)];        // 기기 시간대와 무관하게(§16.5)
   var ex=sched.exceptions||[];
   var cancels=ex.filter(function(e){return e.date===dateStr&&e.type==='휴강';});
   var items=(sched.weekly||[])
@@ -2327,7 +2456,7 @@ function homeStudent(){
   var p=ME.planner, has=!!p, pct=has?Math.round(p.done/p.total*100):0;
   var ok=ME.week.filter(function(d){return d.s==='ok';}).length;
   return ''+
-  '<div class="notice">'+ic('bell',15)+'<span>알림 켜고 등교·방과후 소식 받기 →</span></div>'+
+  notiBanner()+
 
   '<div class="hero">'+
     '<div class="hero-lbl">내 엽전</div>'+
@@ -2496,6 +2625,7 @@ function logout(){document.getElementById('app').classList.add('hidden');
   document.getElementById('login').classList.remove('hidden');
   hideTeacherLogin();
   try{ localStorage.removeItem(SKEY); }catch(e){}   // 다음엔 다시 학번을 묻는다
+  disableNotis();                                   // 남의 기기에 알림이 남지 않게
   ME={id:'',name:'',track:'공무원',coins:0,dorm:false,week:[],planner:null};
   streakCache=null; sShowErr('');
   if(window.AUTH) AUTH.leave();      // 교사 세션을 끊고 다시 익명으로
@@ -2520,6 +2650,7 @@ async function applyStudent(m){
   await loadPlannerToday();
   ME.week = await buildWeek(m.name);
   streakCache = null;                 // 다른 학생으로 바뀌었을 수 있다
+  scheduleLocalNotis();               // 앞으로 3주치 알림을 다시 깐다(앱에서만)
 }
 
 async function studentLogin(){
@@ -2671,6 +2802,12 @@ fillIcoSlots();
 /* 모듈(FS/AUTH)은 defer라 이 스크립트보다 늦게 뜬다 — 준비되면 자동 입실 */
 if(window.FS) autoLogin();
 else window.addEventListener('fs-ready', function(){ autoLogin(); });
+
+/* 앱이 다시 앞으로 나올 때 알림을 새로 깐다 —
+   예약분이 3주치뿐이라 오래 안 열면 바닥난다. 열 때마다 채워준다. */
+document.addEventListener('visibilitychange', function(){
+  if (!document.hidden && ME.name) scheduleLocalNotis();
+});
 </script>
 </body>
 </html>
