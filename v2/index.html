@@ -209,6 +209,9 @@ main{padding:6px 18px calc(32px + var(--safe-bottom));}
              onkeydown="if(event.key==='Enter')document.getElementById('sName').focus()"></div>
   <div class="field"><label>이름</label><input id="sName" type="text" placeholder="이름을 입력하세요"
              onkeydown="if(event.key==='Enter')studentLogin()"></div>
+  <div class="field"><label>PIN <span style="font-weight:500;color:var(--ink-mute)">· 숫자 4자리</span></label>
+    <input id="sPin" type="password" inputmode="numeric" maxlength="4" placeholder="••••"
+           autocomplete="off" onkeydown="if(event.key===&#39;Enter&#39;)studentLogin()"></div>
   <div id="sErr" class="login-err hidden"></div>
   <button class="btn" id="sGo" onclick="studentLogin()">입실하기</button>
   <div class="login-divider">또는</div>
@@ -385,6 +388,15 @@ window.AUTH = {
 /* 방과후 체크인은 그날 18:30~24:00(한국시간)에만 가능하므로,
    특정 날짜의 기록은 그 구간의 타임스탬프 범위로 조회하면 된다.
    date 문자열 대신 서버 시각(at)을 기준으로 삼아야 위조가 불가능하다. */
+/* PIN 해시 — salt로 학번을 쓴다(공개값이지만 학생마다 달라 무지개표를 막는다).
+   앱 고유 문자열(pepper)도 섞는다. 저장된 해시 자체를 아무도 못 읽는 게
+   핵심 방어이고, 이 해시 함수는 그 위에 얹는 층이다. */
+async function _pinHash(sid, pin){
+  const msg = 'topclass:v1:' + String(sid) + ':' + String(pin);
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(msg));
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('');
+}
+
 /* 한국시간 기준 오늘 날짜 — 모듈 안에서도 써야 해서 따로 둔다 */
 function kstTodayISO(){
   const k = new Date(Date.now() + 9*60*60*1000);
@@ -650,6 +662,42 @@ window.FS = {
     const id = (dateStr+'_'+name).replace(/[^\wㄱ-ㅎ가-힣-]/g,'_');
     await setDoc(doc(db,'amOverride',id),
       { date:dateStr, name, status, by, at: serverTimestamp() });
+  },
+
+  /* ── 학생 PIN ──────────────────────────────────────
+     학번·이름은 같은 반이면 서로 다 안다. 그것만으로 남의 성적·엽전을
+     볼 수 있으면 안 되므로 PIN을 둔다.
+
+     🔑 저장된 해시는 보안규칙에서 `allow read: if false`라 아무도 못 읽는다.
+        대조는 규칙 안의 get()이 한다 — 규칙은 읽기 권한과 무관하게 읽을 수 있다.
+        덕분에 해시를 가져가 4자리를 다 돌려보는 오프라인 공격이 불가능하다. */
+  async setPin(sid, pin){
+    await _authReady;
+    await setDoc(doc(db,'studentPin',String(sid)),
+      { hash: await _pinHash(sid, pin), setAt: new Date().toISOString() });
+  },
+  /* 기기-학생 연결. PIN이 맞아야 규칙이 통과시킨다 — 이게 곧 PIN 검증이다. */
+  async bindStudent(sid, name, pin){
+    await _authReady;
+    const u = auth.currentUser;
+    if (!u) throw new Error('인증 준비 중입니다');
+    await setDoc(doc(db,'students',u.uid),
+      { sid:String(sid), name:String(name),
+        pinHash: await _pinHash(sid, pin), at: new Date().toISOString() });
+  },
+  /* 교사: PIN 초기화 — PIN 문서와 기기 연결을 함께 지운다 */
+  async clearPin(sid, name){
+    await _authReady;
+    await deleteDoc(doc(db,'studentPin',String(sid)));
+    const snap = await getDocs(query(collection(db,'students'), where('name','==',name)));
+    for (const d of snap.docs) { try { await deleteDoc(doc(db,'students',d.id)); } catch(e){} }
+  },
+  async myBinding(){
+    await _authReady;
+    const u = auth.currentUser;
+    if (!u) return null;
+    const s = await getDoc(doc(db,'students',u.uid));
+    return s.exists() ? s.data() : null;
   },
 
   /* 한 학생의 등교 기록 전체 — 스트릭은 과거를 통째로 훑어야 해서
@@ -928,13 +976,13 @@ async function loadAmToday(){
   amToday = { status:null, time:'' };
   if (!ME.name) return amToday;
   try {
-    var ov = await FS.amOverrides(today);
-    if (ov[ME.name]){ amToday = { status: ov[ME.name].status, time:'' }; return amToday; }
-    var am = await FS.amCheckIns(today);
-    if (am[ME.name]){
-      var at = am[ME.name].at;
+    var ov = await FS.amOverridesOf(ME.name);
+    if (ov[today]){ amToday = { status: ov[today].status, time:'' }; return amToday; }
+    var am = await FS.amCheckInsOf(ME.name);
+    if (am[today]){
+      var at = am[today].at;
       var k  = new Date(at.seconds*1000 + 9*3600*1000);
-      amToday = { status: verdictFromAt(at, am[ME.name].dorm),
+      amToday = { status: verdictFromAt(at, am[today].dorm),
                   time: pad2(k.getUTCHours())+':'+pad2(k.getUTCMinutes()) };
     }
   } catch(e){ /* 조회 실패 시 버튼은 '인증하기'로 남는다 */ }
@@ -1079,14 +1127,11 @@ async function loadWallet(m){
   var days = await FS.attendanceOf(name);
   var legacyLast = Object.keys(days).sort().pop() || '';
   var today = kstToday();
+  // 이름으로 한 번씩만 읽는다. 날짜별 전체 조회는 (1) 규칙상 학생이 못 읽고
+  // (2) 개시일 이후 날짜 수만큼 쿼리가 늘어 느리다.
   var am = {}, ov = {};
-  var dates = []; eachWeekday(open.date, today, function(ds){ dates.push(ds); });
-  for (var i=0;i<dates.length;i++){
-    try {
-      var a = await FS.amCheckIns(dates[i]); if (a[name]) am[dates[i]] = a[name];
-      var o = await FS.amOverrides(dates[i]); if (o[name]) ov[dates[i]] = o[name];
-    } catch(e){}
-  }
+  try { am = await FS.amCheckInsOf(name); } catch(e){}
+  try { ov = await FS.amOverridesOf(name); } catch(e){}
   var ctx = { days:days, legacyLast:legacyLast, today:today,
               dorm:!!m.dorm, am:am, ov:ov };
 
@@ -1431,6 +1476,32 @@ async function renderExamTeacher(v){
   v.innerHTML=html; fillIcoSlots(v);
 }
 
+/** 교사: 학생 PIN 초기화 — 잊어버렸거나 기기를 바꿨을 때.
+    PIN 문서를 지우면 그 학생은 다음 입실 때 새 PIN을 정하게 된다.
+    기기 연결도 함께 풀어야 새 PIN으로 다시 연결된다. */
+async function resetPin(name){
+  var mem = (await FS.members()).find(function(m){ return m.name === name; });
+  if (!mem) return;
+  closeModal();
+  try {
+    await FS.clearPin(mem.id, name);
+    showModal('<div class="modal-box"><div style="text-align:center;padding:12px 0">'+
+      '<div style="font-size:2.2rem">🔑</div>'+
+      '<div style="font-size:1.15rem;font-weight:800;margin-top:10px">'+escapeHtml(name)+' PIN 초기화</div>'+
+      '<div style="font-size:.85rem;color:var(--ink-mute);margin-top:8px;line-height:1.5">'+
+      '다음에 입실할 때 새 PIN을 정하게 됩니다.<br>'+
+      '학생에게 직접 4자리를 입력하라고 안내해 주세요.</div></div>'+
+      '<button class="btn" onclick="closeModal()">확인</button></div>');
+  } catch(e){
+    showModal('<div class="modal-box"><div style="text-align:center;padding:12px 0">'+
+      '<div style="font-size:2.2rem">⚠️</div>'+
+      '<div style="font-weight:800;margin-top:8px">초기화하지 못했습니다</div>'+
+      '<div style="font-size:.85rem;color:var(--ink-mute);margin-top:6px">'+
+      (e && e.code==='permission-denied' ? '교사로 로그인해야 합니다' : '다시 시도해주세요')+
+      '</div></div><button class="btn" onclick="closeModal()">확인</button></div>');
+  }
+}
+
 /* ═══ 저잣거리 ═══════════════════════════════════════
    재고를 문서에 들고 있지 않는다: 재고 = stock(시작 수량) − 판매 합계.
    문서를 고치는 게 아니라 기록을 쌓기만 하므로 동시 판매에도 꼬이지 않고,
@@ -1670,7 +1741,10 @@ function openGrant(name){
       '<input id="gWhy" type="text" placeholder="예: 청소 도움"></div>'+
     '<div id="gErr" class="login-err hidden"></div>'+
     '<button class="btn" id="gGo" onclick="applyGrant(\''+name+'\')">저장</button>'+
-    '<button class="btn btn-outline" onclick="closeModal()">취소</button></div>');
+    '<button class="btn btn-outline" onclick="closeModal()">취소</button>'+
+    '<div class="sec-label" style="color:var(--ink-mute);font-weight:500">관리</div>'+
+    '<button class="btn btn-outline" style="color:var(--rose)" '+
+      'onclick="resetPin(\''+name+'\')">PIN 초기화</button></div>');
   setTimeout(function(){ var e=document.getElementById('gAmt'); if(e) e.focus(); }, 50);
 }
 
@@ -2148,13 +2222,13 @@ async function loadStreak(force){
   await loadCalendar();
 
   var m = await FS.memberById(ME.id || '');
-  var att = await FS.attendanceAll();            // 구앱 이력(시트에서 옮겨온 것)
-  var myDays = att.byName[ME.name] || {};
-  var legacyLast = '';
-  for (var nm in att.byName){
-    var ks = Object.keys(att.byName[nm]).sort();
-    if (ks.length && ks[ks.length-1] > legacyLast) legacyLast = ks[ks.length-1];
-  }
+  // ⚠️ 전교생 출결을 훑지 않는다 — 보안규칙상 학생은 자기 것만 읽을 수 있고,
+  //    Firestore 쿼리는 문서 하나라도 권한이 없으면 통째로 실패한다.
+  //    "그날이 수업일이었나"는 나이스 학사일정(isSchoolDay)이 판단하므로
+  //    전교생 기록을 볼 이유도 없어졌다.
+  var myDays = await FS.attendanceOf(ME.name);
+  var mk = Object.keys(myDays).sort();
+  var legacyLast = mk.length ? mk[mk.length-1] : '';
 
   var am = {}, ov = {};
   try { am = await FS.amCheckInsOf(ME.name); } catch(e){}
@@ -2640,6 +2714,7 @@ function logout(){document.getElementById('app').classList.add('hidden');
   document.getElementById('login').classList.remove('hidden');
   hideTeacherLogin();
   try{ localStorage.removeItem(SKEY); }catch(e){}   // 다음엔 다시 학번을 묻는다
+  var pf=document.getElementById('sPin'); if(pf) pf.value='';
   disableNotis();                                   // 남의 기기에 알림이 남지 않게
   ME={id:'',name:'',track:'공무원',coins:0,dorm:false,week:[],planner:null};
   streakCache=null; sShowErr('');
@@ -2672,13 +2747,31 @@ async function studentLogin(){
   var btn=document.getElementById('sGo');
   var id=(document.getElementById('sNo').value||'').trim();
   var nm=(document.getElementById('sName').value||'').trim();
+  var pin=(document.getElementById('sPin').value||'').trim();
   if(!id||!nm){ sShowErr('학번과 이름을 입력해주세요'); return; }
+  if(!/^\d{4}$/.test(pin)){ sShowErr('PIN 4자리를 입력해주세요'); return; }
   if(!window.FS){ sShowErr('연결 준비 중입니다. 잠시 후 다시 해주세요'); return; }
   sShowErr(''); btn.disabled=true; btn.textContent='확인 중...';
   try{
     var m = await FS.memberById(id);
-    if(!m)               { sShowErr('학번을 찾을 수 없습니다'); return; }
-    if(m.name !== nm)    { sShowErr('학번과 이름이 맞지 않습니다'); return; }
+    if(!m)            { sShowErr('학번을 찾을 수 없습니다'); return; }
+    if(m.name !== nm) { sShowErr('학번과 이름이 맞지 않습니다'); return; }
+
+    // 이 기기를 이 학생으로 연결한다. PIN이 틀리면 보안규칙이 막는다
+    // (해시 대조를 규칙 안에서 하므로 앱이 정답을 알 필요가 없다).
+    var bound = await tryBind(m, pin);
+    if (!bound){
+      // 이 기기가 이미 다른 학생으로 연결돼 있으면(로그아웃 없이 바꾼 경우)
+      // 익명 계정을 새로 받아 다시 시도한다. 연결 문서는 수정이 안 되기 때문.
+      var mine = null;
+      try { mine = await FS.myBinding(); } catch(e){}
+      if (mine && mine.name !== m.name){
+        await AUTH.leave();                 // signOut → 새 익명 UID
+        bound = await tryBind(m, pin);
+      }
+    }
+    if (!bound){ sShowErr('PIN이 맞지 않습니다'); return; }
+
     await applyStudent(m);
     try{ localStorage.setItem(SKEY, JSON.stringify({id:m.id,name:m.name})); }catch(e){}
     enterApp('student');
@@ -2687,6 +2780,21 @@ async function studentLogin(){
   }finally{
     btn.disabled=false; btn.textContent='입실하기';
   }
+}
+
+/** 기기 연결을 시도한다. PIN이 틀리면 보안규칙이 막아 false가 된다.
+    아직 PIN을 안 정한 학생이면 이번 입력값을 그 학생의 PIN으로 등록한다.
+    studentPin 생성은 "없을 때만" 되므로 남의 PIN을 덮어쓸 수 없다. */
+async function tryBind(m, pin){
+  try { await FS.bindStudent(m.id, m.name, pin); return true; }
+  catch(e){
+    if (!e || e.code !== 'permission-denied') throw e;
+  }
+  try {
+    await FS.setPin(m.id, pin);              // 이미 있으면 규칙이 막는다
+    await FS.bindStudent(m.id, m.name, pin);
+    return true;
+  } catch(e){ return false; }
 }
 
 /* 기기에 기억된 학생으로 자동 입실 — 매번 학번을 다시 치지 않게 */
@@ -2720,16 +2828,9 @@ async function buildWeek(name){
     week.push(ds);
     out.push({d:LBL[i], s:''});
   }
-  // 이번 주에 v2 기록이 있을 수 있으므로 날짜별로 한 번씩 읽는다(최대 5회)
-  try {
-    for (var j=0;j<week.length;j++){
-      if (week[j] > today) continue;                 // 아직 오지 않은 날
-      var a = await FS.amCheckIns(week[j]);
-      if (a[name]) am[week[j]] = a[name];
-      var o = await FS.amOverrides(week[j]);
-      if (o[name]) ov[week[j]] = o[name];
-    }
-  } catch(e){}
+  // 본인 기록만 한 번에 가져온다(날짜별 전체 조회는 규칙상 막힌다)
+  try { am = await FS.amCheckInsOf(name); } catch(e){}
+  try { ov = await FS.amOverridesOf(name); } catch(e){}
 
   var ctx = { days:days, legacyLast:legacyLast, today:today, dorm:ME.dorm,
               am:{}, ov:{} };

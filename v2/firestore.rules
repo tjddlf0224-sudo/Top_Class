@@ -125,7 +125,7 @@ service cloud.firestore {
     // ⚠️ KST 06:00~08:30 == UTC 21:00~23:30 (하루 전 UTC 날짜다. 자정을 넘지 않아
     //    분 단위 비교로 충분하다). 21:00 = 1260분, 23:30 = 1410분.
     match /amCheckIn/{docId} {
-      allow read: if true;
+      // 읽기는 아래 개인 자료 블록에서 본인·교사로 제한한다
 
       allow create: if
            signedIn()
@@ -169,7 +169,7 @@ service cloud.firestore {
     // 언제 무엇이 바뀌었는지 추적할 수 없게 된다. 고칠 일이 있으면 원장에 넣는다.
     // 이 문서가 없는 학생은 아직 전환 전 → 앱이 시트 값(members.coins)을 쓴다.
     match /opening/{name} {
-      allow read: if true;
+      // 읽기는 아래 개인 자료 블록에서 본인·교사로 제한한다
       allow create: if isTeacher()
                     && request.resource.data.keys().hasOnly(['date','coins','by','at'])
                     && request.resource.data.coins is int
@@ -185,7 +185,7 @@ service cloud.firestore {
     // 추가만 가능하다. 잘못 넣었으면 반대 기록을 넣어 상쇄한다(회계 원칙).
     // 지울 수 있게 하면 "왜 잔액이 달라졌는지" 추적이 불가능해진다.
     match /ledger/{docId} {
-      allow read: if true;
+      // 읽기는 아래 개인 자료 블록에서 본인·교사로 제한한다
       allow create: if isTeacher()
                     && request.resource.data.keys()
                          .hasOnly(['name','amount','reason','by','date','at'])
@@ -205,7 +205,7 @@ service cloud.firestore {
     // at은 만들 때 request.time으로 고정되고 이후 절대 못 바꾸므로,
     // 학생은 '지금' 날짜의 플래너만 만들 수 있다.
     match /planner/{docId} {
-      allow read: if true;
+      // 읽기는 아래 개인 자료 블록에서 본인·교사로 제한한다
 
       allow create: if
            signedIn()
@@ -256,7 +256,7 @@ service cloud.firestore {
     // — 물건을 실제로 건네주는 사람이 교사이기 때문.
     // 엽전은 이 기록에서 계산된다: −(수량 × 가격).
     match /marketBuy/{docId} {
-      allow read: if true;
+      // 읽기는 아래 개인 자료 블록에서 본인·교사로 제한한다
       allow create: if isTeacher()
                     && request.resource.data.keys()
                          .hasOnly(['student','item','qty','price','by','at'])
@@ -293,7 +293,7 @@ service cloud.firestore {
     // 초과로 만든 사용 기록은 계산에서 버려지므로 기록을 늘려도 얻는 게 없다.
     // 구매 기록을 늘리면 그만큼 엽전이 깎이므로(-10 × 구매수, 계산) 이득이 없다.
     match /freezeBuy/{docId} {
-      allow read: if true;
+      // 읽기는 아래 개인 자료 블록에서 본인·교사로 제한한다
       allow create: if
            signedIn()
         && request.resource.data.at == request.time
@@ -302,7 +302,7 @@ service cloud.firestore {
       allow update, delete: if false;
     }
     match /freezeUse/{docId} {
-      allow read: if true;
+      // 읽기는 아래 개인 자료 블록에서 본인·교사로 제한한다
       allow create: if
            signedIn()
         && request.resource.data.at == request.time
@@ -310,6 +310,59 @@ service cloud.firestore {
         && request.resource.data.name is string
         && request.resource.data.date is string;
       allow update, delete: if false;
+    }
+
+    // ── 학생 PIN ────────────────────────────────────────
+    // 학번·이름은 같은 반 학생이면 서로 다 안다. 그것만으로 남의 성적·엽전을
+    // 볼 수 있으면 안 되므로 PIN을 둔다.
+    //
+    // 🔑 핵심: allow read를 false로 둔다.
+    //    규칙의 get()은 클라이언트 읽기 권한과 무관하게 문서를 읽을 수 있다.
+    //    그래서 해시를 아무도 못 읽게 해두고 규칙 안에서만 대조한다.
+    //    → 해시를 가져가 오프라인에서 4자리를 다 돌려보는 공격이 불가능하다.
+    //      (온라인으로 시도하려면 매번 쓰기 요청을 보내야 해서 티가 난다)
+    //
+    // salt는 학번을 쓴다(공개값이지만 학생마다 달라 무지개표를 막는다).
+    match /studentPin/{sid} {
+      allow read: if false;
+      // 처음 정할 때만 생성 가능 — 이미 있으면 못 덮어쓴다
+      allow create: if signedIn()
+                    && request.resource.data.keys().hasOnly(['hash','setAt'])
+                    && request.resource.data.hash is string;
+      // 초기화(잊어버렸을 때)는 교사만
+      allow update, delete: if isTeacher();
+    }
+
+    // ── 기기-학생 연결 ──────────────────────────────────
+    // PIN이 맞아야 만들어진다. 이 문서가 "이 기기는 누구인가"의 근거가 되고,
+    // 아래 개인 자료 규칙들이 이걸 보고 본인 것만 열어준다.
+    //
+    // ⚠️ 대조하려면 클라이언트가 해시를 보내야 하고, 보낸 값은 문서에 남는다.
+    //    그래서 이 문서는 본인과 교사만 읽게 막는다. 남이 해시를 가져가
+    //    오프라인에서 돌려보는 일을 못 하게 하려는 것.
+    match /students/{uid} {
+      allow read: if request.auth != null && (request.auth.uid == uid || isTeacher());
+      allow create: if signedIn()
+                    && request.auth.uid == uid
+                    && request.resource.data.keys().hasOnly(['sid','name','pinHash','at'])
+                    && request.resource.data.sid is string
+                    && request.resource.data.name is string
+                    // 🔑 PIN 대조 — 저장된 해시는 아무도 못 읽지만 규칙은 읽는다
+                    && exists(/databases/$(database)/documents/studentPin/$(request.resource.data.sid))
+                    && get(/databases/$(database)/documents/studentPin/$(request.resource.data.sid)).data.hash
+                       == request.resource.data.pinHash;
+      allow update: if false;
+      allow delete: if isTeacher();      // 기기 바꿨을 때 교사가 풀어준다
+    }
+
+    // 이 기기가 연결된 학생 이름 (개인 자료 규칙들이 공통으로 쓴다)
+    function myName() {
+      return get(/databases/$(database)/documents/students/$(request.auth.uid)).data.name;
+    }
+    function isMe(name) {
+      return request.auth != null
+        && exists(/databases/$(database)/documents/students/$(request.auth.uid))
+        && myName() == name;
     }
 
     // ── 교사 지정 휴업일 ────────────────────────────────
@@ -347,8 +400,46 @@ service cloud.firestore {
     //    그래서 컬렉션 이름을 와일드카드로 받아 문자열로 비교한다.
     //    문자열 리터럴 안의 한글은 문제없다.
     match /{coll}/{docId} {
-      allow read: if coll in ['teachers', 'examScores', 'attendance',
+      allow read: if coll in ['teachers', 'examScores',
                               'examHistory_공기업', 'examHistory_공무원'];
+    }
+
+    // ── 출결 (v2 전용, 구앱은 안 읽는다) ─────────────────
+    // 문서 ID가 학생 이름이라 본인 것만 열어준다.
+    // ⚠️ 스트릭·엽전 계산은 "그날이 수업일이었나"를 알려고 전교생 출결을 훑었다.
+    //    이제 못 읽으므로, 그 판단은 나이스 학사일정(calendar.json)이 대신한다.
+    match /attendance/{name} {
+      allow read: if isTeacher() || isMe(name);
+    }
+
+    // ── 플래너 ──────────────────────────────────────────
+    match /planner/{docId} {
+      allow read: if isTeacher() || isMe(resource.data.name);
+    }
+
+    // ── 엽전 (개인 내역) ────────────────────────────────
+    match /ledger/{docId} {
+      allow read: if isTeacher() || isMe(resource.data.name);
+    }
+    match /opening/{name} {
+      allow read: if isTeacher() || isMe(name);
+    }
+
+    // ── 등교 인증 기록 ──────────────────────────────────
+    match /amCheckIn/{docId} {
+      allow read: if isTeacher() || isMe(resource.data.name);
+    }
+
+    // ── 스트릭 프리즈 ───────────────────────────────────
+    match /freezeBuy/{docId} { allow read: if isTeacher() || isMe(resource.data.name); }
+    match /freezeUse/{docId} { allow read: if isTeacher() || isMe(resource.data.name); }
+
+    // ── 저잣거리 구매 내역 ──────────────────────────────
+    // ⚠️ 공개로 둔다. 재고 = 시작수량 − 판매합계라 학생도 전체 판매 기록을
+    //    읽어야 남은 수량을 볼 수 있다. 내용은 "누가 과자를 몇 개 샀다" 정도라
+    //    성적·상담과 달리 민감도가 낮아 이 교환을 받아들인다.
+    match /marketBuy/{docId} {
+      allow read: if true;
     }
 
     // ── 그 외 전부 ─────────────────────────────────────
