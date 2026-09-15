@@ -236,7 +236,7 @@ main{padding:6px 18px calc(32px + var(--safe-bottom));}
   <div class="header">
     <div class="header-top">
       <div>
-        <div class="h-name" id="uName">맹진우</div>
+        <div class="h-name" id="uName"></div>
         <div class="h-meta">
           <span class="h-role" id="uRole">공기업반</span>
           <span class="chip chip-gold" id="uStreak">🔥 3일 연속</span>
@@ -757,8 +757,8 @@ function fillIcoSlots(root){
 
 /* ═══ 상태 ═══ */
 var ROLE='student', TAB='home';
-/* 로그인한 학생. 값은 전부 Firestore에서 채운다(예전엔 맹진우 고정값이 박혀 있었고,
-   그 탓에 누가 방과후 체크인을 해도 '맹진우' 이름으로 기록됐다).
+/* 로그인한 학생. 값은 전부 Firestore에서 채운다(예전엔 특정 학생 이름이
+   고정값으로 박혀 있었고, 그 탓에 누가 방과후 체크인을 해도 그 이름으로 기록됐다).
    planner는 아직 시트에만 있어 Firestore에 없다 — null이면 화면에서 '–'로 표시한다. */
 var ME={id:'',name:'',track:'공무원',coins:0,dorm:false,week:[],planner:null};
 
