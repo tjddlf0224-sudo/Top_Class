@@ -3,7 +3,7 @@
 이 파일은 Claude와 진행한 작업 세션의 전체 맥락을 기록한다.
 **앞으로 새 요청을 받으면 이 파일을 먼저 읽어 맥락을 파악한 뒤 응답/실행하고, 작업이 끝나면 이 파일을 다시 업데이트한다.**
 
-최종 갱신: 2026-09-15 — **⚠️ §7(v2 리디자인)·§8(출시일 체크리스트)·§11(구앱 속도 개선)·§12(수업일 판별 나이스 API)·§13(교사 로그인)·§15(등교출결 v2)·§16(엽전 계산)·§17(플래너)·§18(GAS 호출 0)·§19(B2 완료)·§20(FS 유실 사고·규칙 catch-all)·§21(공휴일 결석 기록)·§22(오처리 환불·calendarOff)·§23(자습없는날 감지)·§24(교사홈 실데이터)·§25(전환 절차)·§26(전환전 준비완료)·§27(로컬 알림) 먼저 읽을 것. §6의 ClassHub 멀티테넌트 계획은 보류됨.**
+최종 갱신: 2026-09-15 — **⚠️ §7(v2 리디자인)·§8(출시일 체크리스트)·§11(구앱 속도 개선)·§12(수업일 판별 나이스 API)·§13(교사 로그인)·§15(등교출결 v2)·§16(엽전 계산)·§17(플래너)·§18(GAS 호출 0)·§19(B2 완료)·§20(FS 유실 사고·규칙 catch-all)·§21(공휴일 결석 기록)·§22(오처리 환불·calendarOff)·§23(자습없는날 감지)·§24(교사홈 실데이터)·§25(전환 절차)·§26(전환전 준비완료)·§27(로컬 알림)·§28(Capacitor 래핑) 먼저 읽을 것. §6의 ClassHub 멀티테넌트 계획은 보류됨.**
 
 ---
 
@@ -1188,3 +1188,45 @@ counsel-app은 npm 번들러라 `import { LocalNotifications } from '@capacitor/
 - iOS/안드로이드 빌드, 아이콘(`v2/icons/icon-1024-flat.png` — 알파 제거본), 스플래시
 - 앱스토어/플레이 심사 — **무인증 로그인(학번+이름)이 지적될 수 있음**(§8.4)
 - 참고: 상담일지 앱(`~/counsel-app`)에 검증된 Capacitor 설정이 있다
+
+## 28. Capacitor 래핑 (2026-09-15) — `~/Top_Class-App`
+
+사용자 지시: "래핑까지 진행해". **v2 저장소와 분리**했다(공개 Pages 저장소에 네이티브 프로젝트를 섞지 않으려고).
+
+### 28.1 구조 — 화면은 원격
+| | |
+|---|---|
+| 위치 | `~/Top_Class-App` |
+| appId | `com.tjddlf0224.topclass` |
+| 앱 이름 | 장원급제반 |
+| 화면 | `server.url` = `https://tjddlf0224-sudo.github.io/Top_Class/v2/` |
+| 네이티브 | `@capacitor/local-notifications`, `@capacitor/app` 만 |
+
+**왜 원격인가**: `v2/index.html`을 고쳐 push하면 **앱도 즉시 바뀐다 — 스토어 재심사 불필요**. 전산회계 오락실 iOS 앱과 같은 방식이고 심사 통과 전례가 있다.
+오프라인이 필요해지면 `server` 항목을 지우고 v2 파일을 `www/`로 복사하면 된다. `www/index.html`은 **연결 실패 시 보이는 대체 화면**이다.
+
+### 28.2 환경에서 알아둘 것
+- **Capacitor 8은 SPM을 쓴다 → CocoaPods 불필요**(`pod` 명령 없어도 됨)
+- **시스템에 java가 없다.** Android Studio 내장 JDK 21을 써야 한다:
+  `export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"`
+- `android/local.properties`에 `sdk.dir=$HOME/Library/Android/sdk` 필요(gitignore됨)
+- 이 맥의 Xcode 27에는 **Simulator.app이 없다** — 시뮬레이터 부팅은 되지만 UI 앱이 없어 탭·스크린샷 도구가 실패한다(`SimDeviceLegacyHIDClient` 오류). `xcrun simctl io booted screenshot`은 동작한다.
+
+### 28.3 검증 결과
+| 항목 | 결과 |
+|---|---|
+| 안드로이드 APK 빌드 | ✅ 6.2MB (`assembleDebug`) |
+| iOS 시뮬레이터 빌드 | ✅ BUILD SUCCEEDED |
+| 시뮬레이터 설치·실행 | ✅ v2 로그인 화면이 네이티브 셸에 정상 표시 |
+| iOS 플러그인 등록 | ✅ `packageClassList`에 `LocalNotificationsPlugin` |
+| 안드로이드 플러그인 등록 | ✅ `capacitor.plugins.json`에 등록 |
+| 안드로이드 권한 | ✅ POST_NOTIFICATIONS / SCHEDULE_EXACT_ALARM / RECEIVE_BOOT_COMPLETED |
+| 아이콘·스플래시 | ✅ `@capacitor/assets`로 android 100개 / ios 13개 생성 |
+
+**알림이 실제로 울리는지는 미검증** — Simulator.app이 없어 UI를 조작할 수 없었다. 플러그인 등록·권한까지는 확인했으니, 실기기에서 한 번 켜보면 된다.
+
+### 28.4 남은 것
+- **iOS 서명·실행** — Apple 계정이 필요해 내가 못 한다. `npx cap open ios` → Xcode에서 팀 선택 후 실기기 실행
+- 실기기에서 알림 켜고 다음 날 아침 07:50에 오는지 확인
+- 스토어 제출: **무인증 로그인(학번+이름)이 심사에서 지적될 수 있음**(§8.4)
+- 안드로이드 릴리스 서명 키(상담일지 앱 방식 참고)
