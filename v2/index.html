@@ -54,7 +54,7 @@ input,select,textarea{font-family:inherit;font-size:16px;}
 .login-sub{font-size:0.86rem;color:var(--ink-mute);margin-top:6px;}
 .field{margin-bottom:10px;}
 .field label{display:block;font-size:0.78rem;font-weight:600;color:var(--ink-soft);margin-bottom:6px;}
-input[type=text],input[type=tel],select,textarea{width:100%;padding:13px 14px;border:1.5px solid var(--line);
+input[type=text],input[type=tel],input[type=password],select,textarea{width:100%;padding:13px 14px;border:1.5px solid var(--line);
   border-radius:var(--radius-sm);color:var(--ink);background:var(--surface);outline:none;
   transition:border-color .15s,box-shadow .15s;-webkit-appearance:none;appearance:none;}
 input:focus,select:focus,textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(91,106,240,.1);}
@@ -258,12 +258,6 @@ main{padding:6px 18px calc(32px + var(--safe-bottom));}
   <main id="view"></main>
 </div>
 
-<!-- 프로토타입 전환 -->
-<div id="proto">
-  <button class="on" onclick="setRole('student')">학생 화면</button>
-  <button onclick="setRole('teacher')">교사 화면</button>
-  <button onclick="logout()">로그인</button>
-</div>
 
 <!-- ═══ Firebase (조회·체크인 전부 여기로. GAS 안 거침) ═══ -->
 <script type="module">
