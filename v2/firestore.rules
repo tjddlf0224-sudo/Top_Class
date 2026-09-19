@@ -280,7 +280,11 @@ service cloud.firestore {
     //    (프리즈를 여기 뒀다가 하룻밤 만에 사라진 사고가 있었음 → streakFreeze로 분리)
     match /members/{id} {
       allow read: if true;
-      allow write: if false;
+      // 2026-09-19 v2 기숙사생 관리 — 교사가 dorm 칸 하나만 바꿀 수 있다(나머지는 GAS/전환 도구 몫)
+      allow update: if isTeacher()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['dorm'])
+        && request.resource.data.dorm is bool;
+      allow create, delete: if false;
     }
 
     // ── 스트릭 프리즈 ───────────────────────────────────

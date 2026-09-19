@@ -697,6 +697,11 @@ window.FS = {
     await setDoc(doc(db,'calendarOff',dateStr),
       { date:dateStr, reason:String(reason), by:String(by), at: serverTimestamp() });
   },
+  /* 교사: 기숙사생 지정 — 규칙이 members의 dorm 칸만 바꾸게 허용한다 */
+  async setDorm(id, on){
+    await _authReady;
+    await updateDoc(doc(db,'members',String(id)), { dorm: !!on });
+  },
   async clearCalendarOff(dateStr){
     await _authReady;
     await deleteDoc(doc(db,'calendarOff',dateStr));
@@ -1331,6 +1336,171 @@ async function applyBulkGrant(){
 var GROWTH_SEL = { key:'', i:-1 };
 function growthSel(i){ GROWTH_SEL.i = i; renderView(); }
 
+/* ═══ 출결(교사) — 쉬는 기간 (구앱 '트리거 일시정지'의 v2판) ═══════════
+   구앱은 GAS 트리거(자동 결석·감점)를 기간 동안 멈췄다. v2에는 트리거가 없고 전부 계산이라,
+   그 기간의 평일을 '교사 지정 쉬는 날'(calendarOff)로 두면 결석·감점·스트릭·알림에서 모두 빠진다. */
+var OFF = { from:'', to:'', reason:'' };
+async function renderOffDays(v){
+  await loadCalendar(true);
+  var today = kstToday();
+  if (!OFF.from) OFF.from = today;
+  if (!OFF.to)   OFF.to   = shiftDay(today, 6);
+  // 교사 지정일을 이어진 평일 묶음(같은 사유)으로 보여준다
+  var days = Object.keys(CAL_OFF).sort(), groups = [];
+  days.forEach(function(ds){
+    var g = groups[groups.length-1], reason = CAL_OFF[ds];
+    var prevWd = g ? (function(){ var x = shiftDay(ds,-1); while (isWeekend(x)) x = shiftDay(x,-1); return x; })() : null;
+    if (g && g.reason === reason && g.to === prevWd){ g.to = ds; g.days.push(ds); }
+    else groups.push({ from:ds, to:ds, reason:reason, days:[ds] });
+  });
+  var active = groups.filter(function(g){ return g.from <= today && today <= g.to; })[0];
+  var dateInp = function(id, val, fn){ return '<input id="'+id+'" type="date" value="'+val+'" onchange="OFF.'+fn+'=this.value">'; };
+  var html = (active
+      ? '<div class="card pad" style="margin-top:10px;background:var(--orange-soft);box-shadow:none"><b style="color:#c2410c">지금 쉬는 기간이에요</b>'+
+        '<div class="row-s" style="color:#9a3412">'+active.from+' ~ '+active.to+' · '+escapeHtml(active.reason)+'</div></div>' : '')+
+    '<div class="card pad" style="margin-top:10px">'+
+      '<div class="row-t">쉬는 기간 설정</div>'+
+      '<div class="row-s" style="margin:4px 0 12px;line-height:1.6">방학·시험 주간처럼 아침 자습을 쉬는 기간을 정하면, 그 기간은 결석·감점·연속출석·알림에서 모두 빠집니다. (구앱의 트리거 일시정지)</div>'+
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><div class="field"><label>시작일</label>'+dateInp('offFrom',OFF.from,'from')+'</div>'+
+      '<div class="field"><label>종료일</label>'+dateInp('offTo',OFF.to,'to')+'</div></div>'+
+      '<div class="field"><label>사유</label><input id="offWhy" type="text" placeholder="예: 추석 방학" value="'+escapeHtml(OFF.reason)+'" oninput="OFF.reason=this.value"></div>'+
+      '<div id="offErr" class="login-err hidden"></div>'+
+      '<button class="btn" id="offGo" onclick="saveOffRange()">쉬는 기간으로 지정</button></div>'+
+    '<div class="sec-label">지정된 쉬는 날</div><div class="card">'+
+    (groups.length ? groups.slice().reverse().map(function(g, i){
+      var n = g.days.length, past = g.to < today;
+      return '<div class="row" style="cursor:default"><div class="row-main"><div class="row-t">'+(g.from===g.to ? g.from : g.from+' ~ '+g.to)+
+        ' <span style="font-weight:500;color:var(--ink-mute);font-size:.76rem">평일 '+n+'일</span></div>'+
+        '<div class="row-s">'+escapeHtml(g.reason)+(past?' · 지난 기간':'')+'</div></div>'+
+        '<button class="btn btn-outline btn-sm" style="color:var(--rose)" onclick="clearOffRange(\''+g.days.join(',')+'\')">해제</button></div>';
+    }).join('') : '<div class="blk"><div class="row-s">아직 없어요 — 나이스 학사일정의 휴업일은 따로 지정하지 않아도 빠집니다</div></div>')+'</div>';
+  v.innerHTML = html;
+}
+async function saveOffRange(){
+  var err = document.getElementById('offErr'), show = function(t){ err.textContent=t; err.classList.remove('hidden'); };
+  var from = document.getElementById('offFrom').value, to = document.getElementById('offTo').value;
+  var why = (document.getElementById('offWhy').value||'').trim();
+  if (!from || !to) return show('시작일과 종료일을 골라주세요');
+  if (from > to)    return show('종료일이 시작일보다 앞설 수 없어요');
+  if (!why)         return show('사유를 입력해주세요');
+  await loadCalendar();
+  var list = []; eachWeekday(from, to, function(ds){ if (isSchoolDay(ds)) list.push(ds); });   // 이미 쉬는 날은 건너뜀
+  if (!list.length) return show('그 기간에는 수업일이 없어요(이미 모두 쉬는 날)');
+  if (list.length > 120) return show('한 번에 120일까지만 지정할 수 있어요');
+  if (!confirm(from+' ~ '+to+' 중 수업일 '+list.length+'일을 쉬는 날로 지정할까요?')) return;
+  var btn = document.getElementById('offGo'); btn.disabled = true; btn.textContent = '저장 중...';
+  var res = await Promise.all(list.map(function(ds){ return FS.setCalendarOff(ds, why, '교사').then(function(){ return 0; }, function(){ return 1; }); }));
+  var fail = res.reduce(function(a,b){ return a+b; }, 0);
+  await loadCalendar(true);
+  if (typeof scheduleLocalNotis === 'function') try { scheduleLocalNotis(); } catch(e){}
+  OFF.reason = '';
+  if (fail) alert(fail+'일은 저장하지 못했습니다. 다시 시도해 주세요.');
+  renderView();
+}
+async function clearOffRange(csv){
+  var days = csv.split(',');
+  if (!confirm((days.length>1 ? days[0]+' ~ '+days[days.length-1]+' ('+days.length+'일)' : days[0])+'을 다시 수업일로 되돌릴까요?')) return;
+  await Promise.all(days.map(function(ds){ return FS.clearCalendarOff(ds).then(null, function(){}); }));
+  await loadCalendar(true);
+  if (typeof scheduleLocalNotis === 'function') try { scheduleLocalNotis(); } catch(e){}
+  renderView();
+}
+
+/* ═══ 출결(교사) — 기숙사생 관리 ═══════════════════════
+   기숙사생은 08:30 전이면 지각이 아니다(verdictFromAt). members.dorm만 교사가 바꿀 수 있다.
+   ⚠️ 전환 전에는 GAS가 매일 members를 시트로 다시 쓰므로 여기서 바꿔도 되돌아간다 → 잠금. */
+async function renderDorm(v){
+  var mem = await FS.members();
+  var locked = kstToday() < ATT_V2_FROM;
+  var n = mem.filter(function(m){ return m.dorm; }).length;
+  v.innerHTML = '<div class="card pad" style="margin-top:10px"><div class="row-t">기숙사생 '+n+'명</div>'+
+      '<div class="row-s" style="margin-top:4px;line-height:1.6">기숙사생은 '+pad2(Math.floor(AM_CLOSE_MIN/60))+':'+pad2(AM_CLOSE_MIN%60)+
+      ' 전에만 인증하면 지각이 아닌 출석으로 처리됩니다.</div></div>'+
+    (locked ? '<div class="card pad" style="margin-top:10px;background:var(--orange-soft);box-shadow:none"><b style="color:#c2410c">지금은 구앱에서 바꿔 주세요</b>'+
+      '<div class="row-s" style="color:#9a3412;margin-top:4px;line-height:1.6">전환 전에는 구앱 서버가 매일 밤 명부를 시트 기준으로 다시 씁니다. 여기서 바꾸면 다음 날 되돌아가요. 전환일부터 여기서 바꿀 수 있어요.</div></div>' : '')+
+    '<div class="sec-label">학생</div><div class="card">'+
+    mem.map(function(m){
+      return '<div class="row" style="cursor:'+(locked?'default':'pointer')+'"'+(locked?'':' onclick="toggleDorm(\''+m.id+'\','+(!m.dorm)+')"')+'>'+
+        '<div class="avatar">'+m.name.charAt(0)+'</div><div class="row-main"><div class="row-t">'+escapeHtml(m.name)+'</div><div class="row-s">'+m.track+'반</div></div>'+
+        '<span class="chip" style="'+(m.dorm?'':'background:var(--line-soft);color:var(--ink-mute)')+'">'+(m.dorm?'기숙사':'통학')+'</span></div>';
+    }).join('')+'</div>';
+}
+async function toggleDorm(id, on){
+  try { await FS.setDorm(id, on); renderView(); }
+  catch(e){ alert(e && e.code==='permission-denied' ? '교사로 로그인해야 합니다' : '저장하지 못했습니다'); }
+}
+
+/* ═══ 주간 리포트 (구앱 weeklyTeacherReport의 v2판) ═══════════════
+   구앱은 GAS가 매주 월요일 만들어 시트에 쌓았다. v2는 저장하지 않고 그 주 자료로 바로 계산한다. */
+var WR_OFF = -1;                                    // 0 = 이번 주, -1 = 지난주
+function wrMove(d){ WR_OFF += d; if (WR_OFF > 0) WR_OFF = 0; openWeeklyReport(); }
+async function openWeeklyReport(){
+  showModal('<div class="modal-box"><div class="row-s" style="text-align:center;padding:30px 0">리포트를 만드는 중…</div></div>');
+  await loadCalendar();
+  var today = kstToday(), dow = dowOf(today);
+  var mon = shiftDay(today, -((dow+6)%7) + WR_OFF*7), fri = shiftDay(mon, 4);
+  var mem = await FS.members();
+  var got = await Promise.all([ soft(FS.attendanceAll(), { byName:{} }), soft(FS.amSince(mon), { am:{}, ov:{} }), soft(FS.counselAll(), []),
+    Promise.all(mem.map(function(m){ return soft(FS.plannerOf(m.name), {}); })),
+    Promise.all(mem.map(function(m){ return soft(loadWallet(m), { balance:m.coins, items:[], mode:'시트' }); })) ]);
+  var A = got[0], R = got[1], C = got[2], legacyLast = '';
+  for (var nm in A.byName){ var ks = Object.keys(A.byName[nm]).sort(); if (ks.length && ks[ks.length-1] > legacyLast) legacyLast = ks[ks.length-1]; }
+  var schoolDays = []; eachWeekday(mon, fri, function(ds){ if (isSchoolDay(ds) && ds <= today) schoolDays.push(ds); });
+  var T = { 출석:0, 지각:0, 결석:0, 공결:0, p100:0, pSub:0, counsel:0, coin:0 }, rows = [];
+  mem.forEach(function(m, i){
+    var ctx = { days:A.byName[m.name]||{}, legacyLast:legacyLast, today:today, dorm:!!m.dorm, am:{}, ov:{} };
+    Object.keys(R.am).forEach(function(ds){ if (R.am[ds][m.name]) ctx.am[ds] = R.am[ds][m.name]; });
+    Object.keys(R.ov).forEach(function(ds){ if (R.ov[ds][m.name]) ctx.ov[ds] = R.ov[ds][m.name]; });
+    var c = { 출석:0, 지각:0, 결석:0, 공결:0, known:0 }, P = got[3][i] || {}, p100 = 0, pSub = 0, pMiss = 0;
+    schoolDays.forEach(function(ds){ var s = attStatusOf(ds, ctx); if (s){ c[s] = (c[s]||0)+1; c.known++; }
+      if (P[ds]){ pSub++; if (P[ds].progress === 100) p100++; }
+      // 미작성은 v2에서 플래너를 쓰기 시작한 날(전환일)부터만 센다 — 그 전 플래너는 구앱 시트에 있다
+      else if (ds >= ATT_V2_FROM && s !== '결석') pMiss++; });
+    var W = got[4][i], dCoin = (W.items||[]).filter(function(x){ return x.date >= mon && x.date <= fri; }).reduce(function(a,x){ return a + x.amount; }, 0);
+    var cn = C.filter(function(r){ return r.name === m.name && r.date >= mon && r.date <= fri && r.done; }).length;
+    ['출석','지각','결석','공결'].forEach(function(k){ T[k] += c[k]||0; });
+    T.p100 += p100; T.pSub += pSub; T.counsel += cn; T.coin += dCoin;
+    rows.push({ m:m, c:c, p100:p100, pSub:pSub, pMiss:pMiss, cn:cn, dCoin:dCoin, mode:W.mode });
+  });
+  var n = schoolDays.length;
+  var flag = function(r){ var f = []; if (r.c.결석) f.push('결석 '+r.c.결석); if (r.c.지각) f.push('지각 '+r.c.지각);
+    if (r.pMiss) f.push('플래너 미작성 '+r.pMiss); return f; };
+  var watch = rows.filter(function(r){ return flag(r).length; }).sort(function(a,b){ return (b.c.결석*3+b.c.지각) - (a.c.결석*3+a.c.지각); });
+  var perfect = rows.filter(function(r){ return n && r.c.출석 === n; });
+  var noCounsel = rows.filter(function(r){ return !r.cn; });
+  var title = (+mon.slice(5,7))+'/'+(+mon.slice(8))+' ~ '+(+fri.slice(5,7))+'/'+(+fri.slice(8));
+  var pre = kstToday() < ATT_V2_FROM;
+  var text = '[장원급제반 주간 리포트] '+title+'\n수업일 '+n+'일 · 학생 '+mem.length+'명\n'+
+    '출석 '+T.출석+' · 지각 '+T.지각+' · 결석 '+T.결석+(T.공결?' · 공결 '+T.공결:'')+'\n'+
+    '플래너 제출 '+T.pSub+'건(100% 달성 '+T.p100+'건) · 상담 '+T.counsel+'건\n'+
+    (perfect.length ? '개근: '+perfect.map(function(r){ return r.m.name; }).join(', ')+'\n' : '')+
+    (watch.length ? '살펴볼 학생:\n'+watch.map(function(r){ return '- '+r.m.name+': '+flag(r).join(', '); }).join('\n')+'\n' : '')+
+    (noCounsel.length ? '이번 주 상담 없음: '+noCounsel.map(function(r){ return r.m.name; }).join(', ') : '');
+  window.__wrText = text;
+  var stat = function(v, l, col){ return '<div style="flex:1;text-align:center;background:var(--line-soft);border-radius:10px;padding:10px 2px">'+
+    '<div style="font-size:1.2rem;font-weight:800;color:'+(col||'var(--ink)')+'">'+v+'</div><div style="font-size:.66rem;color:var(--ink-mute)">'+l+'</div></div>'; };
+  showModal('<div class="modal-box" style="max-width:420px">'+
+    '<div style="display:flex;align-items:center;justify-content:space-between"><button class="btn btn-outline btn-sm" onclick="wrMove(-1)">‹</button>'+
+      '<div style="text-align:center"><div style="font-weight:800;font-size:1.05rem">주간 리포트</div><div class="row-s">'+title+(WR_OFF===0?' (이번 주)':'')+'</div></div>'+
+      '<button class="btn btn-outline btn-sm" onclick="wrMove(1)" '+(WR_OFF>=0?'disabled style="opacity:.3"':'')+'>›</button></div>'+
+    (pre ? '<div class="row-s" style="margin-top:10px;color:var(--orange);line-height:1.5">※ 전환 전에는 출결·플래너가 구앱 시트에만 있어 이 리포트에 잡히지 않아요.</div>' : '')+
+    '<div style="display:flex;gap:6px;margin-top:12px">'+stat(T.출석,'출석','#16a34a')+stat(T.지각,'지각','var(--orange)')+stat(T.결석,'결석','var(--rose)')+stat(T.counsel,'상담')+'</div>'+
+    '<div style="display:flex;gap:6px;margin-top:6px">'+stat(n,'수업일')+stat(T.pSub,'플래너 제출')+stat(T.p100,'100% 달성')+stat((T.coin>0?'+':'')+T.coin,'엽전 변동')+'</div>'+
+    (perfect.length ? '<div class="sec-label">개근</div><div class="row-s" style="line-height:1.7">'+perfect.map(function(r){ return escapeHtml(r.m.name); }).join(', ')+'</div>' : '')+
+    '<div class="sec-label">살펴볼 학생</div>'+
+    (watch.length ? watch.map(function(r){ return '<div class="row" style="cursor:default;padding:10px 0"><div class="row-main"><div class="row-t">'+escapeHtml(r.m.name)+'</div>'+
+        '<div class="row-s" style="color:var(--rose)">'+flag(r).join(' · ')+'</div></div></div>'; }).join('') : '<div class="row-s">없어요</div>')+
+    '<div class="sec-label">이번 주 상담 없음</div><div class="row-s" style="line-height:1.7">'+(noCounsel.length ? noCounsel.map(function(r){ return escapeHtml(r.m.name); }).join(', ') : '모두 상담했어요')+'</div>'+
+    '<button class="btn" onclick="copyWeeklyReport(this)">글로 복사</button>'+
+    '<button class="btn btn-outline" onclick="closeModal()">닫기</button></div>');
+}
+function copyWeeklyReport(btn){
+  var t = window.__wrText || '';
+  var done = function(){ btn.textContent = '복사했어요'; setTimeout(function(){ btn.textContent = '글로 복사'; }, 1500); };
+  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(t).then(done, function(){ prompt('복사해서 쓰세요', t); });
+  else prompt('복사해서 쓰세요', t);
+}
+
 /* ═══ 하위 메뉴 (구앱과 같은 구성) ═════════════════════════
    주 메뉴는 화면 아래, 하위 메뉴는 화면 위(헤더 안)에 둔다.
    구앱 하위 탭:
@@ -1342,6 +1512,7 @@ var SUBTABS = {
             after:[['today','오늘 출석'],['cal','달력']] },
   teacher:{ exam:[['input','성적 등록'],['manage','성적 관리']],
             after:[['att','출석 현황'],['cal','달력']],
+            att:[['day','날짜별'],['off','쉬는 기간'],['dorm','기숙사생']],
             counsel:[['daily','일별 조회'],['list','학생 명단'],['cal','학생 달력'],['stats','통계']] }
 };
 // 처음 들어갈 때 고를 하위 탭(없으면 첫 번째)
@@ -2088,7 +2259,8 @@ function renderView(){
 function renderViewInner(v){
   if(TAB==='home'){v.innerHTML=ROLE==='student'?homeStudent():homeTeacher();fillIcoSlots(v);return;}
   if(TAB==='after'){return renderAfterSchool(v);}
-  if(TAB==='att' && ROLE==='teacher'){return renderAmTeacher(v);}
+  if(TAB==='att' && ROLE==='teacher'){ var su=subOf();
+    return su==='off' ? renderOffDays(v) : su==='dorm' ? renderDorm(v) : renderAmTeacher(v); }
   if(TAB==='coin'){return ROLE==='student'?renderCoinStudent(v):renderCoinTeacher(v);}
   if(TAB==='market'){return renderMarket(v);}
   if(TAB==='exam'){ if(ROLE==='student') return renderExamStudentSub(v);
@@ -3805,8 +3977,8 @@ function homeStudent(){
 
   '<div class="sec-label">바로가기</div>'+
   '<div class="quick">'+
-    quick('qr','','내 QR')+quick('coin','y','엽전 안내')+
-    quick('calendar','s','방과후')+quick('chart','o','내 성적')+
+    quick('memo','','플래너','openPlanner()')+quick('coin','y','엽전 안내','openCoinGuide()')+
+    quick('calendar','s','방과후',"go('after')")+quick('chart','o','내 성적',"go('exam')")+
   '</div>';
 }
 
@@ -3842,6 +4014,10 @@ function homeTeacher(){
   '<div class="quick">'+
     quick('coin','y','엽전 지급',"go('coin')")+quick('market','o','저잣거리',"go('market')")+
     quick('calendar','s','방과후 출석',"go('after')")+quick('chat','r','상담',"go('counsel')")+
+  '</div>'+
+  '<div class="quick" style="margin-top:10px">'+
+    quick('clipboard','s','주간 리포트','openWeeklyReport()')+quick('calendar','o','쉬는 기간',"go('att');goSub('off')")+
+    quick('person','y','기숙사생',"go('att');goSub('dorm')")+quick('chart','r','성적 등록',"go('exam');goSub('input')")+
   '</div>';
 }
 
@@ -3902,6 +4078,24 @@ async function fillTeacherHome(){
     var monDs = mon.getFullYear()+'-'+pad2(mon.getMonth()+1)+'-'+pad2(mon.getDate());
     set('thCounsel', recs.filter(function(r){ return r.date >= monDs; }).length + '건');
   } catch(e){ set('thCounsel', '–'); }
+}
+
+/** 엽전 안내 — 실제 계산에 쓰는 상수(COIN_RULE 등)에서 그대로 만든다(문구와 계산이 어긋나지 않게) */
+function openCoinGuide(){
+  var R = COIN_RULE, t = function(m){ return pad2(Math.floor(m/60))+':'+pad2(m%60); };
+  var row = function(k, v, sub){ return '<div class="row" style="cursor:default;padding:12px 0"><div class="row-main"><div class="row-t">'+k+'</div>'+
+    (sub?'<div class="row-s">'+sub+'</div>':'')+'</div><span class="row-v" style="color:'+(v>0?'#16a34a':v<0?'var(--rose)':'var(--ink-mute)')+'">'+(v>0?'+':'')+v+'냥</span></div>'; };
+  showModal('<div class="modal-box"><div style="font-weight:800;font-size:1.15rem;text-align:center">엽전 안내</div>'+
+    '<div class="sec-label">등교</div>'+
+    row('출석', R.출석, t(AM_LATE_MIN)+' 전 인증')+row('지각', R.지각, t(AM_LATE_MIN)+'~'+t(AM_CLOSE_MIN)+' (기숙사생은 '+t(AM_CLOSE_MIN)+' 전이면 출석)')+
+    row('결석', R.결석, t(AM_CLOSE_MIN)+'까지 인증하지 않은 수업일')+row('공결', R.공결, '선생님이 인정한 결석')+
+    row('주간 개근', R.주간개근, '그 주 수업일을 모두 출석')+
+    '<div class="sec-label">플래너</div>'+
+    row('100% 달성', R.플래너100, '그날 할 일을 모두 완료')+row('미작성', R.플래너미작성, '수업일에 플래너를 쓰지 않음(결석한 날은 제외)')+
+    '<div class="sec-label">그 밖에</div>'+
+    row('스트릭 프리즈', -FREEZE_COST, '연속 출석이 끊기지 않게 하루를 지켜 줌')+
+    '<div class="row-s" style="margin-top:12px;line-height:1.6">쉬는 날(주말·공휴일·학교 휴업일)은 계산하지 않습니다. 선생님이 직접 주거나 뺀 엽전과 저잣거리 구매는 엽전 내역에서 볼 수 있어요.</div>'+
+    '<button class="btn" onclick="closeModal()">확인</button></div>');
 }
 
 function quick(icon,color,lbl,onclick){
