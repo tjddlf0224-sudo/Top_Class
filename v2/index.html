@@ -40,6 +40,9 @@ body{display:flex;justify-content:center;min-height:100vh;}
 #app,#login{width:100%;max-width:430px;background:var(--bg);}
 @media(min-width:600px){#app,#login{max-width:600px;}}
 .hidden{display:none !important;}
+/* iOS의 날짜·시간 입력칸은 내용 폭을 최소 폭으로 잡아 부모 밖으로 삐져나온다 */
+input[type=date],input[type=time]{display:block;min-width:0;max-width:100%;min-height:48px;text-align:left;}
+input[type=date]::-webkit-date-and-time-value,input[type=time]::-webkit-date-and-time-value{text-align:left;}
 input,select,textarea{font-family:inherit;font-size:16px;}
 .ico{display:block;flex-shrink:0;}
 
@@ -52,9 +55,9 @@ input,select,textarea{font-family:inherit;font-size:16px;}
 .login-mark img{display:block;width:72px;height:72px;}
 .login-title{font-size:1.55rem;font-weight:800;letter-spacing:-0.5px;}
 .login-sub{font-size:0.86rem;color:var(--ink-mute);margin-top:6px;}
-.field{margin-bottom:10px;}
+.field{margin-bottom:10px;min-width:0;}
 .field label{display:block;font-size:0.78rem;font-weight:600;color:var(--ink-soft);margin-bottom:6px;}
-input[type=text],input[type=tel],input[type=password],select,textarea{width:100%;padding:13px 14px;border:1.5px solid var(--line);
+input[type=text],input[type=tel],input[type=password],input[type=date],input[type=time],input[type=number],select,textarea{width:100%;padding:13px 14px;border:1.5px solid var(--line);
   border-radius:var(--radius-sm);color:var(--ink);background:var(--surface);outline:none;
   transition:border-color .15s,box-shadow .15s;-webkit-appearance:none;appearance:none;}
 input:focus,select:focus,textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(91,106,240,.1);}
@@ -292,7 +295,7 @@ main{padding:6px 18px calc(96px + var(--safe-bottom));}
 <!-- ═══ Firebase (조회·체크인 전부 여기로. GAS 안 거침) ═══ -->
 <script type="module">
 import { initializeApp } from "./vendor/firebase/firebase-app.js";
-import { getFirestore, doc, getDoc, setDoc, updateDoc, addDoc, deleteDoc, collection, getDocs, query, where, serverTimestamp, writeBatch }
+import { getFirestore, doc, getDoc, setDoc, updateDoc, addDoc, deleteDoc, collection, getDocs, query, where, serverTimestamp, writeBatch, runTransaction }
   from "./vendor/firebase/firebase-firestore.js";
 import { initializeAuth, onAuthStateChanged, signInAnonymously, signInWithEmailAndPassword,
          signOut, browserLocalPersistence, indexedDBLocalPersistence }
@@ -447,6 +450,23 @@ window.FS = {
     };
     const d = s.data();
     return { weekly: parse(d.weekly), exceptions: parse(d.exceptions) };
+  },
+  /* 방과후 시간표 고치기 — 트랜잭션 안에서 최신본을 읽고 fn으로 고쳐 저장한다.
+     구앱도 같은 문서를 통째로 저장하므로, 옛 값 위에 고치면 남의 수정을 덮어쓴다(그래서 트랜잭션).
+     형식은 구앱(fsSaveAfterSchool)과 같게 — weekly/exceptions를 JSON 문자열로. */
+  async updateSchedule(fn){
+    await _authReady;
+    const ref = doc(db,'schedule','afterschool');
+    const parse = v => { if (Array.isArray(v)) return v;
+      try { const p = JSON.parse(v); return Array.isArray(p) ? p : []; } catch(e){ return []; } };
+    await runTransaction(db, async tx => {
+      const s = await tx.get(ref);
+      const d = s.exists() ? s.data() : {};
+      const cur = { weekly: parse(d.weekly), exceptions: parse(d.exceptions) };
+      fn(cur);
+      tx.set(ref, { weekly: JSON.stringify(cur.weekly), exceptions: JSON.stringify(cur.exceptions),
+                    updatedAt: new Date().toISOString() });
+    });
   },
   /* 학번(문서 ID)으로 한 명만 조회 — 로그인용.
      members() 전체 조회는 14명이라 가볍지만, 로그인은 한 건이면 충분하다.
@@ -964,8 +984,352 @@ var TABS={
   student:[['home','홈','clipboard'],['exam','성적','chart'],['market','저잣거리','market'],
            ['coin','엽전','coin'],['after','방과후','calendar']],
   teacher:[['home','집무실','clipboard'],['att','출결','check'],['coin','엽전','coin'],
-           ['counsel','상담','chat'],['exam','성적','chart']]
+           ['counsel','상담','chat'],['exam','성적','chart'],['after','방과후','calendar']]
 };
+
+/* ═══ 방과후 달력 (구앱 renderMonth/asOpenDay/asOpenForm 이식) ═══════════
+   schedule/afterschool 한 문서가 유일본이다(구앱도 같은 문서를 실시간으로 쓴다).
+   저장은 FS.updateSchedule(고치는 함수) — 트랜잭션 안에서 최신본을 읽어 그 위에 고치므로
+   구앱에서 동시에 고친 것을 덮어쓰지 않는다. */
+var AS_PALETTE = ['#e11d48','#2563eb','#16a34a','#7c3aed','#ea580c','#0891b2','#db2777','#4f46e5','#65a30d','#92400e','#1d4ed8','#0d9488'];
+function asColor(subject){
+  var s = String(subject||''), h = 0;
+  for (var i = 0; i < s.length; i++) h = (h*31 + s.charCodeAt(i)) % 1000000;
+  return AS_PALETTE[h % AS_PALETTE.length];
+}
+function asFmtTime(v){
+  var s = String(v==null?'':v).trim(); if (!s) return '';
+  var m = s.match(/^(\d{1,2}):(\d{2})/); if (m) return pad2(+m[1])+':'+m[2];
+  return '';
+}
+function asTimeRange(a, b){ a = asFmtTime(a); b = asFmtTime(b); return a ? a + (b ? '~'+b : '') : ''; }
+function asCleanPlace(v){ var s = String(v||'').trim(); return (!s || /GMT|\b(Mon|Tue|Wed|Thu|Fri|Sat|Sun)\b/.test(s)) ? '' : s; }
+function asGenId(){ return 'c' + Date.now() + Math.floor(Math.random()*1000); }
+
+/** 그 날의 수업 = 요일 반복수업(기간·휴강 반영) + 그 날 특강. 휴강된 것은 뺀다. */
+function asResolveDay(sched, ds){
+  var WD = ['일','월','화','수','목','금','토'], wd = WD[dowOf(ds)];
+  var ex = sched.exceptions || [];
+  var cancels = ex.filter(function(e){ return e.date === ds && e.type === '휴강'; });
+  var items = (sched.weekly||[])
+    .filter(function(c){ return c.day === wd && (!c.startDate || ds >= c.startDate) && (!c.endDate || ds <= c.endDate); })
+    .map(function(c){
+      var cc = cancels.filter(function(x){ return x.subject === c.subject && (!x.start || x.start === c.start); })[0];
+      return { id:c.id, day:c.day, start:c.start, end:c.end, subject:c.subject, teacher:c.teacher, track:c.track,
+               place:c.place, note:c.note, kind:'weekly', cancelled:!!cc, startDate:c.startDate||'', endDate:c.endDate||'' };
+    });
+  ex.filter(function(e){ return e.date === ds && e.type === '특강'; }).forEach(function(e){
+    items.push({ id:e.id, start:e.start, end:e.end, subject:e.subject, teacher:e.teacher, track:e.track,
+                 place:e.place, note:e.note, kind:'date', date:e.date, cancelled:false });
+  });
+  items = items.filter(function(x){ return !x.cancelled; });
+  items.sort(function(a,b){ return String(a.start||'').localeCompare(String(b.start||'')); });
+  return { ds:ds, wd:wd, items:items };
+}
+
+var ASC = { ym:'', pick:'' };
+var asDayItems = [];
+function ascMonth(delta){
+  var p = ASC.ym.split('-'), y = +p[0], m = +p[1] + delta;
+  if (m > 12){ m = 1; y++; } if (m < 1){ m = 12; y--; }
+  ASC.ym = y+'-'+pad2(m); ASC.pick = ''; renderView();
+}
+function ascPick(ds){ ASC.pick = ds; renderView(); }
+
+async function renderAsCalendar(v){
+  if (!ASC.ym) ASC.ym = kstToday().slice(0,7);
+  var sched = await FS.schedule();
+  var teacher = ROLE === 'teacher', today = kstToday();
+  var y = +ASC.ym.slice(0,4), mo = +ASC.ym.slice(5), last = new Date(Date.UTC(y, mo, 0)).getUTCDate();
+  var html = '<div class="card pad" style="margin-top:10px"><div style="display:flex;align-items:center;justify-content:space-between">'+
+    '<button class="btn btn-outline btn-sm" onclick="ascMonth(-1)">‹ 이전</button><b>'+y+'년 '+mo+'월</b>'+
+    '<button class="btn btn-outline btn-sm" onclick="ascMonth(1)">다음 ›</button></div>'+
+    '<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:4px;margin-top:12px">'+
+    ['월','화','수','목','금'].map(function(d){ return '<div class="cal-h">'+d+'</div>'; }).join('');
+  // 주말은 칸을 만들지 않는다(구앱과 같음) — 첫 평일 앞에만 빈 칸
+  var placed = false;
+  for (var d = 1; d <= last; d++){
+    var ds = ASC.ym+'-'+pad2(d), w = dowOf(ds);
+    if (w === 0 || w === 6) continue;
+    if (!placed){ for (var i = 0; i < w-1; i++) html += '<div></div>'; placed = true; }
+    var r = asResolveDay(sched, ds);
+    var chips = r.items.slice(0,3).map(function(it){ var c = asColor(it.subject);
+      return '<div style="font-size:.58rem;line-height:1.35;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;'+
+        'border-left:3px solid '+c+';padding-left:3px;color:'+c+';font-weight:600;width:100%;text-align:left">'+escapeHtml(it.subject)+'</div>'; }).join('');
+    if (r.items.length > 3) chips += '<div style="font-size:.56rem;color:var(--ink-mute)">+'+(r.items.length-3)+'</div>';
+    html += '<div class="cal-d'+(ds===today?' today':'')+(ds===ASC.pick?' pick':'')+'" style="align-items:stretch;min-height:64px;background:var(--surface);border-color:'+(ds===today?'var(--accent)':'var(--line-soft)')+'" onclick="ascPick(\''+ds+'\')">'+
+      '<span style="font-weight:700;font-size:.74rem">'+d+'</span>'+chips+'</div>';
+  }
+  html += '</div></div>';
+  if (teacher) html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px">'+
+    '<button class="btn btn-outline" style="margin:0" onclick="asOpenForm(\'weekly\')">+ 반복 수업</button>'+
+    '<button class="btn btn-outline" style="margin:0" onclick="asOpenWeekly()">반복 수업 관리</button></div>';
+
+  // 고른 날(기본: 오늘이 이 달이면 오늘)
+  var pick = ASC.pick || (today.slice(0,7) === ASC.ym && !isWeekend(today) ? today : '');
+  if (pick){
+    var r2 = asResolveDay(sched, pick);
+    asDayItems = r2.items; ASC.pickShown = pick;
+    html += '<div class="sec-label">'+(+pick.slice(5,7))+'월 '+(+pick.slice(8))+'일 ('+r2.wd+')</div>';
+    if (!r2.items.length) html += '<div class="card pad"><div class="row-s">수업이 없어요</div></div>';
+    html += r2.items.map(function(it, idx){
+      var t = asTimeRange(it.start, it.end), place = asCleanPlace(it.place);
+      var tr = (it.track==='공무원'||it.track==='공기업') ? '<span class="chip" style="margin-left:6px">'+it.track+'반</span>' : '';
+      var one = it.kind === 'date' ? '<span class="chip" style="margin-left:6px;background:var(--sky-soft);color:var(--sky)">이날만</span>' : '';
+      var period = (teacher && it.kind==='weekly' && (it.startDate||it.endDate)) ? '<div class="row-s">기간 '+(it.startDate||'처음')+' ~ '+(it.endDate||'계속')+'</div>' : '';
+      return '<div class="card pad" style="margin-bottom:8px;border-left:5px solid '+asColor(it.subject)+'">'+
+        '<div style="display:flex;justify-content:space-between;gap:10px;align-items:center"><div style="min-width:0">'+
+        '<div class="row-s">'+(t || (teacher?'<span style="color:var(--rose)">시간 미설정 — 수정하세요</span>':'시간 미설정'))+tr+one+'</div>'+
+        '<div class="row-t" style="margin-top:2px">'+escapeHtml(it.subject)+'</div>'+
+        '<div class="row-s">'+escapeHtml((it.teacher||'')+(place?' · '+place:''))+'</div>'+period+
+        (it.note ? '<div class="row-s" style="margin-top:2px">'+escapeHtml(it.note)+'</div>' : '')+'</div>'+
+        (teacher ? '<div style="display:flex;flex-direction:column;gap:6px;flex-shrink:0">'+
+          '<button class="btn btn-outline btn-sm" onclick="asChooseEdit('+idx+')">수정</button>'+
+          '<button class="btn btn-outline btn-sm" style="color:var(--rose)" onclick="asChooseDelete('+idx+')">삭제</button></div>' : '')+
+        '</div></div>';
+    }).join('');
+    if (teacher) html += '<button class="btn btn-outline" onclick="asOpenForm(\'date\',null,\''+pick+'\')">+ 이 날 수업 추가</button>';
+  } else {
+    html += '<div class="empty" style="padding:24px"><span>날짜를 누르면 그 날 수업이 보여요</span></div>';
+  }
+  v.innerHTML = html;
+}
+
+/* ── 교사 편집 ── */
+function asSaved(msg){ closeModal(); renderView(); }
+async function asApply(fn){
+  try { await FS.updateSchedule(fn); asSaved(); }
+  catch(e){ alert('저장하지 못했습니다. 인터넷 연결을 확인해 주세요.'); }
+}
+function asChooseEdit(idx){
+  var it = asDayItems[idx]; if (!it) return;
+  if (it.kind !== 'weekly') return asOpenForm('date', it, it.date);
+  showModal('<div class="modal-box"><div style="font-weight:800;font-size:1.05rem">\''+escapeHtml(it.subject)+'\' 수정</div>'+
+    '<div class="row-s" style="margin:4px 0 12px">매주 '+it.day+'요일 반복 수업입니다. 어느 범위를 고칠까요?</div>'+
+    '<button class="btn btn-outline" onclick="asOpenForm(\'weekly\', asDayItems['+idx+'])">전체 일정 수정</button>'+
+    '<button class="btn btn-outline" onclick="asOpenSingle('+idx+')">이 날짜만 수정</button>'+
+    '<button class="btn" style="background:var(--line-soft);color:var(--ink)" onclick="closeModal()">취소</button></div>');
+}
+function asChooseDelete(idx){
+  var it = asDayItems[idx]; if (!it) return;
+  var day = ASC.pickShown;
+  if (it.kind !== 'weekly'){
+    if (!confirm('이 수업을 삭제할까요?')) return;
+    return asApply(function(s){ s.exceptions = s.exceptions.filter(function(x){ return x.id !== it.id; }); });
+  }
+  showModal('<div class="modal-box"><div style="font-weight:800;font-size:1.05rem">\''+escapeHtml(it.subject)+'\' 삭제</div>'+
+    '<div class="row-s" style="margin:4px 0 12px">매주 '+it.day+'요일 반복 수업입니다. 어느 범위를 삭제할까요?</div>'+
+    '<button class="btn btn-outline" style="color:var(--rose)" onclick="asDelSeries(\''+it.id+'\')">전체 일정 삭제</button>'+
+    '<button class="btn btn-outline" style="color:var(--rose)" onclick="asCancelDate('+idx+')">'+day+'만 삭제</button>'+
+    '<button class="btn" style="background:var(--line-soft);color:var(--ink)" onclick="closeModal()">취소</button></div>');
+}
+function asDelSeries(id){
+  if (!confirm('이 반복 수업을 전부 삭제할까요? (매주 사라집니다)')) return;
+  asApply(function(s){ s.weekly = s.weekly.filter(function(c){ return c.id !== id; }); });
+}
+// 반복 수업의 이 날짜만 삭제 = 그 날짜에 '휴강' 예외를 남긴다(구앱과 같은 방식)
+function asCancelDate(idx){
+  var it = asDayItems[idx], day = ASC.pickShown; if (!it) return;
+  asApply(function(s){ s.exceptions.push({ id:asGenId(), date:day, type:'휴강', subject:it.subject, start:it.start }); });
+}
+function asOpenSingle(idx){
+  var it = asDayItems[idx]; if (!it) return;
+  asOpenForm('single', { subject:it.subject, start:it.start, end:it.end, teacher:it.teacher, track:it.track,
+                         place:it.place, note:it.note, date:ASC.pickShown, _from:{ date:ASC.pickShown, subject:it.subject, start:it.start } });
+}
+
+var AS_FORM = null;
+/* mode: weekly(반복) | date(특강) | single(반복 수업의 한 회차만 다른 날·시간으로) */
+function asOpenForm(mode, ex, date){
+  ex = ex || null;
+  AS_FORM = { mode:mode, id: (ex && mode!=='single') ? ex.id : null, from: ex && ex._from ? ex._from : null };
+  var sel = function(id, opts, cur){ return '<select id="'+id+'">'+opts.map(function(o){ return '<option'+(o===cur?' selected':'')+'>'+o+'</option>'; }).join('')+'</select>'; };
+  var inp = function(id, type, val, ph){ return '<input id="'+id+'" type="'+type+'" value="'+escapeHtml(val||'')+'"'+(ph?' placeholder="'+ph+'"':'')+'>'; };
+  var title = mode==='single' ? '이 날짜만 수정' : ex ? '수업 수정' : mode==='weekly' ? '반복 수업 추가' : '수업 추가';
+  var when = mode==='weekly'
+    ? '<div class="field"><label>요일</label>'+sel('afDay', ['월','화','수','목','금','토','일'], ex?ex.day:'월')+'</div>'+
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><div class="field"><label>시작일(선택)</label>'+inp('afFrom','date', ex?ex.startDate:kstToday())+'</div>'+
+      '<div class="field"><label>종료일(선택)</label>'+inp('afTo','date', ex?ex.endDate:'')+'</div></div>'
+    : '<div class="field"><label>날짜</label>'+inp('afDate','date', (ex&&ex.date) || date || ASC.pickShown || kstToday())+'</div>';
+  showModal('<div class="modal-box"><div style="font-weight:800;font-size:1.1rem;margin-bottom:12px">'+title+'</div>'+ when +
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><div class="field"><label>시작</label>'+inp('afStart','time', ex?asFmtTime(ex.start):'')+'</div>'+
+    '<div class="field"><label>종료</label>'+inp('afEnd','time', ex?asFmtTime(ex.end):'')+'</div></div>'+
+    '<div class="field"><label>과목</label>'+inp('afSubject','text', ex?ex.subject:'', '예: 공무원 국어')+'</div>'+
+    '<div class="field"><label>강사</label>'+inp('afTeacher','text', ex?ex.teacher:'')+'</div>'+
+    '<div class="field"><label>대상 반</label>'+sel('afTrack', ['공통','공무원','공기업'], (ex&&ex.track)||'공통')+'</div>'+
+    '<div class="field"><label>장소</label>'+inp('afPlace','text', ex?asCleanPlace(ex.place):'')+'</div>'+
+    '<div class="field"><label>메모</label>'+inp('afNote','text', ex?ex.note:'')+'</div>'+
+    '<div id="afErr" class="login-err hidden"></div>'+
+    '<button class="btn" id="afGo" onclick="asSaveForm()">저장</button>'+
+    '<button class="btn btn-outline" onclick="closeModal()">취소</button></div>');
+}
+function asSaveForm(){
+  var g = function(id){ var e = document.getElementById(id); return e ? String(e.value||'').trim() : ''; };
+  var err = document.getElementById('afErr'), show = function(t){ err.textContent=t; err.classList.remove('hidden'); };
+  var F = AS_FORM, subject = g('afSubject');
+  if (!subject) return show('과목명을 입력해주세요');
+  var p = { start:g('afStart'), end:g('afEnd'), subject:subject, track:g('afTrack'), teacher:g('afTeacher'), place:g('afPlace'), note:g('afNote') };
+  if (F.mode === 'weekly'){
+    p.day = g('afDay'); p.startDate = g('afFrom'); p.endDate = g('afTo');
+    if (p.startDate && p.endDate && p.startDate > p.endDate) return show('시작일이 종료일보다 늦을 수 없어요');
+  } else {
+    p.date = g('afDate'); p.type = '특강';
+    if (!p.date) return show('날짜를 골라주세요');
+  }
+  var btn = document.getElementById('afGo'); btn.disabled = true; btn.textContent = '저장 중...';
+  asApply(function(s){
+    if (F.mode === 'weekly'){
+      if (F.id){ var w = s.weekly.filter(function(c){ return c.id === F.id; })[0]; if (w) Object.assign(w, p); }
+      else s.weekly.push(Object.assign({ id:asGenId() }, p));
+    } else {
+      if (F.id){ var e = s.exceptions.filter(function(x){ return x.id === F.id; })[0]; if (e) Object.assign(e, p); }
+      else s.exceptions.push(Object.assign({ id:asGenId() }, p));
+      // 한 회차만 옮긴 경우 원래 자리는 그 날만 휴강
+      if (F.mode === 'single' && F.from)
+        s.exceptions.push({ id:asGenId(), date:F.from.date, type:'휴강', subject:F.from.subject, start:F.from.start });
+    }
+  });
+}
+async function asOpenWeekly(){
+  var sched = await FS.schedule();
+  var by = {}; (sched.weekly||[]).forEach(function(c){ (by[c.day] = by[c.day] || []).push(c); });
+  var html = '';
+  ['월','화','수','목','금','토','일'].forEach(function(d){
+    var list = (by[d]||[]).sort(function(a,b){ return String(a.start||'').localeCompare(String(b.start||'')); });
+    if (!list.length) return;
+    html += '<div class="sec-label" style="margin-top:14px">'+d+'요일</div>';
+    list.forEach(function(c){
+      html += '<div style="display:flex;justify-content:space-between;gap:8px;align-items:center;padding:10px 0;border-top:1px solid var(--line-soft)">'+
+        '<div style="min-width:0"><div class="row-t" style="border-left:3px solid '+asColor(c.subject)+';padding-left:6px">'+escapeHtml(c.subject)+'</div>'+
+        '<div class="row-s">'+asTimeRange(c.start,c.end)+(c.teacher?' · '+escapeHtml(c.teacher):'')+'</div>'+
+        ((c.startDate||c.endDate) ? '<div class="row-s">기간 '+(c.startDate||'처음')+' ~ '+(c.endDate||'계속')+'</div>' : '')+'</div>'+
+        '<div style="display:flex;gap:6px;flex-shrink:0"><button class="btn btn-outline btn-sm" onclick="asEditWeekly(\''+c.id+'\')">수정</button>'+
+        '<button class="btn btn-outline btn-sm" style="color:var(--rose)" onclick="asDelSeries(\''+c.id+'\')">삭제</button></div></div>';
+    });
+  });
+  showModal('<div class="modal-box"><div style="font-weight:800;font-size:1.1rem">반복 수업 관리</div>'+
+    (html || '<div class="row-s" style="padding:14px 0">등록된 반복 수업이 없어요</div>')+
+    '<button class="btn" onclick="asOpenForm(\'weekly\')">+ 반복 수업 추가</button>'+
+    '<button class="btn btn-outline" onclick="closeModal()">닫기</button></div>');
+}
+async function asEditWeekly(id){
+  var sched = await FS.schedule();
+  var c = (sched.weekly||[]).filter(function(x){ return x.id === id; })[0];
+  if (c) asOpenForm('weekly', c);
+}
+
+/* ═══ 교사 홈 — 학생 현황 (구앱 loadStudentQuickView 이식) ═══════════
+   한 학생의 최근 7일 출결·플래너·상담 + 엽전 + 직전 모의고사 */
+var TH_WHO = '';
+function thWho(v){ TH_WHO = v; fillStudentQuick(); }
+async function fillStudentQuick(){
+  var box = document.getElementById('thQuick'); if (!box) return;
+  var mem = await FS.members();
+  var sel = document.getElementById('thQuickSel');
+  var cnt = document.getElementById('thQuickCnt');
+  if (cnt){ var g = mem.filter(function(m){ return m.track === '공기업'; }).length;
+    cnt.textContent = '공무원반 '+(mem.length-g)+'명 · 공기업반 '+g+'명'; }
+  if (sel && sel.options.length <= 1)
+    sel.innerHTML = '<option value="">학생을 고르세요</option>'+mem.map(function(m){
+      return '<option value="'+escapeHtml(m.name)+'"'+(m.name===TH_WHO?' selected':'')+'>'+escapeHtml(m.name)+' ('+m.track+'반)</option>'; }).join('');
+  var m = mem.filter(function(x){ return x.name === TH_WHO; })[0];
+  if (!m){ box.innerHTML = ''; return; }
+  var who = TH_WHO;
+  box.innerHTML = '<div class="row-s" style="padding:10px 0">불러오는 중…</div>';
+  await loadCalendar();
+  var today = kstToday(), dates = [];
+  for (var i = 6; i >= 0; i--) dates.push(shiftDay(today, -i));
+  var got = await Promise.all([ soft(FS.attendanceAll(), { byName:{} }), soft(FS.amSince(dates[0]), { am:{}, ov:{} }),
+    soft(FS.plannerOf(m.name), {}), soft(FS.counselAll(), []), soft(loadWallet(m), { balance:m.coins }),
+    soft(examDataFor(m.name, m.track), { exams:[] }) ]);
+  if (who !== TH_WHO) return;                        // 그사이 다른 학생을 골랐다
+  var A = got[0], R = got[1], P = got[2], C = got[3], W = got[4], E = got[5], legacyLast = '';
+  for (var nm in A.byName){ var ks = Object.keys(A.byName[nm]).sort(); if (ks.length && ks[ks.length-1] > legacyLast) legacyLast = ks[ks.length-1]; }
+  var ctx = { days:A.byName[m.name]||{}, legacyLast:legacyLast, today:today, dorm:!!m.dorm, am:{}, ov:{} };
+  Object.keys(R.am).forEach(function(ds){ if (R.am[ds][m.name]) ctx.am[ds] = R.am[ds][m.name]; });
+  Object.keys(R.ov).forEach(function(ds){ if (R.ov[ds][m.name]) ctx.ov[ds] = R.ov[ds][m.name]; });
+  var cs = {}; C.forEach(function(r){ if (r.name === m.name) cs[r.date] = r; });
+  var att = function(ds){
+    if (isWeekend(ds)) return '<span style="color:var(--ink-mute);font-size:.66rem">주말</span>';
+    var s = attStatusOf(ds, ctx);
+    if (s === '출석') return '<b style="color:#16a34a">✓</b>';
+    if (s === '지각') return '<b style="color:var(--orange)">△</b>';
+    if (s === '결석') return '<b style="color:var(--rose)">✗</b>';
+    if (s === '공결') return '<span style="color:var(--ink-soft);font-size:.66rem">공결</span>';
+    return '<span style="color:#c0c0d0">—</span>';
+  };
+  var plan = function(ds){
+    var p = P[ds];
+    var col = !p ? '#e5e7eb' : p.progress === 0 ? '#f43f5e' : p.progress < 50 ? '#fb923c' : p.progress < 100 ? '#facc15' : '#22c55e';
+    return '<span style="display:inline-block;width:14px;height:14px;border-radius:50%;background:'+col+'"></span>';
+  };
+  var cns = function(ds){ var r = cs[ds]; return r ? (r.done ? '<b style="color:#16a34a">✓</b>' : '<span style="color:var(--ink-mute)">○</span>') : '<span style="color:#c0c0d0">—</span>'; };
+  var lastEx = E.exams.length ? E.exams[E.exams.length-1] : null;
+  var html = '<div style="overflow-x:auto;margin-top:10px"><table class="tbl" style="table-layout:fixed"><thead><tr><th style="width:52px">항목</th>'+
+    dates.map(function(ds){ return '<th style="font-size:.68rem">'+(+ds.slice(5,7))+'/'+(+ds.slice(8))+'</th>'; }).join('')+'</tr></thead><tbody>'+
+    '<tr><td>출결</td>'+dates.map(function(ds){ return '<td>'+att(ds)+'</td>'; }).join('')+'</tr>'+
+    '<tr><td>플래너</td>'+dates.map(function(ds){ return '<td>'+plan(ds)+'</td>'; }).join('')+'</tr>'+
+    '<tr><td>상담</td>'+dates.map(function(ds){ return '<td>'+cns(ds)+'</td>'; }).join('')+'</tr></tbody></table></div>'+
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px">'+
+      '<div style="background:var(--line-soft);border-radius:10px;padding:10px;text-align:center"><div class="row-s">엽전</div>'+
+        '<div style="font-weight:800;font-size:1.05rem;color:'+(W.balance<0?'var(--rose)':'var(--ink)')+'">'+W.balance+'냥</div></div>'+
+      '<div style="background:var(--line-soft);border-radius:10px;padding:10px;text-align:center"><div class="row-s">직전 모의고사</div>'+
+        (lastEx ? (E.isG ? '<div style="font-weight:800;color:var(--accent)">NCS '+lastEx.korean+'점</div>'
+                         : '<div style="font-size:.74rem">국 '+lastEx.korean+' · 영 '+lastEx.english+' · 한 '+lastEx.history+'</div><div style="font-weight:800">합계 '+lastEx.total+'</div>')
+                : '<div class="row-s">미등록</div>')+'</div></div>'+
+    '<div style="display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;margin-top:8px;font-size:.66rem;color:var(--ink-mute)">'+
+      [['#e5e7eb','미제출'],['#f43f5e','0%'],['#fb923c','~49%'],['#facc15','~99%'],['#22c55e','100%']].map(function(x){
+        return '<span><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:'+x[0]+';margin-right:3px"></span>'+x[1]+'</span>'; }).join('')+'</div>'+
+    (kstToday() < ATT_V2_FROM ? '<div class="row-s" style="margin-top:8px">※ 전환 전에는 구앱의 출결·플래너 기록이 여기에 보이지 않아요(구앱 시트에만 있음).</div>' : '');
+  box.innerHTML = html;
+}
+
+/* ═══ 교사 엽전 — 여러 명 한꺼번에 지급·차감 ═══ */
+var COIN_MULTI = false, COIN_PICK = {};
+function coinMulti(on){ COIN_MULTI = on; COIN_PICK = {}; renderView(); }
+function coinToggle(name){ if (COIN_PICK[name]) delete COIN_PICK[name]; else COIN_PICK[name] = 1; renderView(); }
+async function coinAll(){
+  var mem = await FS.members(), all = mem.every(function(m){ return COIN_PICK[m.name]; });
+  COIN_PICK = {}; if (!all) mem.forEach(function(m){ COIN_PICK[m.name] = 1; });
+  renderView();
+}
+function openBulkGrant(){
+  var names = Object.keys(COIN_PICK); if (!names.length) return;
+  showModal('<div class="modal-box"><div style="text-align:center;padding:4px 0 12px">'+
+      '<div style="font-size:1.2rem;font-weight:800">'+names.length+'명 엽전 지급·차감</div>'+
+      '<div style="font-size:.78rem;color:var(--ink-mute);margin-top:6px;line-height:1.5">'+names.map(escapeHtml).join(', ')+'</div></div>'+
+    '<div class="field"><label>한 명당 수량 (뺄 때는 −)</label><input id="gAmt" type="number" inputmode="numeric" placeholder="예: 3 또는 -2"></div>'+
+    '<div class="field"><label>사유</label><input id="gWhy" type="text" placeholder="예: 대청소 참여"></div>'+
+    '<div id="gErr" class="login-err hidden"></div>'+
+    '<button class="btn" id="gGo" onclick="applyBulkGrant()">'+names.length+'명에게 저장</button>'+
+    '<button class="btn btn-outline" onclick="closeModal()">취소</button></div>');
+  setTimeout(function(){ var e = document.getElementById('gAmt'); if (e) e.focus(); }, 50);
+}
+async function applyBulkGrant(){
+  var names = Object.keys(COIN_PICK);
+  var amt = parseInt((document.getElementById('gAmt').value||'').trim(), 10);
+  var why = (document.getElementById('gWhy').value||'').trim();
+  var err = document.getElementById('gErr'), show = function(m){ err.textContent=m; err.classList.remove('hidden'); };
+  if (!amt || isNaN(amt)) return show('수량을 입력해주세요 (0은 안 됩니다)');
+  if (!why)               return show('사유를 입력해주세요');
+  var btn = document.getElementById('gGo'); btn.disabled = true; btn.textContent = '저장 중...';
+  // 학생마다 원장 한 줄씩 — 일부만 실패해도 누가 됐는지 알 수 있게 결과를 모은다
+  var res = await Promise.all(names.map(function(n){
+    return FS.addLedger(n, amt, why, '교사').then(function(){ return null; }, function(){ return n; }); }));
+  var failed = res.filter(Boolean);
+  if (failed.length){
+    names.forEach(function(n){ if (failed.indexOf(n) < 0) delete COIN_PICK[n]; });   // 성공한 사람은 선택에서 뺀다
+    btn.disabled = false; btn.textContent = '남은 '+failed.length+'명 다시 저장';
+    return show('저장하지 못한 학생: '+failed.join(', ')+' — 다시 눌러 주세요');
+  }
+  COIN_MULTI = false; COIN_PICK = {};
+  closeModal(); renderView();
+}
+
+/* ═══ 성적 성장 그래프 — 끝 숫자 대신, 점을 누르면 그 시험 점수를 위에 보여준다 ═══
+   (가족투자관리 앱 차트의 방식: 기본은 최신 값, 누르면 그 시점 값 + 세로 안내선) */
+var GROWTH_SEL = { key:'', i:-1 };
+function growthSel(i){ GROWTH_SEL.i = i; renderView(); }
 
 /* ═══ 하위 메뉴 (구앱과 같은 구성) ═════════════════════════
    주 메뉴는 화면 아래, 하위 메뉴는 화면 위(헤더 안)에 둔다.
@@ -974,8 +1338,10 @@ var TABS={
      성적(교사)  성적 등록 · 성적 관리(학생 선택 → 성적 · 성장 · 반비교 · 선배비교)
      상담(교사)  일별 조회 · 학생 명단 · 학생 달력 · 통계 */
 var SUBTABS = {
-  student:{ exam:[['scores','성적'],['growth','성장'],['compare','반비교'],['legacy','선배비교']] },
+  student:{ exam:[['scores','성적'],['growth','성장'],['compare','반비교'],['legacy','선배비교']],
+            after:[['today','오늘 출석'],['cal','달력']] },
   teacher:{ exam:[['input','성적 등록'],['manage','성적 관리']],
+            after:[['att','출석 현황'],['cal','달력']],
             counsel:[['daily','일별 조회'],['list','학생 명단'],['cal','학생 달력'],['stats','통계']] }
 };
 // 처음 들어갈 때 고를 하위 탭(없으면 첫 번째)
@@ -1040,66 +1406,88 @@ function diffColor(d){ return d>0 ? '#16a34a' : d<0 ? 'var(--rose)' : 'var(--ink
 var GROWTH_SHOW = { total:true, korean:true, english:true, history:true };
 function toggleGrowth(k){ GROWTH_SHOW[k] = !GROWTH_SHOW[k]; renderView(); }
 
-function lineChartSVG(labels, series, right){
-  var W=340, H=210, PL=28, PR=right?34:10, PT=12, PB=30, cw=W-PL-PR, ch=H-PT-PB, n=labels.length;
+function lineChartSVG(labels, series, right, sel){
+  var W=340, H=200, PL=26, PR=right?30:10, PT=12, PB=26, cw=W-PL-PR, ch=H-PT-PB, n=labels.length;
   var X = function(i){ return PL + (n<=1 ? cw/2 : cw*i/(n-1)); };
   var Y = function(v,max){ return PT + ch - ch*Math.max(0,Math.min(v,max))/max; };
   var g = '';
   [0,25,50,75,100].forEach(function(t){
     var y = Y(t,100);
-    g += '<line x1="'+PL+'" x2="'+(W-PR)+'" y1="'+y+'" y2="'+y+'" stroke="#eeeef5"/>'+
-         '<text x="'+(PL-5)+'" y="'+(y+3)+'" font-size="9" fill="#9a9ab0" text-anchor="end">'+t+'</text>';
-    if (right) g += '<text x="'+(W-PR+5)+'" y="'+(y+3)+'" font-size="9" fill="#9a9ab0">'+(t*3)+'</text>';
+    g += '<line x1="'+PL+'" x2="'+(W-PR)+'" y1="'+y+'" y2="'+y+'" stroke="#f0f0f6"/>'+
+         '<text x="'+(PL-6)+'" y="'+(y+3)+'" font-size="8.5" fill="#a8a8bc" text-anchor="end">'+t+'</text>';
+    if (right) g += '<text x="'+(W-PR+6)+'" y="'+(y+3)+'" font-size="8.5" fill="#a8a8bc">'+(t*3)+'</text>';
   });
+  // 고른 시험의 세로 안내선
+  if (sel >= 0) g += '<line x1="'+X(sel)+'" x2="'+X(sel)+'" y1="'+PT+'" y2="'+(PT+ch)+'" stroke="#c7c7d6" stroke-dasharray="3 3"/>';
   var step = Math.max(1, Math.ceil(n/6));
   labels.forEach(function(l,i){
-    if (i % step && i !== n-1) return;
-    g += '<text x="'+X(i)+'" y="'+(H-12)+'" font-size="9" fill="#9a9ab0" text-anchor="middle">'+escapeHtml(l)+'</text>';
+    if (i % step && i !== n-1 && i !== sel) return;
+    g += '<text x="'+X(i)+'" y="'+(H-8)+'" font-size="8.5" text-anchor="middle" '+
+         (i===sel ? 'fill="#1a1a2e" font-weight="700"' : 'fill="#a8a8bc"')+'>'+escapeHtml(l)+'</text>';
   });
   series.forEach(function(s){
     var max = s.right ? 300 : 100;
     var pts = s.data.map(function(v,i){ return X(i)+','+Y(v,max); }).join(' ');
-    g += '<polyline points="'+pts+'" fill="none" stroke="'+s.color+'" stroke-width="'+(s.bold?2.6:1.8)+'"'+
-         (s.dash?' stroke-dasharray="5 3"':'')+' stroke-linejoin="round" stroke-linecap="round"/>';
+    g += '<polyline points="'+pts+'" fill="none" stroke="'+s.color+'" stroke-width="'+(s.bold?2.4:1.7)+'"'+
+         (s.dash?' stroke-dasharray="4 3"':'')+' stroke-linejoin="round" stroke-linecap="round" opacity="'+(s.bold?1:.9)+'"/>';
     s.data.forEach(function(v,i){
-      g += '<circle cx="'+X(i)+'" cy="'+Y(v,max)+'" r="'+(s.bold?3.6:2.8)+'" fill="'+s.color+'"/>';
+      g += i === sel
+        ? '<circle cx="'+X(i)+'" cy="'+Y(v,max)+'" r="5" fill="'+s.color+'" stroke="#fff" stroke-width="2.2"/>'
+        : '<circle cx="'+X(i)+'" cy="'+Y(v,max)+'" r="'+(s.bold?2.8:2.3)+'" fill="'+s.color+'"/>';
     });
-    var li = s.data.length-1;
-    if (li >= 0) g += '<text x="'+X(li)+'" y="'+(Y(s.data[li],max)-7)+'" font-size="9.5" font-weight="700" fill="'+s.color+
-                      '" text-anchor="middle">'+s.data[li]+'</text>';
   });
-  return '<svg viewBox="0 0 '+W+' '+H+'" style="width:100%;height:auto;display:block">'+g+'</svg>';
+  // 누르는 칸 — 점 하나하나를 정확히 누르기 어렵기 때문에 세로 띠 전체를 그 시험으로 본다
+  for (var i = 0; i < n; i++){
+    var x0 = n<=1 ? PL : (i===0 ? PL-10 : (X(i-1)+X(i))/2), x1 = n<=1 ? W-PR : (i===n-1 ? W-PR+10 : (X(i)+X(i+1))/2);
+    g += '<rect x="'+x0+'" y="0" width="'+(x1-x0)+'" height="'+H+'" fill="transparent" style="cursor:pointer" onclick="growthSel('+i+')"/>';
+  }
+  return '<svg viewBox="0 0 '+W+' '+H+'" style="width:100%;height:auto;display:block;-webkit-user-select:none;user-select:none">'+g+'</svg>';
 }
 
 function viewGrowth(d){
   if (!d.exams.length) return emptyBox('chart','아직 등록된 성적이 없어요');
-  var labels = d.exams.map(function(e){ return e.date.slice(5); });
+  if (GROWTH_SEL.key !== d.name){ GROWTH_SEL.key = d.name; GROWTH_SEL.i = -1; }
+  var n = d.exams.length, sel = (GROWTH_SEL.i >= 0 && GROWTH_SEL.i < n) ? GROWTH_SEL.i : n-1, cur = d.exams[sel];
+  var labels = d.exams.map(function(e){ return e.date.slice(5).replace('-','/'); });
   var series = [], S = GROWTH_SHOW;
-  if (d.isG){
-    series.push({ label:'NCS', color:'#5b6af0', bold:true, data:d.exams.map(function(e){ return e.korean; }) });
-  } else {
-    if (S.total)   series.push({ label:'총점', color:'#1a1a2e', bold:true, right:true, data:d.exams.map(function(e){ return e.total; }) });
-    if (S.korean)  series.push({ label:'국어', color:'#5b6af0', dash:true, data:d.exams.map(function(e){ return e.korean; }) });
-    if (S.english) series.push({ label:'영어', color:'#16a34a', dash:true, data:d.exams.map(function(e){ return e.english; }) });
-    if (S.history) series.push({ label:'한국사', color:'#f97316', dash:true, data:d.exams.map(function(e){ return e.history; }) });
-  }
+  var DEF = d.isG ? [['korean','NCS','#5b6af0',true]]
+                  : [['total','총점','#1a1a2e',true],['korean','국어','#5b6af0'],['english','영어','#16a34a'],['history','한국사','#f97316']];
+  DEF.forEach(function(x){
+    if (!d.isG && !S[x[0]]) return;
+    series.push({ key:x[0], label:x[1], color:x[2], bold:!!x[3], dash:!x[3], right: !d.isG && x[0]==='total',
+                  data: d.exams.map(function(e){ return e[x[0]]; }) });
+  });
   var html = '';
   if (!d.isG){
     html += '<div class="seg">'+[['total','총점'],['korean','국어'],['english','영어'],['history','한국사']].map(function(x){
-      return '<button class="'+(S[x[0]]?'on':'')+'" onclick="toggleGrowth(\''+x[0]+'\')">'+(S[x[0]]?'✓ ':'')+x[1]+'</button>';
+      return '<button class="'+(S[x[0]]?'on':'')+'" onclick="toggleGrowth(\''+x[0]+'\')">'+x[1]+'</button>';
     }).join('')+'</div>';
-  } else {
-    html += '<div class="sec-label">NCS 점수 성장 곡선</div>';
   }
-  html += '<div class="card pad" style="margin-top:10px">'+lineChartSVG(labels, series, !d.isG && S.total)+
-    '<div style="display:flex;flex-wrap:wrap;gap:10px;justify-content:center;margin-top:6px;font-size:.72rem;color:var(--ink-soft)">'+
-    series.map(function(s){ return '<span><span style="display:inline-block;width:14px;height:3px;border-radius:2px;background:'+s.color+
-      ';vertical-align:middle;margin-right:4px"></span>'+s.label+'</span>'; }).join('')+'</div></div>';
-  // 숫자로도 — 폰에서 점 위를 누를 수 없으니 표로 함께 보여준다
+  // 고른 시험의 점수 — 그래프 위에 한 줄로
+  var a = d.avg[cur.name];
+  var chip = function(label, val, color, big){
+    return '<div style="flex:1;min-width:0;text-align:center;padding:8px 2px;border-radius:10px;background:'+(big?'var(--ink)':'var(--line-soft)')+'">'+
+      '<div style="font-size:.66rem;font-weight:600;color:'+(big?'rgba(255,255,255,.7)':'var(--ink-mute)')+'">'+
+        '<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:'+color+';margin-right:4px;vertical-align:middle"></span>'+label+'</div>'+
+      '<div style="font-size:1.05rem;font-weight:800;margin-top:2px;color:'+(big?'#fff':'var(--ink)')+'">'+val+'</div></div>';
+  };
+  html += '<div class="card pad" style="margin-top:10px">'+
+    '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px">'+
+      '<div style="min-width:0"><div class="row-t" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+escapeHtml(cur.name)+'</div>'+
+      '<div class="row-s">'+cur.date+(cur.rank?' · '+cur.rank+'등':'')+(sel===n-1?' · 최근':'')+'</div></div>'+
+      (a ? '<div class="row-s" style="flex-shrink:0">반평균 '+(d.isG?a.avgKorean:a.avgTotal)+'</div>' : '')+'</div>'+
+    '<div style="display:flex;gap:6px;margin-top:10px">'+
+      (d.isG ? chip('NCS', cur.korean, '#5b6af0', true)
+             : chip('총점', cur.total, '#fff', true)+chip('국어', cur.korean, '#5b6af0')+chip('영어', cur.english, '#16a34a')+chip('한국사', cur.history, '#f97316'))+
+    '</div>'+
+    '<div style="margin-top:12px">'+lineChartSVG(labels, series, !d.isG && S.total, sel)+'</div>'+
+    '<div style="text-align:center;font-size:.68rem;color:var(--ink-mute);margin-top:4px">그래프를 누르면 그 시험 점수가 위에 보여요</div></div>';
+  // 숫자 표 — 전체를 한눈에
   html += '<div class="sec-label">시험별 점수</div><div class="card pad" style="overflow-x:auto"><table class="tbl"><thead><tr><th>시험</th>'+
     (d.isG ? '<th>NCS</th>' : '<th>국</th><th>영</th><th>한</th><th>총점</th>')+'</tr></thead><tbody>'+
-    d.exams.slice().reverse().map(function(e){
-      return '<tr><td>'+escapeHtml(e.name)+'<div style="font-size:.68rem;color:var(--ink-mute)">'+e.date+'</div></td>'+
+    d.exams.map(function(e, i){ return { e:e, i:i }; }).reverse().map(function(x){ var e = x.e;
+      return '<tr onclick="growthSel('+x.i+')" style="cursor:pointer;'+(x.i===sel?'background:var(--accent-soft)':'')+'"><td>'+escapeHtml(e.name)+
+        '<div style="font-size:.68rem;color:var(--ink-mute)">'+e.date+'</div></td>'+
         (d.isG ? '<td><b>'+e.korean+'</b></td>'
                : '<td>'+e.korean+'</td><td>'+e.english+'</td><td>'+e.history+'</td><td><b>'+e.total+'</b></td>')+'</tr>';
     }).join('')+'</tbody></table></div>';
@@ -1613,8 +2001,9 @@ async function counselStats(mem, recs){
   });
   html += '<div class="sec-label">월별 상담 건수</div><div class="card pad"><svg viewBox="0 0 '+W+' '+H+'" style="width:100%;height:auto;display:block">'+svg+'</svg></div>';
 
-  var rankRows = function(items){
-    if (!items.length) return '<div class="blk"><div class="row-s">데이터가 없어요</div></div>';
+  var pre = kstToday() < ATT_V2_FROM;
+  var rankRows = function(items, why){
+    if (!items.length) return '<div class="blk"><div class="row-s">'+(why || '데이터가 없어요')+'</div></div>';
     return items.map(function(s, i){
       return '<div class="row" style="cursor:default"><div class="avatar" style="'+(i<3?'background:var(--gold-soft);color:var(--gold)':'')+'">'+(i+1)+'</div>'+
         '<div class="row-main"><div class="row-t">'+escapeHtml(s.name)+' <span style="font-weight:500;color:var(--ink-mute);font-size:.74rem">'+(s.sub||'')+'</span></div>'+
@@ -1642,7 +2031,8 @@ async function counselStats(mem, recs){
         ? { name:n, sub:'출석 '+a.attend+'/'+a.total+'일', main:'결석 '+a.absent+' · 지각 '+a.late,
             pct:Math.round((a.absent*3+a.late)/(a.total*3)*100), color:'var(--rose)' }
         : { name:n, sub:'출석 '+a.attend+'/'+a.total+'일', main:Math.round(a.attend/a.total*100)+'%',
-            pct:Math.round(a.attend/a.total*100), color:'#16a34a' }; }))+'</div>';
+            pct:Math.round(a.attend/a.total*100), color:'#16a34a' }; }),
+      pre ? '전환 전이라 최근 등교 기록이 아직 구앱 시트에만 있어요. 전환 후 v2 등교 인증이 쌓이면 보여요.' : '')+'</div>';
 
   // 플래너 순위(최근 14일)
   var pe = Object.keys(plan).filter(function(n){ return plan[n].total > 0; });
@@ -1650,7 +2040,8 @@ async function counselStats(mem, recs){
   html += '<div class="sec-label">플래너 현황 순위 <span style="font-weight:500">· 최근 14일</span></div><div class="card pad" style="padding-top:4px">'+
     segHtml([['bad','달성률 낮은 순'],['good','달성률 높은 순']], CS.rp, 'csRankP')+
     rankRows(pe.slice(0,5).map(function(n){ var p = plan[n], pct = Math.round(p.done/p.total*100);
-      return { name:n, sub:'100% '+p.done+'/'+p.total+'일', main:pct+'%', pct:pct, color:CS.rp==='bad'?'var(--rose)':'#16a34a' }; }))+'</div>';
+      return { name:n, sub:'100% '+p.done+'/'+p.total+'일', main:pct+'%', pct:pct, color:CS.rp==='bad'?'var(--rose)':'#16a34a' }; }),
+      pre ? '전환 전이라 플래너가 아직 구앱 시트에만 있어요. 전환 후 v2에서 쓴 플래너가 쌓이면 보여요.' : '')+'</div>';
 
   // 엽전 현황(낮은 순)
   var neg = coin.filter(function(c){ return c.coins < 0; }).length;
@@ -2535,16 +2926,30 @@ async function renderCoinTeacher(v){
   // 학생마다 차례로 기다리지 않고 한꺼번에 계산한다(폰에서 13명 × 왕복 시간이던 것을 1번 왕복으로)
   var ws = await Promise.all(mem.map(function(m){ return loadWallet(m); }));
   var rows = mem.map(function(m, i){ return { m:m, bal:ws[i].balance, mode:ws[i].mode }; });
-  var html = '<div class="sec-label">엽전 지급·차감</div><div class="card">';
+  var picked = Object.keys(COIN_PICK).length;
+  var html = '<div style="display:flex;justify-content:space-between;align-items:center;margin:14px 2px 10px">'+
+    '<div class="sec-label" style="margin:0">엽전 지급·차감</div>'+
+    (COIN_MULTI
+      ? '<div style="display:flex;gap:6px"><button class="btn btn-outline btn-sm" onclick="coinAll()">전체</button>'+
+        '<button class="btn btn-outline btn-sm" onclick="coinMulti(false)">취소</button></div>'
+      : '<button class="btn btn-outline btn-sm" onclick="coinMulti(true)">여러 명 선택</button>')+'</div><div class="card">';
   html += rows.map(function(r){
-    return '<div class="row" onclick="openGrant(\''+r.m.name+'\')" style="cursor:pointer">'+
-      '<div class="avatar">'+r.m.name.charAt(0)+'</div>'+
+    var on = !!COIN_PICK[r.m.name];
+    return '<div class="row" onclick="'+(COIN_MULTI ? 'coinToggle' : 'openGrant')+'(\''+r.m.name+'\')" style="cursor:pointer;'+(on?'background:var(--accent-soft);margin:0 -18px;padding-left:18px;padding-right:18px':'')+'">'+
+      (COIN_MULTI
+        ? '<div class="avatar" style="'+(on?'background:var(--accent);color:#fff':'background:var(--line-soft);color:var(--ink-mute)')+'">'+(on?'✓':'')+'</div>'
+        : '<div class="avatar">'+r.m.name.charAt(0)+'</div>')+
       '<div class="row-main"><div class="row-t">'+r.m.name+'</div>'+
       '<div class="row-s">'+r.m.track+'반'+(r.mode==='시트'?' · 전환 전':'')+'</div></div>'+
       '<span class="row-v" style="color:'+(r.bal<0?'var(--rose)':'var(--ink)')+'">'+r.bal+'냥</span></div>';
   }).join('') + '</div>'+
   '<div class="sec-label" style="color:var(--ink-mute);font-weight:500">'+
-    '학생을 탭하면 엽전을 주거나 뺄 수 있습니다</div>';
+    (COIN_MULTI ? '학생을 눌러 고른 뒤 아래 버튼으로 한꺼번에 주거나 뺍니다' : '학생을 탭하면 엽전을 주거나 뺄 수 있습니다')+'</div>';
+  // 고른 학생이 있으면 하단 메뉴 바로 위에 고정 버튼
+  if (COIN_MULTI && picked)
+    html += '<div style="position:fixed;left:50%;transform:translateX(-50%);width:calc(100% - 36px);max-width:394px;'+
+      'bottom:calc(74px + var(--safe-bottom));z-index:110"><button class="btn" style="margin:0;box-shadow:0 8px 24px rgba(91,106,240,.35)" onclick="openBulkGrant()">'+
+      picked+'명 지급·차감</button></div><div style="height:64px"></div>';
   v.innerHTML=html; fillIcoSlots(v);
 }
 
@@ -3238,8 +3643,9 @@ async function renderAfterSchool(v){
   v.innerHTML='<div class="empty"><span>불러오는 중...</span></div>';
   if(!window.FS){v.innerHTML='<div class="empty"><span>연결 준비 중입니다<br>잠시 후 다시 시도해주세요</span></div>';return;}
   try{
-    if(ROLE==='student') await renderAsStudent(v);
-    else                 await renderAsTeacher(v);
+    if(subOf()==='cal')       await renderAsCalendar(v);
+    else if(ROLE==='student') await renderAsStudent(v);
+    else                      await renderAsTeacher(v);
   }catch(e){
     v.innerHTML='<div class="empty"><div class="empty-ico">'+ic('warn',40)+'</div>'+
       '<span>불러오지 못했습니다<br><span style="font-size:.78rem">'+String(e.message||e)+'</span></span></div>';
@@ -3409,6 +3815,7 @@ function homeStudent(){
 function homeTeacher(){
   setTimeout(renderQuietBanner, 0);
   setTimeout(fillTeacherHome, 0);
+  setTimeout(fillStudentQuick, 0);
   return ''+
   '<div id="quietBox"></div>'+
 
@@ -3421,6 +3828,10 @@ function homeTeacher(){
       '<div>이번 주 상담<b id="thCounsel">–</b></div>'+
     '</div>'+
   '</div>'+
+
+  '<div class="sec-label">학생 현황 <span id="thQuickCnt" style="font-weight:500"></span></div>'+
+  '<div class="card pad"><select id="thQuickSel" onchange="thWho(this.value)"><option value="">학생을 고르세요</option></select>'+
+    '<div id="thQuick"></div></div>'+
 
   '<div class="sec-label">학생</div>'+
   '<div class="card" id="thRoster">'+
