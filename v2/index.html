@@ -1947,6 +1947,214 @@ async function sendMyCoinReq(){
   catch(e){ btn.disabled = false; btn.textContent = '보내기'; show('보내지 못했습니다'); }
 }
 
+/* ═══ 학부모 면담 보고서 (Word) — 구앱 buildParentReportDocx 이식 ═══════════════
+   docx 라이브러리(8.5.0, 약 730KB)는 버튼을 누를 때만 앱 안의 파일(vendor/docx)에서 불러온다.
+   저장: 앱에서는 파일로 쓴 뒤 공유 시트(파일에 저장·카카오톡 등), 웹에서는 내려받기.
+   ⚠️ 구앱 보고서의 첫 표는 머리글이 '합격자평균'인데 실제 값은 반 평균이었다 — 여기선 '반 평균'으로 바로잡음. */
+function loadDocxLib(){
+  if (window.docx) return Promise.resolve();
+  if (loadDocxLib._p) return loadDocxLib._p;
+  loadDocxLib._p = new Promise(function(res, rej){
+    var s = document.createElement('script'); s.src = 'vendor/docx/docx.bundle.js';
+    s.onload = function(){ res(); }; s.onerror = function(){ loadDocxLib._p = null; rej(new Error('Word 라이브러리를 불러오지 못했습니다')); };
+    document.head.appendChild(s);
+  });
+  return loadDocxLib._p;
+}
+
+/* 성장 추이 그림(PNG) — 보고서에 넣을 선 그래프: 본인 점수 + 반 평균 */
+async function reportChartPng(d){
+  var ex = d.exams, W = 900, H = 340, P = { t:34, r:44, b:64, l:84 }, cw = W-P.l-P.r, ch = H-P.t-P.b;
+  var my = ex.map(function(e){ return d.isG ? e.korean : e.total; });
+  var av = ex.map(function(e){ var a = d.avg[e.name]; return a ? (d.isG ? a.avgKorean : a.avgTotal) : null; });
+  var vals = my.concat(av.filter(function(v){ return v !== null; }));
+  var maxV = Math.max.apply(null, vals.concat([d.isG ? 60 : 180])), minV = Math.max(0, Math.min.apply(null, vals) - 10), rng = (maxV - minV) || 1;
+  var IN = 34;   // 첫·끝 점이 축 숫자에 겹치지 않게 안쪽으로
+  var X = function(i){ return P.l + IN + (ex.length > 1 ? i/(ex.length-1) : .5) * (cw - IN*2); }, Y = function(v){ return P.t + ch - (v-minV)/rng*ch; };
+  var c = document.createElement('canvas'); c.width = W; c.height = H; var g = c.getContext('2d');
+  g.fillStyle = '#fff'; g.fillRect(0,0,W,H);
+  g.font = '13px sans-serif'; g.textAlign = 'right';
+  for (var i = 0; i <= 5; i++){ var v = minV + rng/5*i, y = Y(v);
+    g.strokeStyle = '#eeeef5'; g.lineWidth = 1; g.beginPath(); g.moveTo(P.l, y); g.lineTo(P.l+cw, y); g.stroke();
+    g.fillStyle = '#9a9ab0'; g.fillText(Math.round(v), P.l-8, y+4); }
+  if (av.some(function(v){ return v !== null; })){
+    g.strokeStyle = '#f97316'; g.lineWidth = 2; g.setLineDash([7,5]); g.beginPath(); var st = false;
+    av.forEach(function(v, i){ if (v === null) return; if (!st){ g.moveTo(X(i), Y(v)); st = true; } else g.lineTo(X(i), Y(v)); });
+    g.stroke(); g.setLineDash([]);
+    av.forEach(function(v, i){ if (v === null) return; g.fillStyle = '#f97316'; g.beginPath(); g.arc(X(i), Y(v), 4, 0, 7); g.fill(); });
+  }
+  g.strokeStyle = '#5b6af0'; g.lineWidth = 3; g.beginPath();
+  my.forEach(function(v, i){ i ? g.lineTo(X(i), Y(v)) : g.moveTo(X(i), Y(v)); }); g.stroke();
+  my.forEach(function(v, i){ g.fillStyle = '#5b6af0'; g.beginPath(); g.arc(X(i), Y(v), 6, 0, 7); g.fill();
+    g.strokeStyle = '#fff'; g.lineWidth = 2; g.stroke();
+    g.fillStyle = '#1a1a2e'; g.font = 'bold 13px sans-serif'; g.textAlign = 'center'; g.fillText(v+'점', X(i), Y(v)-12); });
+  g.fillStyle = '#6b6b83'; g.font = '12px sans-serif'; g.textAlign = 'center';
+  ex.forEach(function(e, i){ var l = e.name.length > 9 ? e.name.slice(0,9)+'…' : e.name; g.fillText(l, X(i), P.t+ch+20); });
+  var ly = H - 18; g.textAlign = 'left';
+  g.fillStyle = '#5b6af0'; g.fillRect(P.l, ly-6, 22, 3); g.fillStyle = '#1a1a2e'; g.fillText((d.isG?'NCS':'총점')+' (본인)', P.l+28, ly);
+  g.fillStyle = '#f97316'; g.fillRect(P.l+130, ly-6, 22, 3); g.fillStyle = '#1a1a2e'; g.fillText('반 평균', P.l+158, ly);
+  return await new Promise(function(res){ c.toBlob(function(b){ if (!b) return res(null);
+    var r = new FileReader(); r.onload = function(){ res(r.result); }; r.readAsArrayBuffer(b); }, 'image/png'); });
+}
+
+async function buildParentReport(d){
+  await loadDocxLib();
+  var X = window.docx;
+  var Document = X.Document, Packer = X.Packer, Paragraph = X.Paragraph, TextRun = X.TextRun, Table = X.Table, TableRow = X.TableRow,
+      TableCell = X.TableCell, AlignmentType = X.AlignmentType, BorderStyle = X.BorderStyle, WidthType = X.WidthType,
+      ShadingType = X.ShadingType, VerticalAlign = X.VerticalAlign, ImageRun = X.ImageRun;
+  var F = '맑은 고딕', isG = d.isG, ex = d.exams, name = d.name;
+  var C = { head:'1A1A2E', accent:'5B6AF0', sub:'4A4A6A', soft:'EEF0FF', green:'16A34A', red:'E11D48', orange:'EA580C', gray:'6B6B83', zebra:'F7F7FC', white:'FFFFFF' };
+  var trackLabel = isG ? '공기업 취업 과정' : '공무원 시험 준비 과정';
+  var k = kstNow(), today = k.getFullYear()+'년 '+(k.getMonth()+1)+'월 '+k.getDate()+'일';
+  var bd = function(col){ var b = { style:BorderStyle.SINGLE, size:4, color:col||'DDDDE8' }; return { top:b, bottom:b, left:b, right:b }; };
+  var nob = function(){ var b = { style:BorderStyle.NONE, size:0, color:'FFFFFF' }; return { top:b, bottom:b, left:b, right:b }; };
+  var sc = function(s, max){ var p = s/(max||100); return p >= .9 ? C.green : p >= .7 ? C.orange : C.red; };
+  var run = function(t, o){ o = o || {}; return new TextRun({ text:String(t), font:F, size:o.size||19, bold:!!o.bold, color:o.color }); };
+  var cell = function(t, o){ o = o || {};
+    return new TableCell({ width:{ size:o.w||2000, type:WidthType.DXA }, shading:{ fill:o.bg||C.white, type:ShadingType.CLEAR },
+      borders: bd(o.head ? '3A3A5A' : null), margins:{ top:80, bottom:80, left:120, right:120 }, verticalAlign:VerticalAlign.CENTER,
+      children:[ new Paragraph({ alignment: o.left ? AlignmentType.LEFT : AlignmentType.CENTER,
+        children:[ run(t, { bold:o.bold || o.head, color: o.head ? C.white : (o.color || '000000'), size:18 }) ] }) ] }); };
+  var head = function(t, w, bg){ return cell(t, { w:w, head:true, bg:bg||C.head }); };
+  var table = function(cols, rows){ var W = cols.reduce(function(a,c){ return a+c[1]; }, 0);
+    return new Table({ width:{ size:W, type:WidthType.DXA }, columnWidths: cols.map(function(c){ return c[1]; }),
+      rows: [ new TableRow({ children: cols.map(function(c){ return head(c[0], c[1]); }) }) ].concat(rows) }); };
+  var title = function(t){ return new Paragraph({ spacing:{ before:280, after:120 },
+    border:{ bottom:{ style:BorderStyle.SINGLE, size:6, color:C.accent, space:4 } },
+    children:[ run('▌ ', { color:C.accent, size:22, bold:true }), run(t, { color:C.head, size:22, bold:true }) ] }); };
+  var gap = function(b){ return new Paragraph({ spacing:{ before:b||120 } }); };
+  var fmtD = function(v){ return v === null ? '-' : (v >= 0 ? '+'+v.toFixed(1) : v.toFixed(1)); };
+  var dCol = function(v){ return v === null ? C.gray : v > 0 ? C.green : v < 0 ? C.red : C.gray; };
+  var avgOf = function(e){ var a = d.avg[e.name]; return a ? (isG ? a.avgKorean : a.avgTotal) : null; };
+  var scoreOf = function(e){ return isG ? e.korean : e.total; };
+
+  // 1. 머리
+  var header = new Table({ width:{ size:9360, type:WidthType.DXA }, columnWidths:[6560, 2800], rows:[ new TableRow({ children:[
+    new TableCell({ width:{ size:6560, type:WidthType.DXA }, shading:{ fill:C.head, type:ShadingType.CLEAR }, borders:nob(),
+      margins:{ top:140, bottom:140, left:220, right:120 }, children:[
+        new Paragraph({ children:[ run('장원급제반', { color:'A9B0F5', size:20 }) ] }),
+        new Paragraph({ children:[ run('학부모 면담 보고서', { color:C.white, size:36, bold:true }) ] }),
+        new Paragraph({ spacing:{ before:60 }, children:[ run('학생 학업 현황 분석  |  대외비', { color:'9A9AB0', size:16 }) ] }) ] }),
+    new TableCell({ width:{ size:2800, type:WidthType.DXA }, shading:{ fill:C.head, type:ShadingType.CLEAR }, borders:nob(),
+      margins:{ top:140, bottom:140, left:120, right:220 }, verticalAlign:VerticalAlign.CENTER, children:[
+        new Paragraph({ alignment:AlignmentType.RIGHT, children:[ run('작성일: '+today, { color:'C7CCFA', size:17 }) ] }),
+        new Paragraph({ alignment:AlignmentType.RIGHT, spacing:{ before:80 }, children:[ run('과정: '+trackLabel, { color:'9A9AB0', size:16 }) ] }) ] }) ] }) ] });
+
+  // 2. 기본 정보
+  var latest = ex.length ? ex[ex.length-1] : null, latestS = latest ? scoreOf(latest) : '-';
+  var info = new Table({ width:{ size:9360, type:WidthType.DXA }, columnWidths:[1800, 2900, 1800, 2860], rows:[
+    new TableRow({ children:[ head('학생 이름',1800), cell(name,{ w:2900, bold:true, left:true }), head('준비 과정',1800), cell(trackLabel,{ w:2860, left:true }) ] }),
+    new TableRow({ children:[ head('응시 횟수',1800), cell(ex.length+'회',{ w:2900, bold:true }), head('최근 성적',1800),
+      cell(latest ? latestS+'점 ('+(isG?'NCS':'총점')+')' : '없음', { w:2860, bold:true, color: latest ? sc(latestS, isG?100:300) : C.gray }) ] }) ] });
+
+  // 3. 전체 성적표
+  var cols1 = isG ? [['시험명',2800],['날짜',1400],['NCS 점수',1400],['반 평균',1400],['차이',1160],['반 석차',1200]]
+                  : [['시험명',2200],['날짜',1200],['국어',900],['영어',900],['한국사',900],['총점',960],['반 평균',1100],['차이',1100]];
+  var rows1 = ex.slice().reverse().map(function(e, i){ var bg = i%2 ? C.zebra : C.white, a = avgOf(e), df = a === null ? null : scoreOf(e) - a;
+    var c = isG ? [ cell(e.name,{ w:2800, bg:bg, left:true }), cell(e.date,{ w:1400, bg:bg }), cell(e.korean+'점',{ w:1400, bg:bg, bold:true, color:sc(e.korean) }),
+                    cell(a === null ? '-' : a+'점',{ w:1400, bg:bg, color:C.gray }), cell(fmtD(df),{ w:1160, bg:bg, bold:true, color:dCol(df) }), cell(e.rank ? e.rank+'등' : '-',{ w:1200, bg:bg }) ]
+                : [ cell(e.name,{ w:2200, bg:bg, left:true }), cell(e.date,{ w:1200, bg:bg }), cell(e.korean,{ w:900, bg:bg, bold:true, color:sc(e.korean) }),
+                    cell(e.english,{ w:900, bg:bg, bold:true, color:sc(e.english) }), cell(e.history,{ w:900, bg:bg, bold:true, color:sc(e.history) }),
+                    cell(e.total,{ w:960, bg:bg, bold:true, color:sc(e.total,300) }), cell(a === null ? '-' : a+'점',{ w:1100, bg:bg, color:C.gray }),
+                    cell(fmtD(df),{ w:1100, bg:bg, bold:true, color:dCol(df) }) ];
+    return new TableRow({ children:c }); });
+
+  // 4. 성장 추이
+  var growth = [];
+  if (ex.length >= 2){
+    var f0 = scoreOf(ex[0]), fl = scoreOf(ex[ex.length-1]), dd = fl - f0, m = isG ? 'NCS' : '총점';
+    growth.push(new Paragraph({ spacing:{ before:80, after:80 }, children:[
+      run('전체 응시 횟수: '), run(ex.length+'회', { bold:true }), run('   |   첫 시험 '+m+': '), run(f0+'점', { bold:true }),
+      run('   →   최근 시험 '+m+': '), run(fl+'점', { bold:true }), run('   ('),
+      run(dd > 0 ? '+'+dd+'점 향상' : dd < 0 ? dd+'점 하락' : '변화 없음', { bold:true, color: dd > 0 ? C.green : dd < 0 ? C.red : C.gray }), run(')') ] }));
+    var cols2 = isG ? [['시험명',3200],['날짜',1760],['NCS',1760],['반평균(NCS)',1760],['차이',880]]
+                    : [['시험명',2400],['날짜',1200],['국어',1100],['영어',1100],['한국사',1100],['총점',1060],['반평균(총점)',1200],['차이',1200]];
+    growth.push(table(cols2, ex.map(function(e, i){ var bg = i%2 ? C.zebra : C.white, a = avgOf(e), df = a === null ? null : scoreOf(e) - a;
+      return new TableRow({ children: isG
+        ? [ cell(e.name,{ w:3200, bg:bg, left:true }), cell(e.date,{ w:1760, bg:bg }), cell(e.korean+'점',{ w:1760, bg:bg, bold:true, color:sc(e.korean) }),
+            cell(a === null ? '-' : a+'점',{ w:1760, bg:bg, color:C.gray }), cell(fmtD(df),{ w:880, bg:bg, bold:true, color:dCol(df) }) ]
+        : [ cell(e.name,{ w:2400, bg:bg, left:true }), cell(e.date,{ w:1200, bg:bg }), cell(e.korean,{ w:1100, bg:bg, color:sc(e.korean) }),
+            cell(e.english,{ w:1100, bg:bg, color:sc(e.english) }), cell(e.history,{ w:1100, bg:bg, color:sc(e.history) }),
+            cell(e.total,{ w:1060, bg:bg, bold:true, color:sc(e.total,300) }), cell(a === null ? '-' : a,{ w:1200, bg:bg, color:C.gray }),
+            cell(fmtD(df),{ w:1200, bg:bg, bold:true, color:dCol(df) }) ] }); })));
+    var png = await reportChartPng(d);
+    if (png){ growth.push(gap(120)); growth.push(new Paragraph({ alignment:AlignmentType.CENTER,
+      children:[ new ImageRun({ data:png, transformation:{ width:580, height:220 }, type:'png' }) ] })); }
+  } else {
+    growth.push(new Paragraph({ children:[ run('성적 데이터가 1회 이하라 성장 추이를 분석할 수 없습니다.', { color:C.gray }) ] }));
+  }
+
+  // 5. 반 평균 대비(최근 시험)
+  var cmp = [];
+  if (latest){
+    var la = d.avg[latest.name] || null;
+    var subs = isG ? [{ l:'NCS', me:latest.korean, a: la ? la.avgKorean : null, mx:100 }]
+                   : [{ l:'국어', me:latest.korean, a: la ? la.avgKorean : null, mx:100 }, { l:'영어', me:latest.english, a: la ? la.avgEnglish : null, mx:100 },
+                      { l:'한국사', me:latest.history, a: la ? la.avgHistory : null, mx:100 }, { l:'총점', me:latest.total, a: la ? la.avgTotal : null, mx:300 }];
+    cmp.push(new Paragraph({ spacing:{ before:80, after:80 }, children:[ run('기준 시험: '+latest.name+'  ('+latest.date+')', { color:C.gray }) ] }));
+    // 합계가 본문 폭(9,746) 안에 들어야 한다 — 구앱은 10,920이라 오른쪽으로 삐져나갔다
+    cmp.push(table([['과목',1500],['내 점수',1700],['반 평균',1700],['차이',1400],['분석',3060]], subs.map(function(s, i){
+      var bg = i%2 ? C.zebra : C.white, df = s.a === null ? null : s.me - s.a;
+      var cm = df === null ? '비교 자료 없음' : df > 5 ? '반 평균보다 우위' : df > 0 ? '반 평균 소폭 상회' : df === 0 ? '반 평균과 같음' : df > -5 ? '반 평균 소폭 미달' : '반 평균보다 부족';
+      return new TableRow({ children:[ cell(s.l,{ w:1500, bg:bg, bold:true }), cell(s.me+'점',{ w:1700, bg:bg, bold:true, color:sc(s.me,s.mx) }),
+        cell(s.a === null ? '-' : s.a+'점',{ w:1700, bg:bg, color:C.gray }), cell(fmtD(df),{ w:1400, bg:bg, bold:true, color:dCol(df) }),
+        cell(cm,{ w:3060, bg:bg, left:true }) ] }); })));
+  }
+
+  // 6. 총평
+  var prev = ex.length >= 2 ? scoreOf(ex[ex.length-2]) : null, rd = prev === null || !latest ? null : latestS - prev;
+  var trend = rd === null ? '첫 응시' : rd > 0 ? '이전 시험보다 '+rd+'점 향상' : rd < 0 ? '이전 시험보다 '+Math.abs(rd)+'점 하락' : '이전 시험과 같은 점수';
+  var la2 = latest ? avgOf(latest) : null;
+  var lines = [ name+' 학생은 '+trackLabel+'에서 지금까지 모두 '+ex.length+'회의 모의고사에 응시했습니다.',
+    la2 !== null ? '최근 시험 반 평균은 '+la2+'점이며, 학생은 반 평균보다 '+Math.abs(latestS-la2).toFixed(1)+'점 '+(latestS >= la2 ? '높습니다.' : '낮습니다.')
+                 : (latest ? '최근 시험 '+(isG?'NCS':'총점')+'은 '+latestS+'점입니다.' : '아직 응시한 모의고사가 없습니다.'),
+    latest ? '최근 시험 결과는 '+trend+'한 것으로 나타났습니다.' : '',
+    '앞으로도 꾸준한 학습으로 목표를 이룰 수 있도록 함께 노력하겠습니다.' ].filter(Boolean);
+
+  var children = [ header, gap(200), title('학생 기본 정보'), gap(80), info, gap(200),
+    title('1. 전체 모의고사 성적'), gap(80), ex.length ? table(cols1, rows1) : new Paragraph({ children:[ run('등록된 성적이 없습니다.', { color:C.gray }) ] }), gap(200),
+    title('2. 점수 성장 추이 분석'), gap(80) ].concat(growth, [ gap(200), title('3. 반 평균 대비 비교 (최근 시험 기준)'), gap(80) ], cmp,
+    [ gap(200), title('4. 담임교사 총평'), gap(80) ],
+    lines.map(function(t){ return new Paragraph({ spacing:{ before:80, after:40 }, children:[ run(t) ] }); }), [ gap(240) ]);
+
+  var doc = new Document({ styles:{ default:{ document:{ run:{ font:F, size:20 } } } },
+    sections:[{ properties:{ page:{ size:{ width:11906, height:16838 }, margin:{ top:1134, bottom:1134, left:1080, right:1080 } } }, children:children }] });
+  return await Packer.toBlob(doc);
+}
+
+/* 만든 파일을 내보낸다 — 앱: 공유 시트(파일에 저장·카카오톡 등) / 웹: 내려받기 */
+async function saveBlobFile(blob, fname, title){
+  var P = window.Capacitor && window.Capacitor.Plugins;
+  if (isNativeApp() && P && P.Filesystem && P.Share){
+    var b64 = await new Promise(function(res, rej){ var r = new FileReader();
+      r.onload = function(){ res(String(r.result).split(',')[1]); }; r.onerror = rej; r.readAsDataURL(blob); });
+    var w = await P.Filesystem.writeFile({ path: fname, data: b64, directory: 'CACHE' });
+    try { await P.Share.share({ title: title, url: w.uri, dialogTitle: title }); } catch(e){ /* 공유 취소 */ }
+    return;
+  }
+  var url = URL.createObjectURL(blob), a = document.createElement('a');
+  a.href = url; a.download = fname; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(function(){ URL.revokeObjectURL(url); }, 10000);   // 바로 풀면 사파리에서 내려받기가 취소되는 일이 있다
+}
+
+async function makeParentReport(){
+  var mem = await FS.members(), m = mem.filter(function(x){ return x.name === EXAM_T.who; })[0];
+  if (!m) return;
+  showModal('<div class="modal-box"><div style="text-align:center;padding:26px 0"><div class="row-t">보고서를 만드는 중…</div>'+
+    '<div class="row-s" style="margin-top:6px">처음엔 Word 도구를 불러오느라 몇 초 걸려요</div></div></div>');
+  try {
+    var d = await examDataFor(m.name, m.track);
+    var blob = await buildParentReport(d);
+    closeModal();
+    await saveBlobFile(blob, m.name+'_학부모면담보고서_'+kstToday()+'.docx', m.name+' 학부모 면담 보고서');
+  } catch(e){
+    closeModal();
+    showModal('<div class="modal-box"><div style="text-align:center;padding:12px 0"><div style="font-weight:800">보고서를 만들지 못했습니다</div>'+
+      '<div class="row-s" style="margin-top:6px">'+escapeHtml(String(e && e.message || e))+'</div></div><button class="btn" onclick="closeModal()">확인</button></div>');
+  }
+}
+
 /* ═══ 하위 메뉴 (구앱과 같은 구성) ═════════════════════════
    주 메뉴는 화면 아래, 하위 메뉴는 화면 위(헤더 안)에 둔다.
    구앱 하위 탭:
@@ -2303,7 +2511,8 @@ async function renderExamManage(v){
   else if (an === 'growth')  body = viewGrowth(d);
   else if (an === 'compare') body = viewCompare(d);
   else                       body = await viewLegacy(d);
-  v.innerHTML = head + segHtml([['scores','성적'],['growth','성장'],['compare','반비교'],['legacy','선배비교']], an, 'examAn') + body;
+  v.innerHTML = head + segHtml([['scores','성적'],['growth','성장'],['compare','반비교'],['legacy','선배비교']], an, 'examAn') + body +
+    '<button class="btn btn-outline" style="margin-top:18px" onclick="makeParentReport()">학부모 면담 보고서 (Word)</button>';
   fillIcoSlots(v);
 }
 
@@ -4580,7 +4789,9 @@ async function fillTeacherHome(){
   set('thPresent', cnt.출석 + ' / ' + mem.length + '명');
   set('thLate',   cnt.지각 + '명');
   set('thAbsent', cnt.결석 + '명');
-  document.getElementById('thRoster').innerHTML = rows.join('');
+  var rosterEl = document.getElementById('thRoster');   // 기다리는 사이 다른 탭으로 갔을 수 있다
+  if (!rosterEl) return;
+  rosterEl.innerHTML = rows.join('');
 
   // 이번 주 상담 — 교사만 읽힌다. 실패하면 '–'로 둔다.
   try {
