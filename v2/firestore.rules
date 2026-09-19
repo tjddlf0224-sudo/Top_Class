@@ -402,6 +402,15 @@ service cloud.firestore {
     match /{coll}/{docId} {
       allow read: if coll in ['teachers', 'examScores',
                               'examHistory_공기업', 'examHistory_공무원'];
+      // 2026-09-19 v2 성적 등록 — 교사만. 문서 모양은 GAS와 같게 강제한다.
+      // ⚠️ 전환 전에는 GAS 새벽 동기화가 시트에 없는 문서를 지운다(앱 화면에서 등록을 막아 둠).
+      allow create, update: if coll == 'examScores' && isTeacher()
+        && request.resource.data.keys().hasOnly(['examName','examDate','studentName','isAvg',
+                                                 'korean','english','history','total','rank'])
+        && request.resource.data.examName is string
+        && request.resource.data.studentName is string
+        && request.resource.data.isAvg is bool;
+      allow delete: if coll == 'examScores' && isTeacher();
     }
 
     // ── 출결 (v2 전용, 구앱은 안 읽는다) ─────────────────

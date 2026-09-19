@@ -98,17 +98,48 @@ input::placeholder{color:#b4b4c8;}
 .dot-badge{position:absolute;top:2px;right:2px;min-width:16px;height:16px;border-radius:8px;
   background:var(--rose);color:#fff;font-size:0.6rem;font-weight:700;line-height:16px;text-align:center;padding:0 4px;}
 
-.tab-bar{display:flex;}
-.tab-btn{flex:1;min-width:0;padding:11px 2px 9px;background:transparent;border:none;
-  border-bottom:2.5px solid transparent;font-family:inherit;font-size:0.7rem;font-weight:500;
+/* 주 메뉴 — 화면 아래에 고정(엄지가 닿는 곳) */
+.tab-bar{position:fixed;left:50%;transform:translateX(-50%);bottom:0;width:100%;max-width:430px;
+  display:flex;background:rgba(255,255,255,.96);-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);
+  border-top:1px solid var(--line);padding-bottom:var(--safe-bottom);z-index:120;}
+@media(min-width:600px){.tab-bar{max-width:600px;}}
+.tab-btn{flex:1;min-width:0;padding:9px 2px 8px;background:transparent;border:none;
+  font-family:inherit;font-size:0.68rem;font-weight:500;
   color:var(--ink-mute);display:flex;flex-direction:column;align-items:center;gap:3px;cursor:pointer;
-  transition:color .15s,border-color .15s;}
+  transition:color .15s;}
 .tab-btn .ico{transition:transform .15s;}
-.tab-btn.active{color:var(--accent);border-bottom-color:var(--accent);font-weight:600;}
-.tab-btn.active .ico{transform:scale(1.08) translateY(-1px);}
+.tab-btn.active{color:var(--accent);font-weight:700;}
+.tab-btn.active .ico{transform:scale(1.1) translateY(-1px);}
+/* 하위 메뉴 — 화면 위(헤더 안)에 */
+.sub-bar{display:flex;gap:6px;overflow-x:auto;padding:0 0 12px;scrollbar-width:none;}
+.sub-bar::-webkit-scrollbar{display:none;}
+.sub-btn{flex:1 0 auto;padding:8px 12px;border:none;border-radius:999px;background:var(--line-soft);
+  color:var(--ink-soft);font-family:inherit;font-size:0.8rem;font-weight:600;cursor:pointer;white-space:nowrap;
+  transition:background .15s,color .15s;}
+.sub-btn.on{background:var(--accent);color:#fff;}
+/* 화면 안의 작은 전환(예: 역대 분포 / 기수별) */
+.seg{display:flex;background:var(--line-soft);border-radius:10px;padding:3px;gap:3px;margin:14px 0 4px;}
+.seg button{flex:1;padding:8px 6px;border:none;border-radius:8px;background:transparent;color:var(--ink-soft);
+  font-family:inherit;font-size:0.8rem;font-weight:600;cursor:pointer;}
+.seg button.on{background:var(--surface);color:var(--ink);box-shadow:0 1px 4px rgba(26,26,46,.08);}
+.tbl{width:100%;border-collapse:collapse;font-size:0.8rem;}
+.tbl th{font-weight:600;color:var(--ink-mute);text-align:center;padding:8px 4px;border-bottom:1px solid var(--line);}
+.tbl td{text-align:center;padding:8px 4px;border-bottom:1px solid var(--line-soft);}
+.tbl td:first-child,.tbl th:first-child{text-align:left;}
+.cal{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;}
+.cal-h{text-align:center;font-size:0.7rem;font-weight:600;color:var(--ink-mute);padding:4px 0;}
+.cal-d{min-height:46px;border-radius:9px;background:var(--line-soft);padding:4px 3px;font-size:0.76rem;
+  display:flex;flex-direction:column;align-items:center;gap:2px;cursor:pointer;border:2px solid transparent;overflow:hidden;}
+.cal-d.x{background:transparent;cursor:default;}
+.cal-d.done{background:var(--green-soft);}
+.cal-d.today{border-color:var(--accent);}
+.cal-d.late{border-color:var(--orange);}
+.cal-d.absent{border-color:var(--rose);}
+.cal-d.pick{box-shadow:0 0 0 2px var(--ink) inset;}
+.cal-n{font-size:0.62rem;color:#16a34a;font-weight:700;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 
 /* ── 본문 ─────────────────────────────────── */
-main{padding:6px 18px calc(32px + var(--safe-bottom));}
+main{padding:6px 18px calc(96px + var(--safe-bottom));}
 .sec-label{font-size:0.74rem;font-weight:700;color:var(--ink-mute);letter-spacing:.3px;
   margin:26px 2px 10px;}
 
@@ -246,23 +277,22 @@ main{padding:6px 18px calc(32px + var(--safe-bottom));}
         </div>
       </div>
       <div style="display:flex;gap:2px;">
-        <button class="icon-btn" id="btnReq" style="display:none">
-          <span class="ico-slot" data-ico="memo" data-sz="21"></span><span class="dot-badge">2</span>
-        </button>
-        <button class="icon-btn"><span class="ico-slot" data-ico="bell" data-sz="21"></span></button>
+        <!-- 알림 켜기/끄기(학생만 — 등교·방과후 알림은 학생용이다) -->
+        <button class="icon-btn" id="btnBell" onclick="toggleNotis()" aria-label="알림"><span class="ico-slot" data-ico="bell" data-sz="21"></span></button>
         <button class="icon-btn" onclick="logout()"><span class="ico-slot" data-ico="exit" data-sz="21"></span></button>
       </div>
     </div>
-    <div class="tab-bar" id="tabBar"></div>
+    <div class="sub-bar hidden" id="subBar"></div>
   </div>
   <main id="view"></main>
+  <nav class="tab-bar" id="tabBar"></nav>
 </div>
 
 
 <!-- ═══ Firebase (조회·체크인 전부 여기로. GAS 안 거침) ═══ -->
 <script type="module">
 import { initializeApp } from "./vendor/firebase/firebase-app.js";
-import { getFirestore, doc, getDoc, setDoc, updateDoc, addDoc, deleteDoc, collection, getDocs, query, where, serverTimestamp }
+import { getFirestore, doc, getDoc, setDoc, updateDoc, addDoc, deleteDoc, collection, getDocs, query, where, serverTimestamp, writeBatch }
   from "./vendor/firebase/firebase-firestore.js";
 import { initializeAuth, onAuthStateChanged, signInAnonymously, signInWithEmailAndPassword,
          signOut, browserLocalPersistence, indexedDBLocalPersistence }
@@ -567,6 +597,57 @@ window.FS = {
     return list.sort((a,b) => b.date.localeCompare(a.date));
   },
 
+  /* 역대 선배 성적 통계 — 구앱 fsGetLegacyStats와 같은 계산.
+     examHistory_공무원/공기업: cohort, examName, name, korean, english, history, total, passed */
+  async legacyStats(track){
+    const coll = (track === '공기업') ? 'examHistory_공기업' : 'examHistory_공무원';
+    const snap = await getDocs(collection(db, coll));
+    const raw = {};
+    snap.forEach(d => { const r = d.data();
+      if (!r.examName || !r.cohort || !r.name) return;
+      ((raw[r.examName] = raw[r.examName] || {})[r.cohort] = raw[r.examName][r.cohort] || []).push({
+        korean:Number(r.korean)||0, english:Number(r.english)||0, history:Number(r.history)||0,
+        total:Number(r.total)||0, passed: r.passed === true }); });
+    const examNames = Object.keys(raw).sort(), dist = {}, cohorts = {};
+    const r1 = x => Math.round(x * 10) / 10;
+    examNames.forEach(en => {
+      const cm = raw[en], all = [], pass = [];
+      Object.values(cm).forEach(rows => rows.forEach(r => { all.push(r); if (r.passed) pass.push(r); }));
+      const stat = k => {
+        if (!all.length) return null;
+        const vals = all.map(r => r[k] || 0);
+        return { min: Math.min(...vals), max: Math.max(...vals),
+                 avg: r1(vals.reduce((a,b)=>a+b,0) / vals.length), count: vals.length, allScores: vals,
+                 passAvg: pass.length ? r1(pass.reduce((a,r)=>a+(r[k]||0),0) / pass.length) : null,
+                 passCount: pass.length };
+      };
+      dist[en] = {}; ['korean','english','history','total'].forEach(k => { dist[en][k] = stat(k); });
+      cohorts[en] = Object.keys(cm).sort().map(c => { const rows = cm[c];
+        const avg = k => r1(rows.reduce((a,r)=>a+(r[k]||0),0) / rows.length);
+        return { cohort:c, avgKorean:avg('korean'), avgEnglish:avg('english'), avgHistory:avg('history'),
+                 avgTotal:avg('total'), count:rows.length, passCount:rows.filter(r=>r.passed).length }; });
+    });
+    return { examNames, dist, cohorts };
+  },
+
+  /* 교사: 모의고사 성적 등록 — 한 시험의 학생 점수 + 반평균(__avg__/__avgG__)을 한 번에.
+     문서 ID는 GAS(syncExamScoresAfterSave)와 같게 만들어 구앱과 같은 문서를 쓴다.
+     ⚠️ GAS의 새벽 동기화가 살아 있는 동안에는 시트에 없는 문서를 지운다 → 화면에서 전환 전 등록을 막는다. */
+  async saveExamScores(examName, examDate, scores, classAvg, classAvgG){
+    await _authReady;
+    const idOf = who => (examName + '_' + examDate + '_' + who).replace(/[\/\s#\[\]\*\?]/g, '_');
+    const b = writeBatch(db);
+    scores.forEach(x => b.set(doc(db,'examScores', idOf(x.name)), {
+      examName, examDate, studentName:x.name, isAvg:false,
+      korean:x.korean||0, english:x.english||0, history:x.history||0, total:x.total||0, rank:x.rank||0 }));
+    const avgDoc = (who, a) => b.set(doc(db,'examScores', idOf(who)), {
+      examName, examDate, studentName:who, isAvg:true,
+      korean:a.avgKorean||0, english:a.avgEnglish||0, history:a.avgHistory||0, total:a.avgTotal||0, rank:0 });
+    if (classAvg)  avgDoc('__avg__', classAvg);
+    if (classAvgG) avgDoc('__avgG__', classAvgG);
+    await b.commit();
+  },
+
   /* 최근 N일치 등교기록·정정을 한 번에 — 날짜별로 조회하면 수십 번 읽는다 */
   async amSince(fromDs){
     const from = new Date(fromDs + 'T00:00:00+09:00');
@@ -789,7 +870,7 @@ window.FS = {
    - 로그인·로그아웃 때도 비운다(FS.__clear) — 사람이 바뀌면 볼 수 있는 자료가 다르다.
    ⚠️ 돌려주는 객체는 캐시와 같은 것이다. 받은 쪽에서 고치지 말 것. */
 (function(){
-  const READ = new Set(['schedule','memberById','attendanceOf','members','attendanceAll','freezeOf',
+  const READ = new Set(['schedule','memberById','attendanceOf','members','attendanceAll','freezeOf','legacyStats',
     'marketItems','marketBuys','examScores','amSince','calendarOff','counselAll','amCheckIns',
     'amOverrides','amCheckInsOf','amOverridesOf','openingOf','ledgerOf','plannerOf','checkIns']);
   const PASS = new Set(['myBinding']);          // 기기-학생 연결 확인은 매번 서버에 묻는다
@@ -886,12 +967,712 @@ var TABS={
            ['counsel','상담','chat'],['exam','성적','chart']]
 };
 
+/* ═══ 하위 메뉴 (구앱과 같은 구성) ═════════════════════════
+   주 메뉴는 화면 아래, 하위 메뉴는 화면 위(헤더 안)에 둔다.
+   구앱 하위 탭:
+     성적(학생)  성적 · 성장 · 반비교 · 선배비교(역대 분포 / 기수별 비교)
+     성적(교사)  성적 등록 · 성적 관리(학생 선택 → 성적 · 성장 · 반비교 · 선배비교)
+     상담(교사)  일별 조회 · 학생 명단 · 학생 달력 · 통계 */
+var SUBTABS = {
+  student:{ exam:[['scores','성적'],['growth','성장'],['compare','반비교'],['legacy','선배비교']] },
+  teacher:{ exam:[['input','성적 등록'],['manage','성적 관리']],
+            counsel:[['daily','일별 조회'],['list','학생 명단'],['cal','학생 달력'],['stats','통계']] }
+};
+// 처음 들어갈 때 고를 하위 탭(없으면 첫 번째)
+var SUBDEF = { teacher:{ exam:'manage' } };
+var SUB = {};
+
+function subList(){ return (SUBTABS[ROLE]||{})[TAB] || null; }
+function subOf(){
+  var l = subList(); if (!l) return null;
+  var k = ROLE+':'+TAB, cur = SUB[k];
+  if (!cur || !l.some(function(x){ return x[0]===cur; }))
+    cur = SUB[k] = ((SUBDEF[ROLE]||{})[TAB]) || l[0][0];
+  return cur;
+}
+function renderSubBar(){
+  var el = document.getElementById('subBar'); if (!el) return;
+  var l = subList();
+  if (!l){ el.classList.add('hidden'); el.innerHTML=''; return; }
+  var cur = subOf();
+  el.classList.remove('hidden');
+  el.innerHTML = l.map(function(x){
+    return '<button class="sub-btn'+(x[0]===cur?' on':'')+'" onclick="goSub(\''+x[0]+'\')">'+x[1]+'</button>';
+  }).join('');
+}
+function goSub(k){ SUB[ROLE+':'+TAB]=k; renderSubBar(); renderView(); window.scrollTo(0,0); }
+
+/* 작은 전환(세그먼트) 한 줄 */
+function segHtml(items, cur, fn){
+  return '<div class="seg">'+items.map(function(x){
+    return '<button class="'+(x[0]===cur?'on':'')+'" onclick="'+fn+'(\''+x[0]+'\')">'+x[1]+'</button>';
+  }).join('')+'</div>';
+}
+
+/* ═══ 성적 분석 공통 ═══════════════════════════════════
+   구앱 fsGetMyExamScores와 같은 모양으로 만든다: exams(날짜 오름차순) + 반평균.
+   반평균은 구앱처럼 트랙으로 가른다 — 공기업은 __avgG__(NCS)만, 그 외는 __avg__만. */
+async function examDataFor(name, track){
+  var list = await FS.examScores();                 // 날짜 내림차순, 캐시 공유 — 고치지 말 것
+  var isG = track === '공기업';
+  var exams = [], avg = {};
+  for (var i = list.length-1; i >= 0; i--){
+    var e = list[i];
+    var r = e.rows.filter(function(x){ return x.name === name; })[0];
+    var a = isG ? e.avgG : e.avg;
+    if (a) avg[e.name] = { avgKorean:a.korean, avgEnglish:a.english, avgHistory:a.history, avgTotal:a.total };
+    if (r) exams.push({ name:e.name, date:e.date, korean:r.korean, english:r.english, history:r.history,
+                        total: r.total || (r.korean+r.english+r.history), rank:r.rank||0 });
+  }
+  return { exams:exams, avg:avg, isG:isG, name:name, track:track };
+}
+var normEx = function(n){ return String(n||'').replace(/\s+/g,' ').trim(); };
+function findMyExam(d, examName){
+  var n = normEx(examName);
+  return d.exams.filter(function(e){ return normEx(e.name) === n; })[0]
+      || d.exams.filter(function(e){ var m=normEx(e.name); return m.indexOf(n)>=0 || n.indexOf(m)>=0; })[0]
+      || null;
+}
+function diffTxt(d){ return (d>0?'+':'')+d; }
+function diffColor(d){ return d>0 ? '#16a34a' : d<0 ? 'var(--rose)' : 'var(--ink-mute)'; }
+
+/* ── 성장 — 선 그래프(외부 라이브러리 없이 SVG) ── */
+var GROWTH_SHOW = { total:true, korean:true, english:true, history:true };
+function toggleGrowth(k){ GROWTH_SHOW[k] = !GROWTH_SHOW[k]; renderView(); }
+
+function lineChartSVG(labels, series, right){
+  var W=340, H=210, PL=28, PR=right?34:10, PT=12, PB=30, cw=W-PL-PR, ch=H-PT-PB, n=labels.length;
+  var X = function(i){ return PL + (n<=1 ? cw/2 : cw*i/(n-1)); };
+  var Y = function(v,max){ return PT + ch - ch*Math.max(0,Math.min(v,max))/max; };
+  var g = '';
+  [0,25,50,75,100].forEach(function(t){
+    var y = Y(t,100);
+    g += '<line x1="'+PL+'" x2="'+(W-PR)+'" y1="'+y+'" y2="'+y+'" stroke="#eeeef5"/>'+
+         '<text x="'+(PL-5)+'" y="'+(y+3)+'" font-size="9" fill="#9a9ab0" text-anchor="end">'+t+'</text>';
+    if (right) g += '<text x="'+(W-PR+5)+'" y="'+(y+3)+'" font-size="9" fill="#9a9ab0">'+(t*3)+'</text>';
+  });
+  var step = Math.max(1, Math.ceil(n/6));
+  labels.forEach(function(l,i){
+    if (i % step && i !== n-1) return;
+    g += '<text x="'+X(i)+'" y="'+(H-12)+'" font-size="9" fill="#9a9ab0" text-anchor="middle">'+escapeHtml(l)+'</text>';
+  });
+  series.forEach(function(s){
+    var max = s.right ? 300 : 100;
+    var pts = s.data.map(function(v,i){ return X(i)+','+Y(v,max); }).join(' ');
+    g += '<polyline points="'+pts+'" fill="none" stroke="'+s.color+'" stroke-width="'+(s.bold?2.6:1.8)+'"'+
+         (s.dash?' stroke-dasharray="5 3"':'')+' stroke-linejoin="round" stroke-linecap="round"/>';
+    s.data.forEach(function(v,i){
+      g += '<circle cx="'+X(i)+'" cy="'+Y(v,max)+'" r="'+(s.bold?3.6:2.8)+'" fill="'+s.color+'"/>';
+    });
+    var li = s.data.length-1;
+    if (li >= 0) g += '<text x="'+X(li)+'" y="'+(Y(s.data[li],max)-7)+'" font-size="9.5" font-weight="700" fill="'+s.color+
+                      '" text-anchor="middle">'+s.data[li]+'</text>';
+  });
+  return '<svg viewBox="0 0 '+W+' '+H+'" style="width:100%;height:auto;display:block">'+g+'</svg>';
+}
+
+function viewGrowth(d){
+  if (!d.exams.length) return emptyBox('chart','아직 등록된 성적이 없어요');
+  var labels = d.exams.map(function(e){ return e.date.slice(5); });
+  var series = [], S = GROWTH_SHOW;
+  if (d.isG){
+    series.push({ label:'NCS', color:'#5b6af0', bold:true, data:d.exams.map(function(e){ return e.korean; }) });
+  } else {
+    if (S.total)   series.push({ label:'총점', color:'#1a1a2e', bold:true, right:true, data:d.exams.map(function(e){ return e.total; }) });
+    if (S.korean)  series.push({ label:'국어', color:'#5b6af0', dash:true, data:d.exams.map(function(e){ return e.korean; }) });
+    if (S.english) series.push({ label:'영어', color:'#16a34a', dash:true, data:d.exams.map(function(e){ return e.english; }) });
+    if (S.history) series.push({ label:'한국사', color:'#f97316', dash:true, data:d.exams.map(function(e){ return e.history; }) });
+  }
+  var html = '';
+  if (!d.isG){
+    html += '<div class="seg">'+[['total','총점'],['korean','국어'],['english','영어'],['history','한국사']].map(function(x){
+      return '<button class="'+(S[x[0]]?'on':'')+'" onclick="toggleGrowth(\''+x[0]+'\')">'+(S[x[0]]?'✓ ':'')+x[1]+'</button>';
+    }).join('')+'</div>';
+  } else {
+    html += '<div class="sec-label">NCS 점수 성장 곡선</div>';
+  }
+  html += '<div class="card pad" style="margin-top:10px">'+lineChartSVG(labels, series, !d.isG && S.total)+
+    '<div style="display:flex;flex-wrap:wrap;gap:10px;justify-content:center;margin-top:6px;font-size:.72rem;color:var(--ink-soft)">'+
+    series.map(function(s){ return '<span><span style="display:inline-block;width:14px;height:3px;border-radius:2px;background:'+s.color+
+      ';vertical-align:middle;margin-right:4px"></span>'+s.label+'</span>'; }).join('')+'</div></div>';
+  // 숫자로도 — 폰에서 점 위를 누를 수 없으니 표로 함께 보여준다
+  html += '<div class="sec-label">시험별 점수</div><div class="card pad" style="overflow-x:auto"><table class="tbl"><thead><tr><th>시험</th>'+
+    (d.isG ? '<th>NCS</th>' : '<th>국</th><th>영</th><th>한</th><th>총점</th>')+'</tr></thead><tbody>'+
+    d.exams.slice().reverse().map(function(e){
+      return '<tr><td>'+escapeHtml(e.name)+'<div style="font-size:.68rem;color:var(--ink-mute)">'+e.date+'</div></td>'+
+        (d.isG ? '<td><b>'+e.korean+'</b></td>'
+               : '<td>'+e.korean+'</td><td>'+e.english+'</td><td>'+e.history+'</td><td><b>'+e.total+'</b></td>')+'</tr>';
+    }).join('')+'</tbody></table></div>';
+  return html;
+}
+
+/* ── 반비교 ── */
+function viewCompare(d){
+  if (!d.exams.length) return emptyBox('chart','등록된 성적이 없어요');
+  var latest = d.exams[d.exams.length-1], la = d.avg[latest.name] || null;
+  var subs = d.isG
+    ? [{ label:'NCS', me:latest.korean, avg:la?la.avgKorean:null, max:100 }]
+    : [{ label:'국어', me:latest.korean, avg:la?la.avgKorean:null, max:100 },
+       { label:'영어', me:latest.english, avg:la?la.avgEnglish:null, max:100 },
+       { label:'한국사', me:latest.history, avg:la?la.avgHistory:null, max:100 },
+       { label:'총점', me:latest.total, avg:la?la.avgTotal:null, max:300 }];
+  var html = '<div class="sec-label">최근 시험 · '+escapeHtml(latest.name)+'</div><div class="card pad">';
+  subs.forEach(function(s, i){
+    var pct = Math.round(s.me/s.max*100), apct = s.avg!==null ? Math.round(s.avg/s.max*100) : null;
+    var df = s.avg!==null ? Math.round((s.me-s.avg)*10)/10 : null;
+    html += '<div style="'+(i?'margin-top:18px':'')+'">'+
+      '<div style="display:flex;justify-content:space-between;align-items:baseline;font-size:.84rem">'+
+        '<b>'+s.label+'</b>'+
+        '<span style="color:var(--ink-mute);font-size:.78rem">내 점수 <b style="color:var(--ink)">'+s.me+'</b>'+
+        (s.avg!==null ? ' · 반평균 '+s.avg+' <b style="color:'+diffColor(df)+'">('+diffTxt(df)+')</b>' : ' · 반평균 없음')+'</span></div>'+
+      '<div style="position:relative;height:10px;background:var(--line-soft);border-radius:6px;margin-top:8px">'+
+        '<div style="width:'+pct+'%;height:100%;background:var(--accent);border-radius:6px"></div>'+
+        (apct!==null ? '<div style="position:absolute;top:-4px;bottom:-4px;left:'+apct+'%;width:3px;background:var(--orange);border-radius:2px;transform:translateX(-50%)"></div>' : '')+
+      '</div></div>';
+  });
+  html += '<div style="font-size:.7rem;color:var(--ink-mute);margin-top:14px"><span style="display:inline-block;width:10px;height:8px;background:var(--accent);border-radius:2px"></span> 내 점수 &nbsp; '+
+          '<span style="display:inline-block;width:3px;height:10px;background:var(--orange);vertical-align:middle"></span> 반평균</div></div>';
+  var avgN = Object.keys(d.avg).length;
+  if (d.exams.length > 1 && avgN){
+    html += '<div class="sec-label">'+(d.isG?'시험별 NCS 비교':'시험별 총점 비교')+'</div><div class="card pad" style="overflow-x:auto">'+
+      '<table class="tbl"><thead><tr><th>시험</th><th>'+(d.isG?'내 NCS':'내 총점')+'</th><th>반평균</th><th>차이</th></tr></thead><tbody>';
+    d.exams.slice().reverse().forEach(function(e){
+      var me = d.isG ? e.korean : e.total, a = d.avg[e.name];
+      var ca = a ? (d.isG ? a.avgKorean : a.avgTotal) : null;
+      var df = ca!==null ? Math.round((me-ca)*10)/10 : null;
+      html += '<tr><td>'+escapeHtml(e.name.replace('모의고사','').trim())+'</td><td><b>'+me+'</b></td>'+
+        '<td style="color:var(--ink-mute)">'+(ca!==null?ca:'-')+'</td>'+
+        '<td style="font-weight:700;color:'+(df!==null?diffColor(df):'var(--ink-mute)')+'">'+(df!==null?diffTxt(df):'-')+'</td></tr>';
+    });
+    html += '</tbody></table></div>';
+  }
+  return html;
+}
+
+/* ── 선배비교 (역대 분포 / 기수별 비교) ── */
+var LEG = { mode:'dist', exam:{} };                 // exam: 학생 이름별로 고른 시험을 기억
+function legMode(m){ LEG.mode = m; renderView(); }
+function legPick(who, v){ LEG.exam[who] = v; renderView(); }
+
+async function viewLegacy(d){
+  var L = await FS.legacyStats(d.isG ? '공기업' : '공무원');
+  var html = segHtml([['dist','역대 분포'],['cohort','기수별 비교']], LEG.mode, 'legMode');
+  if (!L.examNames.length) return html + emptyBox('chart','등록된 역대 데이터가 없어요');
+  var pick = LEG.exam[d.name];
+  if (!pick || L.examNames.indexOf(pick) < 0){
+    pick = '';
+    if (d.exams.length){
+      var latest = normEx(d.exams[d.exams.length-1].name);
+      pick = L.examNames.filter(function(n){ return normEx(n) === latest; })[0] || '';
+    }
+  }
+  html += '<div class="card pad" style="margin-top:10px"><label style="display:block;font-size:.78rem;font-weight:600;color:var(--ink-soft);margin-bottom:6px">시험</label>'+
+    '<select onchange="legPick(\''+escapeHtml(d.name)+'\', this.value)"><option value="">— 시험을 고르세요 —</option>'+
+    L.examNames.map(function(n){ return '<option'+(n===pick?' selected':'')+'>'+escapeHtml(n)+'</option>'; }).join('')+
+    '</select></div>';
+  if (!pick) return html + emptyBox('chart','시험을 고르면 역대 기록과 비교해 보여줘요');
+  var me = findMyExam(d, pick);
+  if (LEG.mode === 'dist') html += legacyDist(d, L.dist[pick], me);
+  else                     html += legacyCohort(d, L.cohorts[pick], me, pick);
+  return html;
+}
+
+function legacyDist(d, dist, me){
+  if (!dist) return emptyBox('chart','이 시험의 역대 데이터가 없어요');
+  var subs = d.isG
+    ? [{ label:'NCS', key:'korean', max:100, my: me?me.korean:null }]
+    : [{ label:'국어', key:'korean', max:100, my: me?me.korean:null },
+       { label:'영어', key:'english', max:100, my: me?me.english:null },
+       { label:'한국사', key:'history', max:100, my: me?me.history:null },
+       { label:'총점', key:'total', max:300, my: me?me.total:null }];
+  var html = '';
+  if (!me) html += '<div class="notice" style="color:var(--orange)">'+ic('warn',15)+'<span>이 시험의 내 점수가 없어 내 위치는 표시되지 않아요</span></div>';
+  html += '<div class="card pad">';
+  subs.forEach(function(s, i){
+    var x = dist[s.key]; if (!x) return;
+    var P = function(v){ return v/s.max*100; };
+    var df = s.my!==null ? Math.round((s.my-x.avg)*10)/10 : null;
+    var pd = (x.passAvg!==null && s.my!==null) ? Math.round((s.my-x.passAvg)*10)/10 : null;
+    var top = '';
+    if (x.allScores && s.my!==null){
+      var below = x.allScores.filter(function(v){ return v < s.my; }).length;
+      top = '<span class="chip" style="margin-left:6px">상위 '+(100-Math.round(below/x.allScores.length*100))+'%</span>';
+    }
+    html += '<div style="'+(i?'margin-top:22px':'')+'">'+
+      '<div style="display:flex;justify-content:space-between;align-items:center"><b style="font-size:.9rem">'+s.label+'</b>'+
+        '<span style="font-size:.72rem;color:var(--ink-mute)">역대 '+x.count+'명</span></div>'+
+      '<div style="font-size:.78rem;margin-top:4px">내 점수 <b>'+(s.my!==null?s.my:'-')+'</b>'+
+        (df!==null?' <span style="color:'+diffColor(df)+'">(역대평균 '+diffTxt(df)+')</span>':'')+top+'</div>'+
+      (x.passAvg!==null
+        ? '<div style="font-size:.76rem;color:var(--sky);margin-top:2px">합격자 평균 <b>'+x.passAvg+'</b>'+
+          (pd!==null?' <span style="color:'+diffColor(pd)+'">('+diffTxt(pd)+')</span>':'')+' · '+x.passCount+'명 합격</div>'
+        : '<div style="font-size:.72rem;color:var(--ink-mute);margin-top:2px">합격자 데이터 없음</div>')+
+      '<div style="position:relative;height:24px;background:var(--line-soft);border-radius:6px;margin-top:8px">'+
+        '<div style="position:absolute;left:'+P(x.min)+'%;width:'+(P(x.max)-P(x.min))+'%;height:100%;background:#d9dcfb;border-radius:6px"></div>'+
+        '<div style="position:absolute;left:'+P(x.avg)+'%;top:0;bottom:0;width:3px;background:#1a1a2e;transform:translateX(-50%)"></div>'+
+        (x.passAvg!==null ? '<div style="position:absolute;left:'+P(x.passAvg)+'%;top:0;bottom:0;width:3px;transform:translateX(-50%);'+
+          'background:repeating-linear-gradient(to bottom,var(--sky) 0 4px,transparent 4px 7px)"></div>' : '')+
+        (s.my!==null ? '<div style="position:absolute;left:'+P(s.my)+'%;top:50%;width:16px;height:16px;border-radius:50%;background:var(--orange);'+
+          'border:3px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.25);transform:translate(-50%,-50%)"></div>' : '')+
+      '</div>'+
+      '<div style="display:flex;justify-content:space-between;font-size:.7rem;color:var(--ink-mute);margin-top:4px">'+
+        '<span>최저 '+x.min+'</span><b style="color:var(--ink)">역대평균 '+x.avg+'</b><span>최고 '+x.max+'</span></div></div>';
+  });
+  html += '<div style="font-size:.7rem;color:var(--ink-mute);margin-top:16px;line-height:1.8">'+
+    '<span style="display:inline-block;width:14px;height:8px;background:#d9dcfb;border-radius:2px"></span> 역대 범위 &nbsp; '+
+    '<span style="display:inline-block;width:3px;height:10px;background:#1a1a2e;vertical-align:middle"></span> 역대 평균 &nbsp; '+
+    '<span style="display:inline-block;width:3px;height:10px;background:var(--sky);vertical-align:middle"></span> 합격자 평균 &nbsp; '+
+    '<span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--orange)"></span> 내 점수</div></div>';
+  return html;
+}
+
+function legacyCohort(d, cohorts, me, examName){
+  if (!cohorts || !cohorts.length) return emptyBox('chart','이 시험의 역대 기수 데이터가 없어요');
+  var key = d.isG ? 'avgKorean' : 'avgTotal', max = d.isG ? 100 : 300;
+  var myScore = me ? (d.isG ? me.korean : me.total) : null;
+  var cur = d.avg[examName] || null;
+  var all = cohorts.slice();
+  if (cur) all.push({ cohort:'현재 기수', avgKorean:cur.avgKorean, avgEnglish:cur.avgEnglish,
+                      avgHistory:cur.avgHistory, avgTotal:cur.avgTotal, isCur:true });
+  var html = '<div class="sec-label">'+(d.isG?'NCS 점수 비교':'총점 비교')+'</div><div class="card pad">';
+  all.forEach(function(c, i){
+    html += '<div style="'+(i?'margin-top:12px':'')+'">'+
+      '<div style="display:flex;justify-content:space-between;font-size:.8rem"><span style="'+(c.isCur?'font-weight:700;color:var(--accent)':'')+'">'+
+        escapeHtml(c.cohort)+(c.isCur?' ★':'')+'</span><span style="color:var(--ink-mute)">평균 '+c[key]+'점</span></div>'+
+      '<div class="bar" style="margin-top:5px"><i style="width:'+(c[key]/max*100)+'%;'+(c.isCur?'':'background:#a9b0f5')+'"></i></div>'+
+      (c.isCur && myScore!==null
+        ? '<div style="display:flex;justify-content:space-between;font-size:.8rem;margin-top:8px;color:var(--orange)"><span>내 점수</span><b>'+myScore+'점</b></div>'+
+          '<div class="bar" style="margin-top:5px"><i style="width:'+(myScore/max*100)+'%;background:var(--orange)"></i></div>' : '')+
+      '</div>';
+  });
+  html += '</div><div class="sec-label">'+(d.isG?'NCS':'과목별')+' 기수 평균 비교표</div><div class="card pad" style="overflow-x:auto"><table class="tbl"><thead><tr><th>기수</th>'+
+    (d.isG ? '<th>NCS</th>' : '<th>국</th><th>영</th><th>한</th><th>총점</th>')+'<th>합격</th></tr></thead><tbody>';
+  all.forEach(function(c){
+    var pass = (c.passCount!=null && c.count) ? c.passCount+'/'+c.count : '-';
+    html += '<tr style="'+(c.isCur?'font-weight:700;background:var(--accent-soft)':'')+'"><td>'+escapeHtml(c.cohort)+(c.isCur?' ★':'')+'</td>'+
+      (d.isG ? '<td>'+c.avgKorean+'</td>' : '<td>'+c.avgKorean+'</td><td>'+c.avgEnglish+'</td><td>'+c.avgHistory+'</td><td>'+c.avgTotal+'</td>')+
+      '<td style="color:var(--sky)">'+pass+'</td></tr>';
+  });
+  if (me) html += '<tr style="color:var(--orange);font-weight:700"><td>내 점수</td>'+
+    (d.isG ? '<td>'+me.korean+'</td>' : '<td>'+me.korean+'</td><td>'+me.english+'</td><td>'+me.history+'</td><td>'+me.total+'</td>')+'<td>-</td></tr>';
+  return html + '</tbody></table></div>';
+}
+
+function emptyBox(icon, text){
+  return '<div class="empty"><div class="empty-ico">'+ic(icon,44)+'</div><span>'+text+'</span></div>';
+}
+
+/* ── 학생 성적 화면 ── */
+async function renderExamStudentSub(v){
+  if (!ME.name){ v.innerHTML='<div class="empty"><span>로그인이 필요합니다</span></div>'; return; }
+  var sub = subOf();
+  if (sub === 'scores') return renderExamStudent(v);
+  v.innerHTML='<div class="empty"><span>불러오는 중…</span></div>';
+  var d = await examDataFor(ME.name, ME.track);
+  v.innerHTML = sub==='growth' ? viewGrowth(d) : sub==='compare' ? viewCompare(d) : await viewLegacy(d);
+  fillIcoSlots(v);
+}
+
+/* ── 교사: 성적 관리 — 위에서 '시험별 순위' 또는 학생을 고른다 ── */
+var EXAM_T = { who:'', an:'scores' };
+function examWho(v){ EXAM_T.who = v; renderView(); }
+function examAn(k){ EXAM_T.an = k; renderView(); }
+
+async function renderExamManage(v){
+  v.innerHTML='<div class="empty"><span>불러오는 중…</span></div>';
+  var mem = await FS.members();
+  var head = '<div class="card pad" style="margin-bottom:6px"><label style="display:block;font-size:.78rem;font-weight:600;color:var(--ink-soft);margin-bottom:6px">보기</label>'+
+    '<select onchange="examWho(this.value)"><option value="">📋 시험별 순위</option>'+
+    mem.map(function(m){ return '<option value="'+escapeHtml(m.name)+'"'+(m.name===EXAM_T.who?' selected':'')+'>'+
+      escapeHtml(m.name)+' ('+m.track+')</option>'; }).join('')+'</select></div>';
+  var m = mem.filter(function(x){ return x.name === EXAM_T.who; })[0];
+  if (!m){
+    // 시험별 순위(기존 화면)를 그 아래에 그린다
+    var box = document.createElement('div');
+    await renderExamTeacher(box);
+    v.innerHTML = head + box.innerHTML; fillIcoSlots(v); return;
+  }
+  var d = await examDataFor(m.name, m.track);
+  var an = EXAM_T.an, body;
+  if (an === 'scores')       body = viewScoresOf(d);
+  else if (an === 'growth')  body = viewGrowth(d);
+  else if (an === 'compare') body = viewCompare(d);
+  else                       body = await viewLegacy(d);
+  v.innerHTML = head + segHtml([['scores','성적'],['growth','성장'],['compare','반비교'],['legacy','선배비교']], an, 'examAn') + body;
+  fillIcoSlots(v);
+}
+
+/* 교사가 보는 한 학생의 성적 목록(구앱 renderAdminExamScoresList) */
+function viewScoresOf(d){
+  if (!d.exams.length) return emptyBox('chart','아직 등록된 성적이 없어요');
+  return d.exams.slice().reverse().map(function(e){
+    var a = d.avg[e.name];
+    return '<div class="sec-label">'+escapeHtml(e.name)+' <span style="font-weight:500;color:var(--ink-mute)">· '+e.date+'</span></div>'+
+      '<div class="card">'+
+      (d.isG
+        ? '<div class="row" style="cursor:default"><div class="row-main"><div class="row-t">NCS</div>'+(a?'<div class="row-s">반평균 '+a.avgKorean+'</div>':'')+'</div><span class="row-v">'+e.korean+'점</span></div>'
+        : [['국어','korean','avgKorean'],['영어','english','avgEnglish'],['한국사','history','avgHistory']].map(function(x){
+            return '<div class="row" style="cursor:default"><div class="row-main"><div class="row-t">'+x[0]+'</div>'+
+              (a?'<div class="row-s">반평균 '+a[x[2]]+'</div>':'')+'</div><span class="row-v">'+e[x[1]]+'점</span></div>'; }).join('')+
+          '<div class="blk"><div class="blk-head"><div><div class="row-t">총점</div></div>'+
+          '<div class="row-v" style="font-size:1.2rem;font-weight:800">'+e.total+'<small>점</small></div></div></div>')+
+      (e.rank ? '<div class="blk"><div class="row-s">'+e.rank+'등</div></div>' : '')+
+      '</div>';
+  }).join('');
+}
+
+/* ── 교사: 성적 등록 ──
+   ⚠️ 전환 전(ATT_V2_FROM 이전)에는 막는다. 구앱의 GAS가 매일 새벽 3시에 시트 기준으로
+   examScores를 다시 쓰면서 시트에 없는 문서를 지우기 때문에, 여기서 넣은 성적이 사라진다. */
+async function renderExamInput(v){
+  v.innerHTML='<div class="empty"><span>불러오는 중…</span></div>';
+  var got = await Promise.all([ FS.members(), FS.examScores() ]);
+  var mem = got[0], list = got[1];
+  var locked = kstToday() < ATT_V2_FROM;
+  var html = '';
+  if (locked){
+    html += '<div class="card pad" style="background:var(--orange-soft);box-shadow:none;margin-top:10px">'+
+      '<div style="font-weight:800;color:#c2410c">지금은 구앱에서 등록해 주세요</div>'+
+      '<div style="font-size:.8rem;color:#9a3412;margin-top:6px;line-height:1.6">전환 전에는 구앱 서버가 매일 새벽 3시에 시트 기준으로 성적을 다시 덮어씁니다. '+
+      '여기서 등록하면 다음 날 사라지므로, 전환일부터 이 화면을 쓸 수 있게 열립니다.</div></div>';
+  } else {
+    var today = kstToday();
+    html += '<div class="card pad" style="margin-top:10px">'+
+      '<div class="field"><label>시험 이름</label><input id="exName" type="text" placeholder="예: 2026 9월 모의고사"></div>'+
+      '<div class="field"><label>시험 날짜</label><input id="exDate" type="date" value="'+today+'" '+
+        'style="width:100%;padding:12px 14px;border:1.5px solid var(--line);border-radius:8px"></div></div>'+
+      '<div class="sec-label">학생별 점수 <span style="font-weight:500">· 공기업반은 NCS 한 칸</span></div><div class="card pad">'+
+      mem.map(function(m){
+        var g = m.track === '공기업', id = 'ex_'+m.id;
+        var inp = function(k, ph, off){ return '<input id="'+id+'_'+k+'" type="number" inputmode="numeric" min="0" max="100" placeholder="'+ph+'"'+
+          (off?' disabled style="opacity:.3"':'')+' style="width:100%;padding:10px 8px;border:1.5px solid var(--line);border-radius:8px;text-align:center">'; };
+        return '<div style="padding:10px 0;border-top:1px solid var(--line-soft)"><div style="font-weight:700;font-size:.88rem;margin-bottom:6px">'+
+          escapeHtml(m.name)+(g?' <span class="chip">공기업</span>':'')+'</div>'+
+          '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px">'+
+          inp('k', g?'NCS':'국어')+inp('e','영어',g)+inp('h','한국사',g)+'</div></div>';
+      }).join('')+
+      '<div id="exErr" class="login-err hidden" style="margin-top:12px"></div>'+
+      '<button class="btn" id="exGo" onclick="submitExam()">성적 등록하기</button></div>';
+  }
+  // 등록된 시험 목록(구앱 loadExamAdminList)
+  html += '<div class="sec-label">등록된 시험</div><div class="card">'+
+    (list.length ? list.map(function(e){
+      var a = e.avg || e.avgG;
+      return '<div class="row" style="cursor:default"><div class="row-main"><div class="row-t">'+escapeHtml(e.name)+'</div>'+
+        '<div class="row-s">'+e.date+' · '+e.rows.length+'명</div></div>'+
+        (a ? '<span class="row-v" style="color:var(--ink-mute);font-size:.8rem">평균 '+(e.single?a.korean:a.total)+'</span>' : '')+'</div>';
+    }).join('') : '<div class="blk"><div class="row-s">아직 없어요</div></div>')+'</div>';
+  v.innerHTML = html; fillIcoSlots(v);
+}
+
+async function submitExam(){
+  var err = document.getElementById('exErr');
+  var show = function(t){ err.textContent=t; err.classList.remove('hidden'); };
+  var name = (document.getElementById('exName').value||'').trim();
+  var date = document.getElementById('exDate').value;
+  if (!name) return show('시험 이름을 입력해주세요');
+  if (!date) return show('시험 날짜를 골라주세요');
+  var mem = await FS.members();
+  var n = function(el){ var x = parseInt(el && el.value, 10); return isNaN(x) ? null : x; };
+  var scores = [];
+  mem.forEach(function(m){
+    var id = 'ex_'+m.id;
+    var k = n(document.getElementById(id+'_k')), e = n(document.getElementById(id+'_e')), h = n(document.getElementById(id+'_h'));
+    if (m.track === '공기업'){ e = null; h = null; }
+    if (k===null && e===null && h===null) return;
+    if ([k,e,h].some(function(x){ return x!==null && (x<0 || x>100); })) { scores = null; return; }
+    if (scores) scores.push({ name:m.name, track:m.track, korean:k||0, english:e||0, history:h||0, total:(k||0)+(e||0)+(h||0) });
+  });
+  if (scores === null) return show('점수는 0~100 사이로 입력해주세요');
+  if (!scores.length) return show('최소 한 명 이상의 점수를 입력해주세요');
+  if (!confirm('"'+name+'" 성적을 '+scores.length+'명 등록할까요?')) return;
+
+  // 구앱 submitExamScores와 같은 계산
+  // 등수는 같은 트랙 안에서만 — 공기업은 NCS 한 과목이라 총점 순위에 섞으면 항상 하위권이 된다
+  ['공무원','공기업'].forEach(function(tr){
+    var g = scores.filter(function(s){ return s.track === tr; });
+    var sorted = g.slice().sort(function(a,b){ return b.total - a.total; });
+    g.forEach(function(s){ s.rank = sorted.indexOf(s) + 1; });
+  });
+  var r1 = function(x){ return Math.round(x*10)/10; };
+  // 반평균(__avg__)은 공무원만으로 — 공기업의 영어·한국사 0점이 끌어내리지 않게(공무원이 없으면 전체)
+  var base = scores.filter(function(s){ return s.track === '공무원'; }); if (!base.length) base = scores;
+  var av = function(arr,k){ return r1(arr.reduce(function(a,s){ return a+s[k]; },0) / arr.length); };
+  var classAvg = { avgKorean:av(base,'korean'), avgEnglish:av(base,'english'), avgHistory:av(base,'history'), avgTotal:av(base,'total') };
+  var gs = scores.filter(function(s){ return s.track === '공기업'; });
+  var classAvgG = gs.length ? (function(){ var x = av(gs,'korean'); return { avgKorean:x, avgEnglish:0, avgHistory:0, avgTotal:x }; })() : null;
+
+  var btn = document.getElementById('exGo'); btn.disabled = true; btn.textContent = '등록 중...';
+  try {
+    await FS.saveExamScores(name, date, scores, classAvg, classAvgG);
+    showModal('<div class="modal-box"><div style="text-align:center;padding:12px 0"><div style="font-size:2rem">📮</div>'+
+      '<div style="font-weight:800;margin-top:8px">성적을 등록했습니다</div><div style="font-size:.85rem;color:var(--ink-mute);margin-top:6px">'+
+      escapeHtml(name)+' · '+scores.length+'명</div></div><button class="btn" onclick="closeModal()">확인</button></div>');
+    renderView();
+  } catch(e){
+    btn.disabled = false; btn.textContent = '성적 등록하기';
+    show(e && e.code==='permission-denied' ? '교사로 로그인해야 합니다(보안규칙 확인 필요)' : '등록하지 못했습니다');
+  }
+}
+
+/* ═══ 상담 (교사) — 일별 조회 · 학생 명단 · 학생 달력 · 통계 ═══ */
+var CS = { date:'', who:'', ym:'', pick:'', year:'', rc:'many', ra:'bad', rp:'bad' };
+function csDate(v){ CS.date = v; renderView(); }
+function csWho(v){ CS.who = v; CS.pick=''; renderView(); }
+function csMonth(delta){
+  var p = CS.ym.split('-'), y = +p[0], m = +p[1] + delta;
+  if (m > 12){ m = 1; y++; } if (m < 1){ m = 12; y--; }
+  CS.ym = y+'-'+pad2(m); CS.pick=''; renderView();
+}
+function csPick(ds){ CS.pick = ds; renderView(); }
+function csToCal(name){ CS.who = name; CS.pick=''; goSub('cal'); }
+function csYear(v){ CS.year = v; renderView(); }
+function csRank(k, v){ CS[k] = v; renderView(); }
+
+async function renderCounselSub(v){
+  if (!CS.date) CS.date = kstToday();
+  if (!CS.ym)   CS.ym   = kstToday().slice(0,7);
+  var sub = subOf();
+  v.innerHTML='<div class="empty"><span>불러오는 중…</span></div>';
+  var got;
+  try { got = await Promise.all([ FS.members(), FS.counselAll() ]); }
+  catch(e){ v.innerHTML = emptyBox('chat','교사로 로그인해야 볼 수 있습니다'); fillIcoSlots(v); return; }
+  var mem = got[0], recs = got[1];
+  counselCache = recs;
+  if (sub === 'daily')     v.innerHTML = counselDaily(mem, recs);
+  else if (sub === 'list') v.innerHTML = counselList(mem, recs);
+  else if (sub === 'cal')  v.innerHTML = await counselCal(mem, recs);
+  else                     v.innerHTML = await counselStats(mem, recs);
+  fillIcoSlots(v);
+}
+
+function memoBox(t){
+  return t ? '<div style="font-size:.8rem;color:var(--ink-soft);background:var(--line-soft);border-radius:8px;padding:8px 10px;margin-top:8px;white-space:pre-wrap;line-height:1.6">'+escapeHtml(t)+'</div>' : '';
+}
+
+/* 일별 조회 — 그날 모든 학생의 상담 여부 */
+function counselDaily(mem, recs){
+  var day = {}; recs.forEach(function(r){ if (r.date === CS.date) day[r.name] = r; });
+  var rows = mem.map(function(m){ return { m:m, r:day[m.name] }; })
+                .sort(function(a,b){ return (a.r&&a.r.done?1:0) - (b.r&&b.r.done?1:0); });
+  var done = rows.filter(function(x){ return x.r && x.r.done; }).length;
+  return '<div class="card pad" style="margin-top:10px"><label style="display:block;font-size:.78rem;font-weight:600;color:var(--ink-soft);margin-bottom:6px">날짜</label>'+
+    '<input type="date" value="'+CS.date+'" onchange="csDate(this.value)" style="width:100%;padding:12px 14px;border:1.5px solid var(--line);border-radius:8px"></div>'+
+    '<div class="sec-label">전체 '+mem.length+'명 · 완료 <span style="color:#16a34a">'+done+'</span> · 미완료 '+(mem.length-done)+'</div><div class="card">'+
+    rows.map(function(x){
+      var ok = x.r && x.r.done;
+      return '<div class="row" style="flex-wrap:wrap;cursor:pointer" onclick="openCounsel(\''+escapeHtml(x.m.name)+'\',\''+CS.date+'\')">'+
+        '<div class="avatar">'+x.m.name.charAt(0)+'</div><div class="row-main"><div class="row-t">'+escapeHtml(x.m.name)+'</div></div>'+
+        '<span class="chip" style="'+(ok?'background:var(--green-soft);color:#16a34a':'background:var(--line-soft);color:var(--ink-mute)')+'">'+(ok?'상담완료':'대기')+'</span>'+
+        (x.r && x.r.memo ? '<div style="flex-basis:100%">'+memoBox(x.r.memo)+'</div>' : '')+'</div>';
+    }).join('')+'</div>';
+}
+
+/* 학생 명단 — 이번 달 학생별 상담 건수 */
+function counselList(mem, recs){
+  var ym = kstToday().slice(0,7), cnt = {}, last = {};
+  recs.forEach(function(r){
+    if (!last[r.name]) last[r.name] = r;                       // recs는 날짜 내림차순
+    if (r.date.slice(0,7) === ym){ var c = cnt[r.name] = cnt[r.name] || { t:0, d:0 }; c.t++; if (r.done) c.d++; }
+  });
+  var sorted = mem.slice().sort(function(a,b){ return ((cnt[b.name]||{}).t||0) - ((cnt[a.name]||{}).t||0); });
+  var tAll = 0, dAll = 0; sorted.forEach(function(m){ var c = cnt[m.name]; if (c){ tAll += c.t; dAll += c.d; } });
+  return '<div class="sec-label">'+(+ym.slice(5))+'월 상담 현황 · 완료 <span style="color:#16a34a">'+dAll+'</span> / 전체 '+tAll+'건</div><div class="card">'+
+    sorted.map(function(m){
+      var c = cnt[m.name] || { t:0, d:0 }, r = last[m.name];
+      var days = r ? Math.floor((new Date(kstToday()) - new Date(r.date)) / 86400000) : null;
+      var warn = (days === null || days > 30);
+      return '<div class="row" style="cursor:pointer" onclick="csToCal(\''+escapeHtml(m.name)+'\')">'+
+        '<div class="avatar">'+m.name.charAt(0)+'</div><div class="row-main"><div class="row-t">'+escapeHtml(m.name)+
+        ' <span style="font-weight:500;color:var(--ink-mute);font-size:.76rem">'+m.track+'반</span></div>'+
+        '<div class="row-s" style="'+(warn?'color:var(--rose)':'')+'">'+(r ? '최근 '+r.date+' · '+days+'일 전' : '상담 기록 없음')+'</div>'+
+        (c.t ? '<div class="bar" style="margin-top:6px"><i style="width:'+Math.round(c.d/c.t*100)+'%;background:'+(c.d===c.t?'var(--green)':'var(--orange)')+'"></i></div>' : '')+
+        '</div><span class="row-v" style="font-size:.84rem;color:'+(c.t?'var(--ink)':'var(--ink-mute)')+'">'+(c.t ? c.d+'/'+c.t+'건' : '없음')+'</span></div>';
+    }).join('')+'</div>';
+}
+
+/* 학생 달력 — 한 학생(또는 전체)의 한 달. 한 학생일 때는 출결(지각·결석)도 겹쳐 보여준다 */
+async function counselCal(mem, recs){
+  var ym = CS.ym, y = +ym.slice(0,4), mo = +ym.slice(5);
+  var first = dowOf(ym+'-01'), last = new Date(Date.UTC(y, mo, 0)).getUTCDate(), today = kstToday();
+  var head = '<div class="card pad" style="margin-top:10px"><label style="display:block;font-size:.78rem;font-weight:600;color:var(--ink-soft);margin-bottom:6px">학생</label>'+
+    '<select onchange="csWho(this.value)"><option value="">— 학생을 고르세요 —</option><option value="__all__"'+(CS.who==='__all__'?' selected':'')+'>👥 학생 전체</option>'+
+    mem.map(function(m){ return '<option value="'+escapeHtml(m.name)+'"'+(m.name===CS.who?' selected':'')+'>'+escapeHtml(m.name)+'</option>'; }).join('')+
+    '</select><div style="display:flex;align-items:center;justify-content:space-between;margin-top:14px">'+
+    '<button class="btn btn-outline btn-sm" onclick="csMonth(-1)">‹ 이전</button><b>'+y+'년 '+mo+'월</b>'+
+    '<button class="btn btn-outline btn-sm" onclick="csMonth(1)">다음 ›</button></div></div>';
+  if (!CS.who) return head + emptyBox('calendar','학생을 고르면 달력이 보여요');
+  var all = CS.who === '__all__';
+  var byDay = {};
+  recs.forEach(function(r){
+    if (r.date.slice(0,7) !== ym || !r.done) return;
+    if (all || r.name === CS.who) (byDay[r.date] = byDay[r.date] || []).push(r);
+  });
+  var att = {};
+  if (!all){
+    await loadCalendar();
+    var got = await Promise.all([ soft(FS.attendanceAll(), { byName:{} }), soft(FS.amSince(ym+'-01'), { am:{}, ov:{} }) ]);
+    var A = got[0], R = got[1], legacyLast = '';
+    for (var nm in A.byName){ var ks = Object.keys(A.byName[nm]).sort(); if (ks.length && ks[ks.length-1] > legacyLast) legacyLast = ks[ks.length-1]; }
+    var m = mem.filter(function(x){ return x.name === CS.who; })[0] || {};
+    var ctx = { days:A.byName[CS.who]||{}, legacyLast:legacyLast, today:today, dorm:!!m.dorm, am:{}, ov:{} };
+    Object.keys(R.am).forEach(function(ds){ if (R.am[ds][CS.who]) ctx.am[ds] = R.am[ds][CS.who]; });
+    Object.keys(R.ov).forEach(function(ds){ if (R.ov[ds][CS.who]) ctx.ov[ds] = R.ov[ds][CS.who]; });
+    for (var dd = 1; dd <= last; dd++){ var ds = ym+'-'+pad2(dd); if (ds <= today){ var s = attStatusOf(ds, ctx); if (s) att[ds] = s; } }
+  }
+  var html = head + '<div class="card pad" style="margin-top:10px"><div class="cal">'+
+    ['일','월','화','수','목','금','토'].map(function(d,i){ return '<div class="cal-h" style="'+(i===0?'color:var(--rose)':i===6?'color:var(--sky)':'')+'">'+d+'</div>'; }).join('');
+  for (var i = 0; i < first; i++) html += '<div class="cal-d x"></div>';
+  for (var d = 1; d <= last; d++){
+    var ds2 = ym+'-'+pad2(d), list = byDay[ds2] || [], st = att[ds2];
+    var cls = 'cal-d'+(list.length?' done':'')+(ds2===today?' today':'')+(st==='지각'?' late':'')+(st==='결석'?' absent':'')+(ds2===CS.pick?' pick':'');
+    html += '<div class="'+cls+'" onclick="csPick(\''+ds2+'\')"><span>'+d+'</span>'+
+      (all && list.length ? '<span class="cal-n">'+escapeHtml(list[0].name)+(list.length>1?' +'+(list.length-1):'')+'</span>' : '')+
+      (!all && st==='지각' ? '<span class="cal-n" style="color:var(--orange)">지각</span>' : '')+
+      (!all && st==='결석' ? '<span class="cal-n" style="color:var(--rose)">결석</span>' : '')+'</div>';
+  }
+  html += '</div><div style="display:flex;flex-wrap:wrap;gap:10px;margin-top:12px;font-size:.7rem;color:var(--ink-mute)">'+
+    '<span><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:var(--green-soft)"></span> 상담완료</span>'+
+    '<span><span style="display:inline-block;width:10px;height:10px;border-radius:3px;border:2px solid var(--accent)"></span> 오늘</span>'+
+    (all ? '' : '<span><span style="display:inline-block;width:10px;height:10px;border-radius:3px;border:2px solid var(--orange)"></span> 지각</span>'+
+                '<span><span style="display:inline-block;width:10px;height:10px;border-radius:3px;border:2px solid var(--rose)"></span> 결석</span>')+
+    '</div></div>';
+  // 고른 날의 상담
+  if (CS.pick){
+    var sel = byDay[CS.pick] || [];
+    html += '<div class="sec-label">'+CS.pick+(!all && att[CS.pick] ? ' · '+att[CS.pick] : '')+'</div><div class="card pad">';
+    if (all){
+      html += sel.length ? sel.map(function(r){ return '<div style="padding:8px 0;border-top:1px solid var(--line-soft)"><b>'+escapeHtml(r.name)+'</b>'+memoBox(r.memo)+
+        '<button class="btn btn-outline btn-sm" style="margin-top:8px" onclick="openCounsel(\''+escapeHtml(r.name)+'\',\''+CS.pick+'\')">수정</button></div>'; }).join('')
+        : '<div class="row-s">이 날 상담 기록이 없어요</div>';
+    } else {
+      var r0 = sel[0];
+      html += (r0 ? memoBox(r0.memo) : '<div class="row-s">상담 기록이 없어요</div>')+
+        '<button class="btn" style="margin-top:12px" onclick="openCounsel(\''+escapeHtml(CS.who)+'\',\''+CS.pick+'\')">'+(r0?'수정':'상담 입력')+'</button>';
+    }
+    html += '</div>';
+  }
+  return html;
+}
+
+/* 통계 — 연도별 건수 · 월별 막대 · 상담/출결/플래너/엽전 순위(구앱과 같은 항목) */
+async function counselStats(mem, recs){
+  var names = {}; mem.forEach(function(m){ names[m.name] = 1; });
+  var data = recs.filter(function(r){ return r.done && names[r.name]; });
+  var years = {}; data.forEach(function(r){ if (r.date) years[r.date.slice(0,4)] = 1; });
+  var thisY = kstToday().slice(0,4); years[thisY] = 1;
+  if (!CS.year) CS.year = thisY;
+  var yd = data.filter(function(r){ return r.date.slice(0,4) === CS.year; });
+  var tm = kstToday().slice(0,7);
+  var monthly = []; for (var i = 1; i <= 12; i++){ var k = CS.year+'-'+pad2(i); monthly.push(yd.filter(function(r){ return r.date.slice(0,7) === k; }).length); }
+  var stu = {}; mem.forEach(function(m){ stu[m.name] = 0; }); yd.forEach(function(r){ stu[r.name]++; });
+
+  // 최근 14일(평일) 출결 · 플래너, 엽전 — 학생마다 동시에 계산(캐시 공유)
+  await loadCalendar();
+  var today = kstToday(), from = shiftDay(today, -13);
+  var got = await Promise.all([
+    soft(FS.attendanceAll(), { byName:{} }), soft(FS.amSince(from), { am:{}, ov:{} }),
+    Promise.all(mem.map(function(m){ return soft(FS.plannerOf(m.name), {}); })),
+    Promise.all(mem.map(function(m){ return soft(loadWallet(m), { balance:m.coins }); }))
+  ]);
+  var A = got[0], R = got[1], legacyLast = '';
+  for (var nm in A.byName){ var ks = Object.keys(A.byName[nm]).sort(); if (ks.length && ks[ks.length-1] > legacyLast) legacyLast = ks[ks.length-1]; }
+  var att = {}, plan = {}, coin = [];
+  mem.forEach(function(m, idx){
+    var ctx = { days:A.byName[m.name]||{}, legacyLast:legacyLast, today:today, dorm:!!m.dorm, am:{}, ov:{} };
+    Object.keys(R.am).forEach(function(ds){ if (R.am[ds][m.name]) ctx.am[ds] = R.am[ds][m.name]; });
+    Object.keys(R.ov).forEach(function(ds){ if (R.ov[ds][m.name]) ctx.ov[ds] = R.ov[ds][m.name]; });
+    var a = { absent:0, late:0, attend:0, total:0 }, p = { done:0, total:0 }, pb = got[2][idx] || {};
+    eachWeekday(from, today, function(ds){
+      var s = attStatusOf(ds, ctx);
+      if (s){ a.total++; if (s==='결석') a.absent++; else if (s==='지각') a.late++; else if (s==='출석') a.attend++; }
+      if (pb[ds]){ p.total++; if (pb[ds].progress === 100) p.done++; }
+    });
+    att[m.name] = a; plan[m.name] = p;
+    coin.push({ name:m.name, coins:(got[3][idx]||{}).balance });
+  });
+
+  var yOpts = Object.keys(years).sort().reverse();
+  var html = '<div class="card pad" style="margin-top:10px"><select onchange="csYear(this.value)">'+
+    yOpts.map(function(y){ return '<option value="'+y+'"'+(y===CS.year?' selected':'')+'>'+y+'년</option>'; }).join('')+'</select></div>'+
+    '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px">'+
+    [[yd.length,'총 상담'],[Object.keys(stu).filter(function(n){ return stu[n]; }).length,'상담 학생'],
+     [yd.filter(function(r){ return r.date.slice(0,7) === tm; }).length,'이번 달']].map(function(x){
+      return '<div class="card pad" style="text-align:center;padding:14px 6px"><div style="font-size:1.5rem;font-weight:800">'+x[0]+'</div>'+
+        '<div style="font-size:.72rem;color:var(--ink-mute);margin-top:2px">'+x[1]+'</div></div>'; }).join('')+'</div>';
+
+  // 월별 막대
+  var mx = Math.max.apply(null, monthly.concat([1])), W=340, H=150, PL=8, PB=20, bw=(W-PL*2)/12;
+  var svg = '';
+  monthly.forEach(function(c, i){
+    var h = c ? Math.max(3, (H-PB-14)*c/mx) : 0, x = PL + i*bw + bw*0.16, w = bw*0.68, y = H-PB-h;
+    var now = (CS.year === thisY && i === (+tm.slice(5))-1);
+    svg += '<rect x="'+x+'" y="'+y+'" width="'+w+'" height="'+h+'" rx="3" fill="'+(now?'#5b6af0':'#c7ccfa')+'"/>'+
+      (c ? '<text x="'+(x+w/2)+'" y="'+(y-3)+'" font-size="9" font-weight="700" text-anchor="middle" fill="#1a1a2e">'+c+'</text>' : '')+
+      '<text x="'+(x+w/2)+'" y="'+(H-6)+'" font-size="9" text-anchor="middle" fill="#9a9ab0">'+(i+1)+'</text>';
+  });
+  html += '<div class="sec-label">월별 상담 건수</div><div class="card pad"><svg viewBox="0 0 '+W+' '+H+'" style="width:100%;height:auto;display:block">'+svg+'</svg></div>';
+
+  var rankRows = function(items){
+    if (!items.length) return '<div class="blk"><div class="row-s">데이터가 없어요</div></div>';
+    return items.map(function(s, i){
+      return '<div class="row" style="cursor:default"><div class="avatar" style="'+(i<3?'background:var(--gold-soft);color:var(--gold)':'')+'">'+(i+1)+'</div>'+
+        '<div class="row-main"><div class="row-t">'+escapeHtml(s.name)+' <span style="font-weight:500;color:var(--ink-mute);font-size:.74rem">'+(s.sub||'')+'</span></div>'+
+        '<div class="bar" style="margin-top:6px"><i style="width:'+s.pct+'%;background:'+s.color+'"></i></div></div>'+
+        '<span class="row-v" style="font-size:.8rem;color:'+s.color+'">'+s.main+'</span></div>';
+    }).join('');
+  };
+
+  // 상담 횟수 순위
+  var ce = Object.keys(stu).map(function(n){ return [n, stu[n]]; });
+  var cmax = Math.max.apply(null, ce.map(function(x){ return x[1]; }).concat([1]));
+  ce.sort(function(a,b){ return CS.rc==='many' ? b[1]-a[1] : a[1]-b[1]; });
+  html += '<div class="sec-label">상담 횟수 순위</div><div class="card pad" style="padding-top:4px">'+
+    segHtml([['many','많은 순'],['few','적은 순']], CS.rc, 'csRankC')+
+    rankRows(ce.slice(0,5).map(function(x){ return { name:x[0], main:x[1]+'건', pct:Math.round(x[1]/cmax*100), color:'var(--accent)' }; }))+'</div>';
+
+  // 출결 순위(최근 14일)
+  var ae = Object.keys(att).filter(function(n){ return att[n].total > 0; });
+  if (CS.ra === 'bad') ae.sort(function(a,b){ return (att[b].absent*3+att[b].late) - (att[a].absent*3+att[a].late); });
+  else ae.sort(function(a,b){ return att[b].attend/att[b].total - att[a].attend/att[a].total; });
+  html += '<div class="sec-label">출결 현황 순위 <span style="font-weight:500">· 최근 14일</span></div><div class="card pad" style="padding-top:4px">'+
+    segHtml([['bad','결석 많은 순'],['good','출석 좋은 순']], CS.ra, 'csRankA')+
+    rankRows(ae.slice(0,5).map(function(n){ var a = att[n];
+      return CS.ra==='bad'
+        ? { name:n, sub:'출석 '+a.attend+'/'+a.total+'일', main:'결석 '+a.absent+' · 지각 '+a.late,
+            pct:Math.round((a.absent*3+a.late)/(a.total*3)*100), color:'var(--rose)' }
+        : { name:n, sub:'출석 '+a.attend+'/'+a.total+'일', main:Math.round(a.attend/a.total*100)+'%',
+            pct:Math.round(a.attend/a.total*100), color:'#16a34a' }; }))+'</div>';
+
+  // 플래너 순위(최근 14일)
+  var pe = Object.keys(plan).filter(function(n){ return plan[n].total > 0; });
+  pe.sort(function(a,b){ var x = plan[a].done/plan[a].total, y = plan[b].done/plan[b].total; return CS.rp==='bad' ? x-y : y-x; });
+  html += '<div class="sec-label">플래너 현황 순위 <span style="font-weight:500">· 최근 14일</span></div><div class="card pad" style="padding-top:4px">'+
+    segHtml([['bad','달성률 낮은 순'],['good','달성률 높은 순']], CS.rp, 'csRankP')+
+    rankRows(pe.slice(0,5).map(function(n){ var p = plan[n], pct = Math.round(p.done/p.total*100);
+      return { name:n, sub:'100% '+p.done+'/'+p.total+'일', main:pct+'%', pct:pct, color:CS.rp==='bad'?'var(--rose)':'#16a34a' }; }))+'</div>';
+
+  // 엽전 현황(낮은 순)
+  var neg = coin.filter(function(c){ return c.coins < 0; }).length;
+  coin.sort(function(a,b){ return a.coins - b.coins; });
+  html += '<div class="sec-label">엽전 현황 <span style="font-weight:500">· 낮은 순</span></div><div class="card pad">'+
+    '<div style="font-size:.8rem;color:var(--ink-soft);margin-bottom:4px">마이너스 엽전 학생 <b style="color:'+(neg?'var(--rose)':'#16a34a')+'">'+neg+'명</b></div>'+
+    coin.slice(0,10).map(function(c){
+      return '<div class="row" style="cursor:default;padding:10px 0"><div class="row-main"><div class="row-t" style="'+(c.coins<0?'color:var(--rose)':'')+'">'+escapeHtml(c.name)+'</div></div>'+
+        '<span class="row-v" style="color:'+(c.coins<0?'var(--rose)':'var(--ink)')+'">'+c.coins+'냥</span></div>'; }).join('')+'</div>';
+  return html;
+}
+function csRankC(v){ csRank('rc', v); }
+function csRankA(v){ csRank('ra', v); }
+function csRankP(v){ csRank('rp', v); }
+
 /* ═══ 렌더 ═══ */
 function renderTabs(){
   document.getElementById('tabBar').innerHTML = TABS[ROLE].map(function(t){
     return '<button class="tab-btn'+(t[0]===TAB?' active':'')+'" onclick="go(\''+t[0]+'\')">'+
-           ic(t[2],20)+'<span>'+t[1]+'</span></button>';
+           ic(t[2],22)+'<span>'+t[1]+'</span></button>';
   }).join('');
+  renderSubBar();
 }
 function go(t){TAB=t;renderTabs();renderView();window.scrollTo(0,0);}
 
@@ -919,8 +1700,9 @@ function renderViewInner(v){
   if(TAB==='att' && ROLE==='teacher'){return renderAmTeacher(v);}
   if(TAB==='coin'){return ROLE==='student'?renderCoinStudent(v):renderCoinTeacher(v);}
   if(TAB==='market'){return renderMarket(v);}
-  if(TAB==='exam'){return ROLE==='student'?renderExamStudent(v):renderExamTeacher(v);}
-  if(TAB==='counsel' && ROLE==='teacher'){return renderCounsel(v);}
+  if(TAB==='exam'){ if(ROLE==='student') return renderExamStudentSub(v);
+                    return subOf()==='input' ? renderExamInput(v) : renderExamManage(v); }
+  if(TAB==='counsel' && ROLE==='teacher'){return renderCounselSub(v);}
   v.innerHTML=stub();fillIcoSlots(v);
 }
 
@@ -1367,52 +2149,9 @@ async function savePlannerNow(){
    구앱과 같은 규칙: 메모를 쓰면 곧 상담완료 — 별도 체크 없음. */
 var counselCache = null;
 
-async function renderCounsel(v){
-  v.innerHTML='<div class="empty"><span>불러오는 중…</span></div>';
-  var mem, recs;
-  try {
-    mem  = await FS.members();
-    recs = await FS.counselAll();
-  } catch(e){
-    v.innerHTML='<div class="empty"><div class="empty-ico">'+ic('chat',44)+'</div>'+
-      '<span>교사로 로그인해야 볼 수 있습니다</span></div>';
-    fillIcoSlots(v); return;
-  }
-  counselCache = recs;
-
-  // 학생별 최근 상담일
-  var last = {};
-  recs.forEach(function(r){ if (!last[r.name]) last[r.name] = r; });
-
-  var html = '<div class="sec-label">학생별 상담</div><div class="card">';
-  html += mem.map(function(m){
-    var r = last[m.name];
-    var days = r ? Math.floor((new Date(kstToday()) - new Date(r.date)) / 86400000) : null;
-    var warn = (days === null || days > 30);
-    return '<div class="row" onclick="openCounsel(\''+escapeHtml(m.name)+'\')" style="cursor:pointer">'+
-      '<div class="avatar">'+m.name.charAt(0)+'</div>'+
-      '<div class="row-main"><div class="row-t">'+escapeHtml(m.name)+'</div>'+
-      '<div class="row-s" style="'+(warn?'color:var(--rose)':'')+'">'+
-        (r ? r.date+' · '+days+'일 전' : '상담 기록 없음')+'</div></div>'+
-      (r ? '<span class="chip" style="background:var(--green-soft);color:#16a34a">완료</span>' : '')+
-      '</div>';
-  }).join('') + '</div>';
-
-  if (recs.length){
-    html += '<div class="sec-label">최근 기록</div><div class="card">';
-    html += recs.slice(0,15).map(function(r){
-      return '<div class="row" onclick="openCounsel(\''+escapeHtml(r.name)+'\')" style="cursor:pointer">'+
-        '<div class="row-main"><div class="row-t">'+escapeHtml(r.name)+
-          ' <span style="font-weight:500;color:var(--ink-mute)">'+r.date+'</span></div>'+
-        '<div class="row-s">'+escapeHtml(r.memo).slice(0,60)+(r.memo.length>60?'…':'')+'</div></div></div>';
-    }).join('') + '</div>';
-  }
-  v.innerHTML = html; fillIcoSlots(v);
-}
-
-function openCounsel(name){
+function openCounsel(name, date){
   var mine = (counselCache||[]).filter(function(r){ return r.name === name; });
-  var today = kstToday();
+  var today = date || kstToday();
   var todayRec = mine.filter(function(r){ return r.date === today; })[0];
 
   var html = '<div class="modal-box">'+
@@ -1425,7 +2164,7 @@ function openCounsel(name){
       'font-family:inherit;font-size:.92rem;resize:vertical">'+
       escapeHtml(todayRec ? todayRec.memo : '')+'</textarea></div>'+
     '<div id="cErr" class="login-err hidden"></div>'+
-    '<button class="btn" id="cGo" onclick="applyCounsel(\''+escapeHtml(name)+'\')">저장</button>'+
+    '<button class="btn" id="cGo" onclick="applyCounsel(\''+escapeHtml(name)+'\',\''+today+'\')">저장</button>'+
     '<button class="btn btn-outline" onclick="closeModal()">닫기</button>';
 
   var past = mine.filter(function(r){ return r.date !== today; });
@@ -1441,12 +2180,12 @@ function openCounsel(name){
   showModal(html);
 }
 
-async function applyCounsel(name){
+async function applyCounsel(name, date){
   var memo = (document.getElementById('cMemo').value||'').trim();
   var err  = document.getElementById('cErr');
   if (!memo){ err.textContent='상담 내용을 입력해주세요'; err.classList.remove('hidden'); return; }
   var btn = document.getElementById('cGo'); btn.disabled=true; btn.textContent='저장 중...';
-  try { await FS.saveCounsel(kstToday(), name, memo); closeModal(); renderView(); }
+  try { await FS.saveCounsel(date || kstToday(), name, memo); closeModal(); renderView(); }
   catch(e){ btn.disabled=false; btn.textContent='저장';
     err.textContent = (e && e.code==='permission-denied')
       ? '교사로 로그인해야 합니다' : '저장하지 못했습니다';
@@ -2780,7 +3519,7 @@ function applyRole(){
   document.getElementById('uName').textContent = t?'교사':ME.name;
   document.getElementById('uRole').textContent = t?'장원급제반 담임':(ME.track+'반');
   document.getElementById('uStreak').style.display = t?'none':'';
-  document.getElementById('btnReq').style.display = t?'':'none';
+  document.getElementById('btnBell').style.display = t?'none':'';
   renderTabs();renderView();
   if (!t) refreshStreakChip().then(syncHeroStreak);
 }
