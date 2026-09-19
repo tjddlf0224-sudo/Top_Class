@@ -261,12 +261,12 @@ main{padding:6px 18px calc(32px + var(--safe-bottom));}
 
 <!-- ═══ Firebase (조회·체크인 전부 여기로. GAS 안 거침) ═══ -->
 <script type="module">
-import { initializeApp } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-app.js";
+import { initializeApp } from "./vendor/firebase/firebase-app.js";
 import { getFirestore, doc, getDoc, setDoc, updateDoc, addDoc, deleteDoc, collection, getDocs, query, where, serverTimestamp }
-  from "https://www.gstatic.com/firebasejs/12.12.1/firebase-firestore.js";
+  from "./vendor/firebase/firebase-firestore.js";
 import { initializeAuth, onAuthStateChanged, signInAnonymously, signInWithEmailAndPassword,
          signOut, browserLocalPersistence, indexedDBLocalPersistence }
-  from "https://www.gstatic.com/firebasejs/12.12.1/firebase-auth.js";
+  from "./vendor/firebase/firebase-auth.js";
 
 /* GAS가 배열·객체를 JSON 문자열로 저장하므로(schedule/attendance 동일 패턴) 읽을 때 되돌린다 */
 function parseObj(v){
@@ -779,6 +779,66 @@ window.FS = {
       { at: serverTimestamp(), subject, name, track });
   }
 };
+
+/* ═══ 읽기 캐시 (먼저 보여주고 뒤에서 새로 고친다) ═══════════════
+   폰에서는 서버 호출 한 번이 0.1~0.3초라, 탭을 옮길 때마다 다시 받으면 매번 기다리게 된다.
+   - 받아 둔 값이 있으면 바로 돌려준다. FRESH_MS가 지났으면 뒤에서 새로 받아 두고,
+     내용이 바뀌었으면 화면을 조용히 다시 그린다(window.softRefresh).
+   - 같은 조회가 동시에 여러 번 불리면(집무실이 명부를 두 곳에서 부르는 식) 한 번만 보낸다.
+   - 쓰기가 한 번이라도 일어나면 전부 비운다 — 방금 바꾼 게 옛 값으로 보이면 안 된다.
+   - 로그인·로그아웃 때도 비운다(FS.__clear) — 사람이 바뀌면 볼 수 있는 자료가 다르다.
+   ⚠️ 돌려주는 객체는 캐시와 같은 것이다. 받은 쪽에서 고치지 말 것. */
+(function(){
+  const READ = new Set(['schedule','memberById','attendanceOf','members','attendanceAll','freezeOf',
+    'marketItems','marketBuys','examScores','amSince','calendarOff','counselAll','amCheckIns',
+    'amOverrides','amCheckInsOf','amOverridesOf','openingOf','ledgerOf','plannerOf','checkIns']);
+  const PASS = new Set(['myBinding']);          // 기기-학생 연결 확인은 매번 서버에 묻는다
+  const FRESH_MS = 20000;
+  const memo = new Map();                       // 키 → { v, t, p }
+  let gen = 0, timer = null;
+  const repaint = () => { clearTimeout(timer);
+    timer = setTimeout(() => { if (typeof window.softRefresh === 'function') window.softRefresh(); }, 120); };
+
+  function load(key, orig, self, args){
+    const g = gen, e = memo.get(key) || {};
+    e.p = orig.apply(self, args).then(v => {
+      if (g !== gen) return v;                  // 그사이 쓰기가 있었다 — 이 응답은 담지 않는다
+      const had = ('v' in e), before = had ? JSON.stringify(e.v) : '';
+      memo.set(key, { v, t: Date.now(), p: null });
+      if (had && before !== JSON.stringify(v)) repaint();
+      return v;
+    }, err => {
+      const cur = memo.get(key);
+      if (cur && 'v' in cur) cur.p = null; else memo.delete(key);
+      throw err;
+    });
+    memo.set(key, e);
+    return e.p;
+  }
+
+  for (const k of Object.keys(FS)) {
+    const orig = FS[k];
+    if (typeof orig !== 'function' || PASS.has(k)) continue;
+    if (READ.has(k)) {
+      FS[k] = function(...args){
+        const key = k + JSON.stringify(args), e = memo.get(key);
+        if (e && ('v' in e)) {
+          if (Date.now() - e.t > FRESH_MS && !e.p) load(key, orig, this, args).catch(() => {});
+          return Promise.resolve(e.v);
+        }
+        if (e && e.p) return e.p;
+        return load(key, orig, this, args);
+      };
+    } else {
+      // 목록에 없는 새 함수는 쓰기로 본다(안전한 쪽)
+      FS[k] = async function(...args){
+        try { return await orig.apply(this, args); } finally { gen++; memo.clear(); }
+      };
+    }
+  }
+  FS.__clear = () => { gen++; memo.clear(); };
+  FS.__stale = () => { memo.forEach(e => { e.t = 0; }); };   // 앱이 다시 앞으로 나올 때
+})();
 window.dispatchEvent(new Event('fs-ready'));
 </script>
 
@@ -835,15 +895,32 @@ function renderTabs(){
 }
 function go(t){TAB=t;renderTabs();renderView();window.scrollTo(0,0);}
 
+function showLoadError(v, e){
+  var denied = e && e.code === 'permission-denied';
+  v.innerHTML='<div class="empty"><div class="empty-ico">'+ic('warn',44)+'</div>'+
+    '<span>'+(denied ? '볼 수 있는 권한이 없어요' : '불러오지 못했어요<br>인터넷 연결을 확인해 주세요')+'</span></div>'+
+    '<button class="btn btn-outline" onclick="renderView()">다시 시도</button>';
+  fillIcoSlots(v);
+}
+
 function renderView(){
-  var v=document.getElementById('view');
+  // 그릴 때마다 새 칸을 만든다. 탭을 빨리 옮기면 앞 화면의 느린 조회가 나중에 끝나
+  // 지금 화면을 덮어쓸 수 있는데, 그 조회는 이미 떼어낸 옛 칸에 그리게 되어 해가 없다.
+  var root=document.getElementById('view');
+  var v=document.createElement('div');
+  root.replaceChildren(v);
+  var p=renderViewInner(v);
+  // 조회가 실패하면 '불러오는 중'에서 영영 멈춰 있지 않게 다시 시도 버튼을 보여준다
+  if (p && p.then) p.then(null, function(e){ showLoadError(v, e); });
+}
+function renderViewInner(v){
   if(TAB==='home'){v.innerHTML=ROLE==='student'?homeStudent():homeTeacher();fillIcoSlots(v);return;}
-  if(TAB==='after'){renderAfterSchool(v);return;}
-  if(TAB==='att' && ROLE==='teacher'){renderAmTeacher(v);return;}
-  if(TAB==='coin'){ROLE==='student'?renderCoinStudent(v):renderCoinTeacher(v);return;}
-  if(TAB==='market'){renderMarket(v);return;}
-  if(TAB==='exam'){ROLE==='student'?renderExamStudent(v):renderExamTeacher(v);return;}
-  if(TAB==='counsel' && ROLE==='teacher'){renderCounsel(v);return;}
+  if(TAB==='after'){return renderAfterSchool(v);}
+  if(TAB==='att' && ROLE==='teacher'){return renderAmTeacher(v);}
+  if(TAB==='coin'){return ROLE==='student'?renderCoinStudent(v):renderCoinTeacher(v);}
+  if(TAB==='market'){return renderMarket(v);}
+  if(TAB==='exam'){return ROLE==='student'?renderExamStudent(v):renderExamTeacher(v);}
+  if(TAB==='counsel' && ROLE==='teacher'){return renderCounsel(v);}
   v.innerHTML=stub();fillIcoSlots(v);
 }
 
@@ -872,12 +949,17 @@ var CAL_OFF = {};    // 교사가 지정한 휴업일 — Firestore calendarOff
     수업일이지만 아침자습을 안 한 날은 교사가 따로 지정한다(calendarOff). */
 async function loadCalendar(force){
   if (CAL && !force) return CAL;
-  try {
-    var r = await fetch('calendar.json', {cache:'no-cache'});
-    CAL = await r.json();
-  } catch(e) { CAL = { 휴업일:{} }; }
-  try { CAL_OFF = await FS.calendarOff(); } catch(e) { CAL_OFF = {}; }
-  return CAL;
+  // 학사일정 파일과 교사 지정 휴업일을 한꺼번에 받는다.
+  // 여러 곳에서 동시에 불러도 한 번만 받도록 진행 중인 약속을 나눠 쓴다.
+  if (!loadCalendar._p || force){
+    loadCalendar._p = Promise.all([
+      fetch('calendar.json', {cache:'no-cache'}).then(function(r){ return r.json(); })
+        .then(null, function(){ return { 휴업일:{} }; }),
+      soft(FS.calendarOff(), {})
+    ]).then(function(r){ CAL = r[0]; CAL_OFF = r[1]; return CAL; });
+    loadCalendar._p.then(function(){ loadCalendar._p = null; });
+  }
+  return loadCalendar._p;
 }
 
 /** 그 날이 수업일인가 — 주말·공휴일·재량휴업일·방학·교사지정 제외 */
@@ -970,9 +1052,9 @@ async function loadAmToday(){
   amToday = { status:null, time:'' };
   if (!ME.name) return amToday;
   try {
-    var ov = await FS.amOverridesOf(ME.name);
+    var both = await Promise.all([ FS.amOverridesOf(ME.name), FS.amCheckInsOf(ME.name) ]);
+    var ov = both[0], am = both[1];
     if (ov[today]){ amToday = { status: ov[today].status, time:'' }; return amToday; }
-    var am = await FS.amCheckInsOf(ME.name);
     if (am[today]){
       var at = am[today].at;
       var k  = new Date(at.seconds*1000 + 9*3600*1000);
@@ -1103,6 +1185,9 @@ function coinFromPlanner(fromDs, toDs, plannerByDate, ctx){
   return { total: total, items: items };
 }
 
+/** 실패해도 되는 조회는 기본값으로 — Promise.all 안에서 하나가 실패해도 나머지를 쓰게 */
+function soft(p, d){ return p.then(null, function(){ return d; }); }
+
 /** 한 학생의 엽전 잔액과 내역.
     반환 mode: '계산' = v2가 계산한 값 / '시트' = 아직 전환 전이라 GAS 값 */
 async function loadWallet(m){
@@ -1114,18 +1199,24 @@ async function loadWallet(m){
     return { mode:'시트', balance: m.coins, items: [], opening: null };
   }
 
-  var ledger = await FS.ledgerOf(name);
+  // 재료 7가지를 한꺼번에 받는다. 차례로 기다리면 폰에서는 호출 수 × 왕복 시간만큼
+  // 늦어진다(교사 엽전 화면은 이걸 학생 수만큼 부른다). 실패해도 되는 것은 기본값으로.
+  var got = await Promise.all([
+    FS.ledgerOf(name), FS.attendanceOf(name),
+    soft(FS.amCheckInsOf(name), {}), soft(FS.amOverridesOf(name), {}),
+    soft(FS.marketBuys(), []), soft(FS.freezeOf(name), { bought:0 }),
+    soft(FS.plannerOf(name), {})
+  ]);
+  var ledger = got[0];
   var ledgerSum = ledger.reduce(function(a,b){ return a + b.amount; }, 0);
 
   // 출결 판정에 필요한 재료
-  var days = await FS.attendanceOf(name);
+  var days = got[1];
   var legacyLast = Object.keys(days).sort().pop() || '';
   var today = kstToday();
   // 이름으로 한 번씩만 읽는다. 날짜별 전체 조회는 (1) 규칙상 학생이 못 읽고
   // (2) 개시일 이후 날짜 수만큼 쿼리가 늘어 느리다.
-  var am = {}, ov = {};
-  try { am = await FS.amCheckInsOf(name); } catch(e){}
-  try { ov = await FS.amOverridesOf(name); } catch(e){}
+  var am = got[2], ov = got[3];
   var ctx = { days:days, legacyLast:legacyLast, today:today,
               dorm:!!m.dorm, am:am, ov:ov };
 
@@ -1137,7 +1228,7 @@ async function loadWallet(m){
   // 저잣거리 구매 — 판매 기록에서 계산한다(원장에 따로 적지 않는다)
   var marketCost = 0, marketItems2 = [];
   try {
-    var buys = await FS.marketBuys();
+    var buys = got[4];
     buys.filter(function(b){ return b.student === name; }).forEach(function(b){
       var c = b.qty * b.price;
       marketCost -= c;
@@ -1147,15 +1238,13 @@ async function loadWallet(m){
   } catch(e){}
 
   // 프리즈 구매 비용 — 구매 기록 수로 계산한다(원장에 따로 적지 않는다)
-  var fz = { bought:0 };
-  try { fz = await FS.freezeOf(name); } catch(e){}
+  var fz = got[5] || { bought:0 };
   var freezeCost = -FREEZE_COST * (fz.bought || 0);
   var freezeItems = [];
   for (var fi=0; fi<(fz.bought||0); fi++)
     freezeItems.push({ date:'', amount:-FREEZE_COST, reason:'스트릭 프리즈 구매', by:'계산' });
 
-  var plannerByDate = {};
-  try { plannerByDate = await FS.plannerOf(name); } catch(e){}
+  var plannerByDate = got[6] || {};
   var pl = coinFromPlanner(from, today, plannerByDate, ctx);
 
   var items = att.items.concat(pl.items).concat(freezeItems).concat(marketItems2)
@@ -1704,12 +1793,9 @@ async function renderCoinStudent(v){
 async function renderCoinTeacher(v){
   v.innerHTML='<div class="empty"><span>불러오는 중…</span></div>';
   var mem = await FS.members();
-  var rows = [];
-  for (var i=0;i<mem.length;i++){
-    var m = mem[i];
-    var w = await loadWallet(m);
-    rows.push({ m:m, bal:w.balance, mode:w.mode });
-  }
+  // 학생마다 차례로 기다리지 않고 한꺼번에 계산한다(폰에서 13명 × 왕복 시간이던 것을 1번 왕복으로)
+  var ws = await Promise.all(mem.map(function(m){ return loadWallet(m); }));
+  var rows = mem.map(function(m, i){ return { m:m, bal:ws[i].balance, mode:ws[i].mode }; });
   var html = '<div class="sec-label">엽전 지급·차감</div><div class="card">';
   html += rows.map(function(r){
     return '<div class="row" onclick="openGrant(\''+r.m.name+'\')" style="cursor:pointer">'+
@@ -1794,13 +1880,13 @@ async function renderAmTeacher(v){
 
   v.innerHTML=head+'<div class="empty"><span>불러오는 중…</span></div>';
 
-  var mem = await FS.members();
-  var am  = await FS.amCheckIns(amDate);
-  var ov  = await FS.amOverrides(amDate);
+  var got = await Promise.all([ FS.members(), FS.amCheckIns(amDate), FS.amOverrides(amDate),
+                                soft(FS.attendanceAll(), { byName:{} }) ]);
+  var mem = got[0], am = got[1], ov = got[2];
   // 구앱(시트) 이력도 함께 봐야 전환 전 날짜가 빈칸으로 보이지 않는다
   var legacy = {}, legacyLast = '';
   try {
-    var all = await FS.attendanceAll();
+    var all = got[3];
     for (var nm in all.byName){
       var ks = Object.keys(all.byName[nm]).sort();
       if (ks.length && ks[ks.length-1] > legacyLast) legacyLast = ks[ks.length-1];
@@ -1995,17 +2081,18 @@ async function scanQuietDays(){
   await loadCalendar();
   var today = kstToday();
   var from  = shiftDay(today, -QUIET_LOOKBACK);
-  var mem   = await FS.members();
+  var got = await Promise.all([ FS.members(), FS.attendanceAll(),
+                                soft(FS.amSince(from), { am:{}, ov:{} }) ]);
+  var mem = got[0];
   if (!mem.length) return [];
 
-  var att = await FS.attendanceAll();
+  var att = got[1];
   var legacyLast = '';
   for (var nm in att.byName){
     var ks = Object.keys(att.byName[nm]).sort();
     if (ks.length && ks[ks.length-1] > legacyLast) legacyLast = ks[ks.length-1];
   }
-  var recent = { am:{}, ov:{} };
-  try { recent = await FS.amSince(from); } catch(e){}
+  var recent = got[2];
 
   var skip = quietDismissed(), out = [];
   eachWeekday(from, today, function(ds){
@@ -2617,8 +2704,10 @@ async function fillTeacherHome(){
 
   set('thDate', isSchoolDay(today) ? '' : '· '+(offReason(today)||'휴업일'));
 
-  var mem = [];
-  try { mem = await FS.members(); } catch(e){}
+  // 명부·출결·등교·정정을 한꺼번에 받는다
+  var got = await Promise.all([ soft(FS.members(), []), soft(FS.attendanceAll(), { byName:{} }),
+                                soft(FS.amCheckIns(today), {}), soft(FS.amOverrides(today), {}) ]);
+  var mem = got[0];
   if (!mem.length){
     var r0=document.getElementById('thRoster');
     if(r0) r0.innerHTML='<div class="blk"><div class="row-s">명부를 불러오지 못했습니다</div></div>';
@@ -2626,10 +2715,7 @@ async function fillTeacherHome(){
   }
 
   // 오늘 출결
-  var att = { byName:{} }, am = {}, ov = {};
-  try { att = await FS.attendanceAll(); } catch(e){}
-  try { am  = await FS.amCheckIns(today); } catch(e){}
-  try { ov  = await FS.amOverrides(today); } catch(e){}
+  var att = got[1], am = got[2], ov = got[3];
   var legacyLast = '';
   for (var nm in att.byName){
     var ks = Object.keys(att.byName[nm]).sort();
@@ -2712,6 +2798,7 @@ function logout(){document.getElementById('app').classList.add('hidden');
   disableNotis();                                   // 남의 기기에 알림이 남지 않게
   ME={id:'',name:'',track:'공무원',coins:0,dorm:false,week:[],planner:null};
   streakCache=null; sShowErr('');
+  if(window.FS && FS.__clear) FS.__clear();   // 사람이 바뀌면 볼 수 있는 자료도 다르다
   if(window.AUTH) AUTH.leave();      // 교사 세션을 끊고 다시 익명으로
   protoSync();}
 
@@ -2730,9 +2817,9 @@ function sShowErr(msg){
 async function applyStudent(m){
   ME.id=m.id; ME.name=m.name; ME.track=m.track; ME.coins=m.coins; ME.dorm=m.dorm;
   await loadCalendar();
-  await loadAmToday();
-  await loadPlannerToday();
-  ME.week = await buildWeek(m.name);
+  // 서로 기다릴 필요가 없는 셋은 동시에
+  var got = await Promise.all([ loadAmToday(), loadPlannerToday(), buildWeek(m.name) ]);
+  ME.week = got[2];
   streakCache = null;                 // 다른 학생으로 바뀌었을 수 있다
   scheduleLocalNotis();               // 앞으로 3주치 알림을 다시 깐다(앱에서만)
 }
@@ -2746,6 +2833,7 @@ async function studentLogin(){
   if(!/^\d{4}$/.test(pin)){ sShowErr('PIN 4자리를 입력해주세요'); return; }
   if(!window.FS){ sShowErr('연결 준비 중입니다. 잠시 후 다시 해주세요'); return; }
   sShowErr(''); btn.disabled=true; btn.textContent='확인 중...';
+  if (FS.__clear) FS.__clear();
   try{
     var m = await FS.memberById(id);
     if(!m)            { sShowErr('학번을 찾을 수 없습니다'); return; }
@@ -2762,6 +2850,11 @@ async function studentLogin(){
       if (mine && mine.name !== m.name){
         await AUTH.leave();                 // signOut → 새 익명 UID
         bound = await tryBind(m, pin);
+      } else if (mine && mine.name === m.name){
+        // 이 기기는 이미 이 학생으로 연결돼 있다(예전에 PIN을 맞게 넣어 만들어진 연결).
+        // 연결 문서는 고칠 수 없어서 다시 만들려다 막힌 것이지 PIN이 틀린 게 아니다.
+        // 자동 입실이 네트워크 문제로 실패해 로그인 화면이 뜬 경우가 이렇다.
+        bound = true;
       }
     }
     if (!bound){ sShowErr('PIN이 맞지 않습니다'); return; }
@@ -2806,11 +2899,13 @@ async function autoLogin(){
 /* 이번 주(월~금) 출결 점 — 기록이 없는 지난 수업일은 결석으로 본다.
    '기록이 없으면 결석'은 방과후·스트릭과 같은 규칙이다(§10.5). */
 async function buildWeek(name){
-  await loadCalendar();
-  var days = await FS.attendanceOf(name);
+  // 학사일정·구앱 출결·등교·정정을 한꺼번에 받는다
+  var got = await Promise.all([ loadCalendar(), FS.attendanceOf(name),
+                                soft(FS.amCheckInsOf(name), {}), soft(FS.amOverridesOf(name), {}) ]);
+  var days = got[1];
   var today = kstToday();
   // 이번 주 v2 기록·교사 정정도 함께 본다 (구앱 이력만 보면 전환 후 빈칸이 된다)
-  var am = {}, ov = {};
+  var am = got[2], ov = got[3];
   var legacyLast = Object.keys(days).sort().pop() || '';
   var k = kstNow();
   var dow = k.getDay();                       // 0=일
@@ -2822,9 +2917,7 @@ async function buildWeek(name){
     week.push(ds);
     out.push({d:LBL[i], s:''});
   }
-  // 본인 기록만 한 번에 가져온다(날짜별 전체 조회는 규칙상 막힌다)
-  try { am = await FS.amCheckInsOf(name); } catch(e){}
-  try { ov = await FS.amOverridesOf(name); } catch(e){}
+  // (본인 기록만 이름으로 가져온다 — 날짜별 전체 조회는 규칙상 막힌다)
 
   var ctx = { days:days, legacyLast:legacyLast, today:today, dorm:ME.dorm,
               am:{}, ov:{} };
@@ -2887,6 +2980,7 @@ async function teacherLogin(){
   btn.disabled=true; btn.textContent='확인 중...';
   try{
     await AUTH.signInTeacher(email,pw);
+    if (window.FS && FS.__clear) FS.__clear();   // 교사로 바뀌면 볼 수 있는 자료가 늘어난다
     document.getElementById('tPw').value='';
     enterApp('teacher');
   }catch(e){
@@ -2917,7 +3011,22 @@ else window.addEventListener('fs-ready', function(){ autoLogin(); });
    예약분이 3주치뿐이라 오래 안 열면 바닥난다. 열 때마다 채워준다. */
 document.addEventListener('visibilitychange', function(){
   if (!document.hidden && ME.name) scheduleLocalNotis();
+  // 다시 앞으로 나오면: 받아 둔 화면을 그대로 보여주고, 뒤에서 새로 받아 바뀐 게 있으면 다시 그린다
+  if (!document.hidden && window.FS && FS.__stale){ FS.__stale(); softRefresh(); }
 });
+
+/** 뒤에서 받은 새 자료로 지금 화면을 다시 그린다.
+    입력 중이거나 창(모달)이 떠 있으면 건드리지 않는다 — 쓰던 내용이 날아가면 안 된다. */
+function softRefresh(){
+  var app = document.getElementById('app');
+  if (!app || app.classList.contains('hidden')) return;
+  if (document.getElementById('modal')) return;
+  var a = document.activeElement;
+  if (a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)) return;
+  var y = window.scrollY;
+  renderView();
+  window.scrollTo(0, y);
+}
 </script>
 </body>
 </html>
