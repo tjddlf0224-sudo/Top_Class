@@ -347,6 +347,8 @@ const auth = initializeAuth(fbApp, {
    ⚠️ 구앱(index.html)은 인증을 전혀 쓰지 않는다. 구앱이 건드리는
       schedule 쓰기와 모든 읽기 권한은 규칙에서 손대지 말 것. */
 const TEACHER_UID = 'c5BpZGuLVtZmKep0xq3DVeCUBij1';
+// 심사용 데모 교사 — admins에 없으므로 서버상 교사가 아니다. 앱이 가상 데이터 모드로 바뀐다(enterDemoMode).
+const DEMO_TEACHER_UID = 'QcRBqM7ivsQTeYUMdMKJSW5BcaR2';
 
 let _isTeacher = false;
 
@@ -392,6 +394,12 @@ window.AUTH = {
 
   async signInTeacher(email, pw){
     const c = await signInWithEmailAndPassword(auth, email, pw);
+    if (c.user.uid === DEMO_TEACHER_UID) {        // 심사용: 실제 자료 대신 가상 데이터로
+      window.enterDemoMode();
+      _isTeacher = true;
+      _authReady = Promise.resolve(c.user);
+      return c.user;
+    }
     if (!(await verifyTeacher(c.user))) {
       await signOut(auth);                       // 교사가 아니면 익명으로 되돌린다
       _authReady = _bootGuarded();
@@ -2153,6 +2161,147 @@ async function makeParentReport(){
     showModal('<div class="modal-box"><div style="text-align:center;padding:12px 0"><div style="font-weight:800">보고서를 만들지 못했습니다</div>'+
       '<div class="row-s" style="margin-top:6px">'+escapeHtml(String(e && e.message || e))+'</div></div><button class="btn" onclick="closeModal()">확인</button></div>');
   }
+}
+
+/* ═══ 심사용 데모 교사 모드 ═══════════════════════════════════
+   App Store·Google Play 심사관이 교사 기능을 볼 수 있게 하되 실제 학생 정보는 절대 보이지 않게 한다.
+   - 데모 교사 계정(DEMO_TEACHER_UID)은 서버 규칙상 교사가 아니다(admins에 없음) → 실제 학생 자료는 서버가 막는다.
+   - 로그인하면 FS를 이 가상 데이터로 통째로 바꾼다. 쓰기는 기기 메모리에만 반영되고 서버에는 가지 않는다.
+   - 로그아웃하면 페이지를 새로 불러 원래 FS로 돌아간다. */
+var DEMO_MODE = false;
+function enterDemoMode(){
+  if (DEMO_MODE) return;
+  DEMO_MODE = true;
+  var today = kstToday(), from = '2026-09-01';
+  var STU = [
+    { id:'9001', name:'김민준', track:'공무원', dorm:false }, { id:'9002', name:'이서연', track:'공무원', dorm:true },
+    { id:'9003', name:'박지훈', track:'공무원', dorm:false }, { id:'9004', name:'최수아', track:'공기업', dorm:false },
+    { id:'9005', name:'정예준', track:'공기업', dorm:true },  { id:'9006', name:'한지우', track:'공기업', dorm:false } ];
+  // 같은 결과가 나오게 고정 난수
+  var seed = 7; var rnd = function(){ seed = (seed*9301 + 49297) % 233280; return seed/233280; };
+  var ts = function(ds, hh, mm){ return { seconds: Math.floor(new Date(ds+'T'+pad2(hh)+':'+pad2(mm)+':00+09:00').getTime()/1000) }; };
+  var days = []; eachWeekday(from, today, function(ds){ if (isSchoolDay(ds)) days.push(ds); });   // 오늘 아침 등교까지 채워 둔다
+  var AM = {}, OV = {}, PL = {}, LED = {}, CNS = [], BUY = [], ASCHK = {}, ASFIX = {}, SET = {}, REQ = [], LOG = [], ABS = [];
+  STU.forEach(function(s){ AM[s.name] = {}; OV[s.name] = {}; PL[s.name] = {}; LED[s.name] = []; });
+  var tasks = ['한국사 기출 1회', '영어 단어 50개', '국어 문법 정리', 'NCS 의사소통 20문항', '행정법 강의 2강', '오답 노트'];
+  days.forEach(function(ds){
+    STU.forEach(function(s, i){
+      var r = rnd();
+      if (r < 0.06 + i*0.01) OV[s.name][ds] = { date:ds, name:s.name, status:'결석', by:'교사' };
+      else { var late = r > 0.9; AM[s.name][ds] = { name:s.name, dorm:s.dorm, at: ts(ds, late ? 8 : 7, late ? 15 + Math.floor(rnd()*10) : 25 + Math.floor(rnd()*30)) }; }
+      if (!OV[s.name][ds]){
+        var n = 3 + Math.floor(rnd()*3), done = Math.max(0, n - Math.floor(rnd()*3));
+        var tk = []; for (var k = 0; k < n; k++) tk.push({ text: tasks[(k+i) % tasks.length], status: k < done ? 3 : (rnd() < .5 ? 2 : 0) });
+        PL[s.name][ds] = { id:'d'+ds+s.id, progress: Math.round(done/n*100), tasks: JSON.stringify(tk) };
+      }
+    });
+  });
+  var led = function(name, date, amount, reason){ LED[name].push({ id:'L'+Math.random(), date:date, amount:amount, reason:reason, by:'교사', at: ts(date, 15, 0).seconds }); };
+  led('김민준','2026-09-11', 3, '청소 도움'); led('이서연','2026-09-15', 2, '발표 우수'); led('최수아','2026-09-17', -2, '휴대폰 사용');
+  led('정예준','2026-09-22', 3, '청소 도움'); led('박지훈','2026-09-24', 1, '과제 우수');
+  var cns = function(date, name, memo){ CNS.push({ id:date+'_'+name, date:date, name:name, done:true, memo:memo }); };
+  cns('2026-09-03','김민준','[학업] 9급 국어 목표 점수 설정, 주간 계획 점검'); cns('2026-09-08','최수아','[진로] 공기업 지원 기관 3곳 정리');
+  cns('2026-09-10','박지훈','[생활] 지각이 잦아 기상 시간 조정 약속'); cns('2026-09-16','이서연','[학업] 영어 단어 학습법 상담');
+  cns('2026-09-18','정예준','[진로] NCS 모의고사 결과 분석'); cns('2026-09-23','한지우','[심리] 시험 불안, 호흡법 안내');
+  BUY.push({ id:'B1', student:'김민준', item:'자유시간', qty:1, price:1, at: ts('2026-09-19',16,0).seconds });
+  BUY.push({ id:'B2', student:'이서연', item:'초코과자', qty:2, price:2, at: ts('2026-09-25',16,0).seconds });
+  REQ.push({ id:'R1', name:'박지훈', amount:1, text:'9월 24일 출석했는데 지각으로 기록된 것 같아요', status:'대기', at: ts('2026-09-26',9,0).seconds, doneAt:0 });
+  SET.dday = { list:[ { name:'지방직 9급 필기', date:'2027-06-19', track:'공무원' }, { name:'공기업 NCS 모의고사', date:'2026-11-14', track:'공기업' } ] };
+  SET.coinPresets = { list:[ { label:'청소 도움', amount:2 }, { label:'발표 우수', amount:2 }, { label:'휴대폰 사용', amount:-2 } ] };
+  var W = function(id,day,subject,track,teacher,place){ return { id:id, day:day, start:'18:30', end:'21:20', subject:subject, track:track, teacher:teacher, place:place, note:'' }; };
+  var SCHED = { weekly:[ W('a','월','국어','공무원','김선생','1-6'), W('b','화','영어','공무원','이선생','1-6'), W('c','수','국어','공무원','김선생','1-6'),
+    W('d','수','NCS','공기업','박선생','1-7'), W('e','목','한국사','공무원','최선생','1-6'), W('f','금','NCS','공기업','박선생','1-7') ], exceptions:[], updatedAt:'demo' };
+  days.forEach(function(ds){ ASCHK[ds] = [];
+    asResolveDay(SCHED, ds).items.forEach(function(c){ STU.forEach(function(s){ var t = classTrack(c);
+      if ((t === '공통' || t === s.track) && rnd() < 0.85) ASCHK[ds].push({ subject:c.subject, name:s.name, track:s.track, at: ts(ds, 18, 35) }); }); }); });
+  // 성적: 공무원(국·영·한) 4회, 공기업(NCS) 3회
+  var EX = [];
+  var gm = STU.filter(function(s){ return s.track === '공무원'; }), gg = STU.filter(function(s){ return s.track === '공기업'; });
+  [['2026-05-20','5월 모의고사'],['2026-06-17','6월 모의고사'],['2026-07-15','7월 모의고사'],['2026-09-10','9월 모의고사']].forEach(function(e, j){
+    var rows = gm.map(function(s, i){ var k = 60 + j*5 + i*6 + Math.floor(rnd()*8), en = 50 + j*6 + i*5 + Math.floor(rnd()*8), h = 70 + j*4 + i*4 + Math.floor(rnd()*6);
+      return { name:s.name, korean:k, english:en, history:Math.min(h,100), total:k+en+Math.min(h,100), rank:0 }; });
+    rows.sort(function(a,b){ return b.total - a.total; }).forEach(function(r, i){ r.rank = i+1; });
+    var av = function(key){ return Math.round(rows.reduce(function(a,r){ return a + r[key]; }, 0) / rows.length * 10) / 10; };
+    EX.push({ name:e[1], date:e[0], single:false, rows:rows, avg:{ korean:av('korean'), english:av('english'), history:av('history'), total:av('total') }, avgG:null });
+  });
+  [['2026-06-17','2016 제2회 NCS'],['2026-08-19','2017 제1회 NCS'],['2026-09-23','2018 제1회 NCS']].forEach(function(e, j){
+    var rows = gg.map(function(s, i){ var k = 45 + j*6 + i*5 + Math.floor(rnd()*8); return { name:s.name, korean:k, english:0, history:0, total:k, rank:0 }; });
+    rows.sort(function(a,b){ return b.total - a.total; }).forEach(function(r, i){ r.rank = i+1; });
+    var a = Math.round(rows.reduce(function(x,r){ return x + r.korean; }, 0) / rows.length * 10) / 10;
+    EX.push({ name:e[1], date:e[0], single:true, rows:rows, avg:null, avgG:{ korean:a, english:0, history:0, total:a } });
+  });
+  EX.sort(function(a,b){ return b.date.localeCompare(a.date); });
+  var byName = function(obj, name){ return obj[name] || {}; };
+  var mem = function(){ return STU.map(function(s){ return { id:s.id, name:s.name, track:s.track, coins:0, dorm:s.dorm }; }); };
+  var ok = function(v){ return Promise.resolve(v); };
+  var realLegacy = FS.legacyStats, realCal = FS.calendarOff;   // 선배 통계(이름 없는 집계)·휴업일은 공개 자료라 그대로 쓴다
+  var D = {
+    members: function(){ return ok(mem()); },
+    memberById: function(id){ var s = STU.filter(function(x){ return x.id === String(id); })[0]; return ok(s ? { id:s.id, name:s.name, track:s.track, coins:0, dorm:s.dorm, role:'관원' } : null); },
+    attendanceOf: function(){ return ok({}); },
+    attendanceAll: function(){ return ok({ byName:{}, schoolDays:new Set() }); },
+    amCheckIns: function(ds){ var o = {}; STU.forEach(function(s){ if (AM[s.name][ds]) o[s.name] = AM[s.name][ds]; }); return ok(o); },
+    amOverrides: function(ds){ var o = {}; STU.forEach(function(s){ if (OV[s.name][ds]) o[s.name] = OV[s.name][ds]; }); return ok(o); },
+    amCheckInsOf: function(n){ return ok(byName(AM, n)); },
+    amOverridesOf: function(n){ return ok(byName(OV, n)); },
+    amSince: function(f){ var am = {}, ov = {}; STU.forEach(function(s){
+      Object.keys(AM[s.name]).forEach(function(ds){ if (ds >= f) (am[ds] = am[ds] || {})[s.name] = AM[s.name][ds]; });
+      Object.keys(OV[s.name]).forEach(function(ds){ if (ds >= f) (ov[ds] = ov[ds] || {})[s.name] = OV[s.name][ds]; }); }); return ok({ am:am, ov:ov }); },
+    setAmOverride: function(ds, n, st){ OV[n][ds] = { date:ds, name:n, status:st, by:'교사' }; return ok(); },
+    amCheckIn: function(){ return ok(); },
+    openingOf: function(){ return ok({ date:from, coins:20 }); },
+    ledgerOf: function(n){ return ok((LED[n]||[]).slice().sort(function(a,b){ return a.date < b.date ? 1 : -1; })); },
+    addLedger: function(n, a, r){ (LED[n] = LED[n] || []).push({ id:'L'+Date.now()+Math.random(), date:today, amount:Number(a), reason:String(r), by:'교사', at:Math.floor(Date.now()/1000) }); return ok(); },
+    plannerOf: function(n){ return ok(byName(PL, n)); },
+    plannersOn: function(ds){ var o = {}; STU.forEach(function(s){ if (PL[s.name][ds]) o[s.name] = { progress:PL[s.name][ds].progress, tasks:PL[s.name][ds].tasks }; }); return ok(o); },
+    plannersSince: function(f){ var o = {}; STU.forEach(function(s){ Object.keys(PL[s.name]).forEach(function(ds){ if (ds >= f) (o[ds] = o[ds] || {})[s.name] = PL[s.name][ds].progress; }); }); return ok(o); },
+    savePlanner: function(){ return ok(); },
+    freezeOf: function(){ return ok({ bought:0, used:0, count:0, dates:[] }); },
+    buyFreeze: function(){ return ok(); }, useFreeze: function(){ return ok(); },
+    marketItems: function(){ return ok([ { id:'m1', name:'자유시간', price:1, stock:30, note:'' }, { id:'m2', name:'초코과자', price:2, stock:20, note:'' },
+      { id:'m3', name:'음료수', price:3, stock:15, note:'' }, { id:'m4', name:'자습 자리 우선 선택권', price:10, stock:3, note:'1주일' } ]); },
+    marketBuys: function(){ return ok(BUY.slice().sort(function(a,b){ return b.at - a.at; })); },
+    addMarketItem: function(){ return ok(); },
+    sellMarket: function(st, it, q, p){ BUY.push({ id:'B'+Date.now(), student:st, item:it, qty:Number(q), price:Number(p), at:Math.floor(Date.now()/1000) }); return ok(); },
+    cancelMarketBuy: function(id){ BUY = BUY.filter(function(b){ return b.id !== id; }); return ok(); },
+    examScores: function(){ return ok(EX); },
+    legacyStats: function(t){ return realLegacy(t); },
+    saveExamScores: function(){ return ok(); },
+    calendarOff: function(){ return realCal(); },
+    setCalendarOff: function(){ return ok(); }, clearCalendarOff: function(){ return ok(); },
+    setDorm: function(id, on){ STU.forEach(function(s){ if (s.id === String(id)) s.dorm = !!on; }); return ok(); },
+    counselAll: function(){ return ok(CNS.slice().sort(function(a,b){ return b.date.localeCompare(a.date); })); },
+    saveCounsel: function(ds, n, m){ CNS = CNS.filter(function(c){ return !(c.date === ds && c.name === n); });
+      CNS.push({ id:ds+'_'+n, date:ds, name:n, done:String(m).trim().length > 0, memo:String(m) }); return ok(); },
+    schedule: function(){ return ok(JSON.parse(JSON.stringify(SCHED))); },
+    updateSchedule: function(fn){ var c = JSON.parse(JSON.stringify(SCHED)); fn(c); SCHED = c; SCHED.updatedAt = String(Date.now()); return ok(); },
+    checkIns: function(ds){ return ok((ASCHK[ds]||[]).slice()); },
+    checkIn: function(){ return ok(); },
+    asOverrides: function(ds){ return ok(JSON.parse(JSON.stringify(ASFIX[ds] || {}))); },
+    setAsOverride: function(ds, sub, n, st){ var d = ASFIX[ds] = ASFIX[ds] || {}; var m = d[sub] = d[sub] || {}; if (st) m[n] = st; else delete m[n]; return ok(); },
+    settings: function(k){ return ok(JSON.parse(JSON.stringify(SET[k] || {}))); },
+    setSettings: function(k, v){ SET[k] = JSON.parse(JSON.stringify(v)); return ok(); },
+    coinReqsAll: function(){ return ok(REQ.slice()); },
+    coinReqsOf: function(n){ return ok(REQ.filter(function(r){ return r.name === n; })); },
+    addCoinReq: function(){ return ok(); },
+    resolveCoinReq: function(id, st){ REQ.forEach(function(r){ if (r.id === id){ r.status = st; r.doneAt = Math.floor(Date.now()/1000); } }); return ok(); },
+    absenceReasons: function(){ return ok(ABS.slice()); },
+    setAbsenceReason: function(ds, n, r){ ABS = ABS.filter(function(a){ return !(a.date === ds && a.name === n); }); if (String(r||'').trim()) ABS.push({ id:ds+n, date:ds, name:n, reason:String(r).trim() }); return ok(); },
+    teacherLogs: function(){ return ok(LOG.slice()); },
+    addTeacherLog: function(ds, t){ LOG.unshift({ id:'T'+Date.now(), date:ds, text:String(t), at:Math.floor(Date.now()/1000) }); return ok(); },
+    deleteTeacherLog: function(id){ LOG = LOG.filter(function(l){ return l.id !== id; }); return ok(); },
+    addMember: function(id, name, track, dorm){ STU.push({ id:String(id), name:String(name), track:String(track), dorm:!!dorm });
+      AM[name] = {}; OV[name] = {}; PL[name] = {}; LED[name] = []; return ok(); },
+    promoteSchoolYear: function(g, n){ return ok({ graduated:g.length, added:n.length, ops:0 }); },
+    setPin: function(){ return ok(); }, bindStudent: function(){ return ok(); }, clearPin: function(){ return ok(); },
+    myBinding: function(){ return ok(null); }
+  };
+  Object.keys(FS).forEach(function(k){
+    if (k.indexOf('__') === 0) return;
+    FS[k] = D[k] || function(){ return Promise.resolve(null); };   // 목록에 없는 새 함수도 서버로 가지 않게
+  });
+  // 전환 전 잠금(성적 등록·명부·학년도 전환·기숙사)도 데모에선 풀어 모든 기능을 보여준다
+  ATT_V2_FROM = '2000-01-01';
 }
 
 /* ═══ 하위 메뉴 (구앱과 같은 구성) ═════════════════════════
@@ -4845,7 +4994,7 @@ function setRole(r){
 function applyRole(){
   var t=ROLE==='teacher';
   document.getElementById('uName').textContent = t?'교사':ME.name;
-  document.getElementById('uRole').textContent = t?'장원급제반 담임':(ME.track+'반');
+  document.getElementById('uRole').textContent = t?(DEMO_MODE?'데모 모드 · 가상 학생 데이터':'장원급제반 담임'):(ME.track+'반');
   document.getElementById('uStreak').style.display = t?'none':'';
   document.getElementById('btnBell').style.display = t?'none':'';
   renderTabs();renderView();
@@ -4857,7 +5006,10 @@ function syncHeroStreak(){
   var el = document.getElementById('heroStreak');
   if (el && streakCache) el.textContent = streakCache.streak + '일';
 }
-function logout(){document.getElementById('app').classList.add('hidden');
+function logout(){
+  // 데모 모드였다면 가상 FS가 남지 않게 페이지를 새로 불러 원래 상태로
+  if (DEMO_MODE){ try{ localStorage.removeItem(SKEY); }catch(e){} if(window.AUTH) AUTH.leave().then(function(){ location.reload(); }); else location.reload(); return; }
+  document.getElementById('app').classList.add('hidden');
   document.getElementById('login').classList.remove('hidden');
   hideTeacherLogin();
   try{ localStorage.removeItem(SKEY); }catch(e){}   // 다음엔 다시 학번을 묻는다
