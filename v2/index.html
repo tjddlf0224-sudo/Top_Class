@@ -73,6 +73,11 @@ input::placeholder{color:#b4b4c8;}
 .btn-sm{width:auto;padding:8px 14px;font-size:0.8rem;margin:0;}
 .login-divider{display:flex;align-items:center;gap:12px;margin:24px 0 16px;color:var(--ink-mute);font-size:0.76rem;}
 .login-divider::before,.login-divider::after{content:'';flex:1;height:1px;background:var(--line);}
+.login-links{display:flex;justify-content:center;align-items:center;gap:8px;margin-top:22px;color:var(--ink-mute);font-size:0.76rem;}
+.login-links button{background:none;border:none;font-family:inherit;font-size:inherit;color:var(--ink-mute);cursor:pointer;padding:6px 2px;text-decoration:underline;text-underline-offset:3px;}
+.doc-box{background:var(--surface);border-radius:18px;width:100%;max-width:560px;height:86vh;height:86dvh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 60px rgba(26,26,46,.2);}
+.doc-head{display:flex;align-items:center;justify-content:space-between;padding:12px 12px 12px 18px;border-bottom:1px solid var(--line);font-weight:800;}
+.doc-box iframe{flex:1;border:0;width:100%;background:#fff;}
 .login-err{background:var(--rose-soft);color:var(--rose);font-size:0.8rem;font-weight:600;
   padding:10px 12px;border-radius:8px;margin-bottom:10px;}
 
@@ -266,6 +271,7 @@ main{padding:6px 18px calc(96px + var(--safe-bottom));}
     <button class="btn" id="tGo" onclick="teacherLogin()">로그인</button>
     <button class="btn btn-outline" onclick="hideTeacherLogin()">취소</button>
   </div>
+  <div class="login-links"><button onclick="openDoc('privacy.html','개인정보 처리방침')">개인정보 처리방침</button><span>·</span><button onclick="openDoc('support.html','문의·도움말')">문의·도움말</button></div>
 </div>
 
 <!-- ══════════ 앱 ══════════ -->
@@ -282,11 +288,13 @@ main{padding:6px 18px calc(96px + var(--safe-bottom));}
       <div style="display:flex;gap:2px;">
         <!-- 알림 켜기/끄기(학생만 — 등교·방과후 알림은 학생용이다) -->
         <button class="icon-btn" id="btnBell" onclick="toggleNotis()" aria-label="알림"><span class="ico-slot" data-ico="bell" data-sz="21"></span></button>
-        <button class="icon-btn" onclick="logout()"><span class="ico-slot" data-ico="exit" data-sz="21"></span></button>
+        <button class="icon-btn" onclick="openAppInfo()" aria-label="앱 정보"><span class="ico-slot" data-ico="info" data-sz="21"></span></button>
+        <button class="icon-btn" onclick="logout()" aria-label="로그아웃"><span class="ico-slot" data-ico="exit" data-sz="21"></span></button>
       </div>
     </div>
     <div class="sub-bar hidden" id="subBar"></div>
   </div>
+  <div id="updBar" class="hidden" style="margin:10px 16px 0;padding:11px 14px;border-radius:12px;background:var(--orange-soft);color:#9a3412;font-size:.82rem;line-height:1.5">새 버전이 나왔어요. 스토어에서 앱을 업데이트해 주세요.</div>
   <main id="view"></main>
   <nav class="tab-bar" id="tabBar"></nav>
 </div>
@@ -349,6 +357,9 @@ const auth = initializeAuth(fbApp, {
 const TEACHER_UID = 'c5BpZGuLVtZmKep0xq3DVeCUBij1';
 // 심사용 데모 교사 — admins에 없으므로 서버상 교사가 아니다. 앱이 가상 데이터 모드로 바뀐다(enterDemoMode).
 const DEMO_TEACHER_UID = 'QcRBqM7ivsQTeYUMdMKJSW5BcaR2';
+// PIN 시도 제한 — firestore.rules의 pinTry 규칙과 같은 값이어야 한다(6시간에 10번)
+const PIN_WINDOW_SEC = 6*3600, PIN_MAX_TRY = 10;
+window.PIN_RULE = { windowSec: PIN_WINDOW_SEC, max: PIN_MAX_TRY };
 
 let _isTeacher = false;
 
@@ -528,6 +539,29 @@ window.FS = {
   async resolveCoinReq(id, status){
     await _authReady;
     await updateDoc(doc(db,'coinReq',id), { status, by:'교사', doneAt: serverTimestamp() });
+  },
+
+  /* 계정·데이터 삭제 요청 — 학생이 앱 안에서 보내고 교사가 처리한다(문서 ID = 학번, 한 사람에 하나).
+     스토어 규정: 계정이 있는 앱은 앱 안에서 삭제를 시작할 수 있어야 한다. */
+  async deleteReqsAll(){
+    const snap = await getDocs(collection(db,'deleteReq'));
+    const out = []; snap.forEach(d => { const v = d.data();
+      out.push({ id:d.id, sid:String(v.sid||d.id), name:String(v.name||''), at: v.at && v.at.seconds || 0 }); });
+    return out.sort((a,b)=> a.at - b.at);
+  },
+  async deleteReqOf(name){
+    const snap = await getDocs(query(collection(db,'deleteReq'), where('name','==',name)));
+    let out = null; snap.forEach(d => { const v = d.data();
+      out = { id:d.id, sid:String(v.sid||d.id), name:String(v.name||''), at: v.at && v.at.seconds || 0 }; });
+    return out;
+  },
+  async addDeleteReq(sid, name){
+    await _authReady;
+    await setDoc(doc(db,'deleteReq',String(sid)), { sid:String(sid), name:String(name), at: serverTimestamp() });
+  },
+  async removeDeleteReq(sid){
+    await _authReady;
+    await deleteDoc(doc(db,'deleteReq',String(sid)));
   },
 
   /* 결석 사유(구앱 saveAbsenceReason) — 교사만. amOverride는 누구나 읽으므로 사유 글은 따로 둔다 */
@@ -918,6 +952,36 @@ window.FS = {
     await setDoc(doc(db,'studentPin',String(sid)),
       { hash: await _pinHash(sid, pin), setAt: new Date().toISOString() });
   },
+  /* PIN 시도 기록 — 맞든 틀리든 시도 한 번마다 남긴다(4자리를 차례로 넣어 보는 공격을 셀 수 있게).
+     pinTry(횟수·시각)는 누구나 읽지만 pinGuess(보낸 해시)는 아무도 못 읽는다(규칙만 읽는다).
+     창(PIN_WINDOW_SEC) 안에 PIN_MAX_TRY번을 넘으면 규칙이 더 못 쓰게 막는다.
+     ⚠️ 지금은 기록만 한다. 옛 빌드(이 기록을 안 남기는 iOS 빌드 5)가 쓰이는 동안에는
+        연결 규칙이 이 기록을 요구하면 그 빌드가 로그인을 못 한다 — 옛 빌드가 사라진 뒤 규칙에서 강제할 것. */
+  async pinAttempt(sid, pin){
+    await _authReady;
+    const u = auth.currentUser; if (!u) return;
+    sid = String(sid);
+    const cur = await getDoc(doc(db,'pinTry',sid));
+    const v = cur.exists() ? cur.data() : null;
+    const hash = await _pinHash(sid, pin);
+    const put = async (n) => {
+      const b = writeBatch(db);
+      b.set(doc(db,'pinTry',sid),   { n, at: serverTimestamp() });
+      b.set(doc(db,'pinGuess',sid), { uid: u.uid, hash, at: serverTimestamp() });
+      await b.commit();
+    };
+    const next  = v ? (Number(v.n)||0) + 1 : 1;
+    const fresh = !v || !v.at || (Date.now()/1000 - v.at.seconds) > PIN_WINDOW_SEC;
+    // 창이 지났는지는 서버 시각이 정한다 — 기기 시계가 달라 막히면 다른 쪽 값으로 한 번 더
+    try { await put(fresh ? 1 : next); }
+    catch(e){ if (v) await put(fresh ? next : 1); else throw e; }
+  },
+  async pinTryOf(sid){
+    const s = await getDoc(doc(db,'pinTry',String(sid)));
+    if (!s.exists()) return null;
+    const v = s.data();
+    return { n: Number(v.n)||0, at: v.at && v.at.seconds || 0 };
+  },
   /* 기기-학생 연결. PIN이 맞아야 규칙이 통과시킨다 — 이게 곧 PIN 검증이다. */
   async bindStudent(sid, name, pin){
     await _authReady;
@@ -933,6 +997,8 @@ window.FS = {
     await deleteDoc(doc(db,'studentPin',String(sid)));
     const snap = await getDocs(query(collection(db,'students'), where('name','==',name)));
     for (const d of snap.docs) { try { await deleteDoc(doc(db,'students',d.id)); } catch(e){} }
+    // 시도 횟수도 풀어 준다(잠겼던 학생이 바로 새 PIN을 정할 수 있게)
+    for (const c of ['pinTry','pinGuess']) { try { await deleteDoc(doc(db,c,String(sid))); } catch(e){} }
   },
   async myBinding(){
     await _authReady;
@@ -1040,8 +1106,9 @@ window.FS = {
   const READ = new Set(['schedule','memberById','attendanceOf','members','attendanceAll','freezeOf','legacyStats',
     'marketItems','marketBuys','examScores','amSince','calendarOff','counselAll','amCheckIns',
     'amOverrides','amCheckInsOf','amOverridesOf','openingOf','ledgerOf','plannerOf','checkIns',
-    'plannersOn','plannersSince','asOverrides','settings','coinReqsAll','coinReqsOf','absenceReasons','teacherLogs']);
-  const PASS = new Set(['myBinding']);          // 기기-학생 연결 확인은 매번 서버에 묻는다
+    'plannersOn','plannersSince','asOverrides','settings','coinReqsAll','coinReqsOf','absenceReasons','teacherLogs',
+    'deleteReqsAll','deleteReqOf']);
+  const PASS = new Set(['myBinding','pinTryOf']);          // 기기-학생 연결 확인은 매번 서버에 묻는다
   const FRESH_MS = 20000;
   const memo = new Map();                       // 키 → { v, t, p }
   let gen = 0, timer = null;
@@ -1112,7 +1179,8 @@ var ICONS = {
   coin:'<ellipse cx="12" cy="12" rx="8.2" ry="8.2"/><path d="M12 7.6v8.8M9.4 9.6h3.4a1.9 1.9 0 0 1 0 3.8H9.4"/>',
   market:'<path d="M4 8.5h16l-1 10.2a1.6 1.6 0 0 1-1.6 1.4H6.6A1.6 1.6 0 0 1 5 18.7L4 8.5z"/><path d="M8.6 8.5V6.4a3.4 3.4 0 0 1 6.8 0v2.1"/>',
   qr:'<rect x="3.5" y="3.5" width="7" height="7" rx="1.4"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.4"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.4"/><path d="M13.5 13.5h3v3h-3z"/><path d="M20.5 13.5v3M17 20.5h3.5"/>',
-  exit:'<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/>'
+  exit:'<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/>',
+  info:'<circle cx="12" cy="12" r="8.4"/><path d="M12 11.2v5"/><path d="M12 7.7v.2"/>'
 };
 function ic(n,s){return '<svg class="ico" width="'+(s||18)+'" height="'+(s||18)+'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">'+(ICONS[n]||'')+'</svg>';}
 function fillIcoSlots(root){
@@ -1819,7 +1887,7 @@ async function runPromote(){
   if (grads.length && !cohort) return show('졸업 기수 이름을 입력해주세요');
   if (news.some(function(s){ return !/^\d{3,6}$/.test(s.id) || !s.name; })) return show('신입생 학번(숫자)과 이름을 모두 입력해주세요');
   if (news.some(function(s){ return mem.some(function(m){ return String(m.id) === s.id; }); })) return show('이미 있는 학번이 있어요');
-  if (!confirm('학년도 전환을 실행합니다.\n\n· 졸업 '+grads.length+'명 (명부에서 빼고 성적을 선배 기록으로)\n· 신입 '+news.length+'명\n\n되돌릴 수 없습니다. 진행할까요?')) return;
+  if (!(await confirmTyped('학년도 전환을 실행합니다.\n\n· 졸업 '+grads.length+'명 (명부에서 빼고 성적을 선배 기록으로)\n· 신입 '+news.length+'명\n\n되돌릴 수 없습니다.', '전환'))) return;
   var btn = document.getElementById('pmGo'); btn.disabled = true; btn.textContent = '처리 중...';
   try { var r = await FS.promoteSchoolYear(grads, news, cohort); PROMO = null; closeModal();
     showModal('<div class="modal-box"><div style="text-align:center;padding:12px 0"><div style="font-weight:800">전환 완료</div><div class="row-s" style="margin-top:6px">졸업 '+r.graduated+'명 · 신입 '+r.added+'명</div></div><button class="btn" onclick="closeModal();renderView()">확인</button></div>'); }
@@ -2169,7 +2237,17 @@ async function makeParentReport(){
    - 로그인하면 FS를 이 가상 데이터로 통째로 바꾼다. 쓰기는 기기 메모리에만 반영되고 서버에는 가지 않는다.
    - 로그아웃하면 페이지를 새로 불러 원래 FS로 돌아간다. */
 var DEMO_MODE = false;
-function enterDemoMode(){
+/* 학생 체험 모드 — 심사용 테스트 학생(DEMO_STUDENT_SID)으로 입실하면 같은 가상 데이터 위에서 학생 화면을 보여준다.
+   - 심사관은 한국 시간과 무관한 때에 앱을 연다. 실제 계정이면 등교 인증(06:00~08:30)·방과후 출석(18:30~)이
+     닫혀 있어 눌러 볼 수 없고, 성적·엽전도 비어 있다 → 체험 모드에서는 언제든 눌러 볼 수 있고 예시 기록이 보인다.
+   - 입실(PIN 대조)은 실제 서버에서 하고, 그 뒤 읽기·쓰기만 가상으로 바뀐다. 서버에는 아무것도 쓰지 않는다.
+   - 실제 자료로 시험하려면 그 기기에서 localStorage tc_nodemo = '1'. */
+var DEMO_STUDENT = false, DEMO_STUDENT_SID = '9999';
+function isDemoStudent(m){
+  try { if (localStorage.getItem('tc_nodemo') === '1') return false; } catch(e){}
+  return !!m && String(m.id) === DEMO_STUDENT_SID;
+}
+function enterDemoMode(stu){
   if (DEMO_MODE) return;
   DEMO_MODE = true;
   var today = kstToday(), from = '2026-09-01';
@@ -2177,6 +2255,8 @@ function enterDemoMode(){
     { id:'9001', name:'김민준', track:'공무원', dorm:false }, { id:'9002', name:'이서연', track:'공무원', dorm:true },
     { id:'9003', name:'박지훈', track:'공무원', dorm:false }, { id:'9004', name:'최수아', track:'공기업', dorm:false },
     { id:'9005', name:'정예준', track:'공기업', dorm:true },  { id:'9006', name:'한지우', track:'공기업', dorm:false } ];
+  if (stu){ DEMO_STUDENT = true;
+    STU.splice(2, 0, { id:String(stu.id), name:String(stu.name), track:(stu.track === '공기업' ? '공기업' : '공무원'), dorm:false }); }
   // 같은 결과가 나오게 고정 난수
   var seed = 7; var rnd = function(){ seed = (seed*9301 + 49297) % 233280; return seed/233280; };
   var ts = function(ds, hh, mm){ return { seconds: Math.floor(new Date(ds+'T'+pad2(hh)+':'+pad2(mm)+':00+09:00').getTime()/1000) }; };
@@ -2199,6 +2279,7 @@ function enterDemoMode(){
   var led = function(name, date, amount, reason){ LED[name].push({ id:'L'+Math.random(), date:date, amount:amount, reason:reason, by:'교사', at: ts(date, 15, 0).seconds }); };
   led('김민준','2026-09-11', 3, '청소 도움'); led('이서연','2026-09-15', 2, '발표 우수'); led('최수아','2026-09-17', -2, '휴대폰 사용');
   led('정예준','2026-09-22', 3, '청소 도움'); led('박지훈','2026-09-24', 1, '과제 우수');
+  if (stu){ led(stu.name,'2026-09-09', 2, '발표 우수'); led(stu.name,'2026-09-18', 3, '청소 도움'); }
   var cns = function(date, name, memo){ CNS.push({ id:date+'_'+name, date:date, name:name, done:true, memo:memo }); };
   cns('2026-09-03','김민준','[학업] 9급 국어 목표 점수 설정, 주간 계획 점검'); cns('2026-09-08','최수아','[진로] 공기업 지원 기관 3곳 정리');
   cns('2026-09-10','박지훈','[생활] 지각이 잦아 기상 시간 조정 약속'); cns('2026-09-16','이서연','[학업] 영어 단어 학습법 상담');
@@ -2211,6 +2292,10 @@ function enterDemoMode(){
   var W = function(id,day,subject,track,teacher,place){ return { id:id, day:day, start:'18:30', end:'21:20', subject:subject, track:track, teacher:teacher, place:place, note:'' }; };
   var SCHED = { weekly:[ W('a','월','국어','공무원','김선생','1-6'), W('b','화','영어','공무원','이선생','1-6'), W('c','수','국어','공무원','김선생','1-6'),
     W('d','수','NCS','공기업','박선생','1-7'), W('e','목','한국사','공무원','최선생','1-6'), W('f','금','NCS','공기업','박선생','1-7') ], exceptions:[], updatedAt:'demo' };
+  // 학생 체험: 오늘 내 반 수업이 없으면(주말 등) 체험용 특강을 하나 둔다 — 출석 체크를 눌러 볼 수 있게
+  if (stu){ var myT = STU[2].track;
+    if (!asResolveDay(SCHED, today).items.some(function(c){ var t = classTrack(c); return t === '공통' || t === myT; }))
+      SCHED.exceptions.push({ date:today, type:'특강', subject:'자습 특강', track:'공통', teacher:'김선생', place:'1-6', start:'18:30', end:'21:20', note:'' }); }
   days.forEach(function(ds){ ASCHK[ds] = [];
     asResolveDay(SCHED, ds).items.forEach(function(c){ STU.forEach(function(s){ var t = classTrack(c);
       if ((t === '공통' || t === s.track) && rnd() < 0.85) ASCHK[ds].push({ subject:c.subject, name:s.name, track:s.track, at: ts(ds, 18, 35) }); }); }); });
@@ -2231,6 +2316,10 @@ function enterDemoMode(){
     EX.push({ name:e[1], date:e[0], single:true, rows:rows, avg:null, avgG:{ korean:a, english:0, history:0, total:a } });
   });
   EX.sort(function(a,b){ return b.date.localeCompare(a.date); });
+  // 학생 체험: 오늘 등교 인증·방과후 출석은 비워 두어 직접 눌러 볼 수 있게 한다
+  var FRZ = { bought:1, used:0, dates:[] }, DREQ = null;
+  if (stu){ delete AM[stu.name][today]; delete OV[stu.name][today];
+    ASCHK[today] = (ASCHK[today]||[]).filter(function(r){ return r.name !== stu.name; }); }
   var byName = function(obj, name){ return obj[name] || {}; };
   var mem = function(){ return STU.map(function(s){ return { id:s.id, name:s.name, track:s.track, coins:0, dorm:s.dorm }; }); };
   var ok = function(v){ return Promise.resolve(v); };
@@ -2248,16 +2337,16 @@ function enterDemoMode(){
       Object.keys(AM[s.name]).forEach(function(ds){ if (ds >= f) (am[ds] = am[ds] || {})[s.name] = AM[s.name][ds]; });
       Object.keys(OV[s.name]).forEach(function(ds){ if (ds >= f) (ov[ds] = ov[ds] || {})[s.name] = OV[s.name][ds]; }); }); return ok({ am:am, ov:ov }); },
     setAmOverride: function(ds, n, st){ OV[n][ds] = { date:ds, name:n, status:st, by:'교사' }; return ok(); },
-    amCheckIn: function(){ return ok(); },
+    amCheckIn: function(ds, n, dorm){ (AM[n] = AM[n] || {})[ds] = { name:n, dorm:!!dorm, at: ts(ds, 7, 42) }; return ok(); },
     openingOf: function(){ return ok({ date:from, coins:20 }); },
     ledgerOf: function(n){ return ok((LED[n]||[]).slice().sort(function(a,b){ return a.date < b.date ? 1 : -1; })); },
     addLedger: function(n, a, r){ (LED[n] = LED[n] || []).push({ id:'L'+Date.now()+Math.random(), date:today, amount:Number(a), reason:String(r), by:'교사', at:Math.floor(Date.now()/1000) }); return ok(); },
     plannerOf: function(n){ return ok(byName(PL, n)); },
     plannersOn: function(ds){ var o = {}; STU.forEach(function(s){ if (PL[s.name][ds]) o[s.name] = { progress:PL[s.name][ds].progress, tasks:PL[s.name][ds].tasks }; }); return ok(o); },
     plannersSince: function(f){ var o = {}; STU.forEach(function(s){ Object.keys(PL[s.name]).forEach(function(ds){ if (ds >= f) (o[ds] = o[ds] || {})[s.name] = PL[s.name][ds].progress; }); }); return ok(o); },
-    savePlanner: function(){ return ok(); },
-    freezeOf: function(){ return ok({ bought:0, used:0, count:0, dates:[] }); },
-    buyFreeze: function(){ return ok(); }, useFreeze: function(){ return ok(); },
+    savePlanner: function(n, tasks, progress){ (PL[n] = PL[n] || {})[today] = { id:'d'+today+n, progress:Number(progress)||0, tasks:JSON.stringify(tasks) }; return ok('d'+today+n); },
+    freezeOf: function(){ return ok(DEMO_STUDENT ? { bought:FRZ.bought, used:FRZ.used, count:FRZ.bought-FRZ.used, dates:FRZ.dates.slice() } : { bought:0, used:0, count:0, dates:[] }); },
+    buyFreeze: function(){ FRZ.bought++; return ok(); }, useFreeze: function(n, ds){ FRZ.used++; FRZ.dates.push(ds); return ok(); },
     marketItems: function(){ return ok([ { id:'m1', name:'자유시간', price:1, stock:30, note:'' }, { id:'m2', name:'초코과자', price:2, stock:20, note:'' },
       { id:'m3', name:'음료수', price:3, stock:15, note:'' }, { id:'m4', name:'자습 자리 우선 선택권', price:10, stock:3, note:'1주일' } ]); },
     marketBuys: function(){ return ok(BUY.slice().sort(function(a,b){ return b.at - a.at; })); },
@@ -2276,14 +2365,19 @@ function enterDemoMode(){
     schedule: function(){ return ok(JSON.parse(JSON.stringify(SCHED))); },
     updateSchedule: function(fn){ var c = JSON.parse(JSON.stringify(SCHED)); fn(c); SCHED = c; SCHED.updatedAt = String(Date.now()); return ok(); },
     checkIns: function(ds){ return ok((ASCHK[ds]||[]).slice()); },
-    checkIn: function(){ return ok(); },
+    checkIn: function(ds, sub, n, track){ (ASCHK[ds] = ASCHK[ds] || []).push({ subject:sub, name:n, track:track, at: ts(ds, 18, 35) }); return ok(); },
     asOverrides: function(ds){ return ok(JSON.parse(JSON.stringify(ASFIX[ds] || {}))); },
     setAsOverride: function(ds, sub, n, st){ var d = ASFIX[ds] = ASFIX[ds] || {}; var m = d[sub] = d[sub] || {}; if (st) m[n] = st; else delete m[n]; return ok(); },
     settings: function(k){ return ok(JSON.parse(JSON.stringify(SET[k] || {}))); },
     setSettings: function(k, v){ SET[k] = JSON.parse(JSON.stringify(v)); return ok(); },
     coinReqsAll: function(){ return ok(REQ.slice()); },
     coinReqsOf: function(n){ return ok(REQ.filter(function(r){ return r.name === n; })); },
-    addCoinReq: function(){ return ok(); },
+    addCoinReq: function(n, a, t){ REQ.unshift({ id:'R'+Date.now(), name:n, amount:Number(a)||0, text:String(t), status:'대기', at:Math.floor(Date.now()/1000), doneAt:0 }); return ok(); },
+    deleteReqsAll: function(){ return ok(DREQ ? [DREQ] : []); },
+    deleteReqOf: function(){ return ok(DREQ); },
+    addDeleteReq: function(sid, n){ DREQ = { id:String(sid), sid:String(sid), name:n, at:Math.floor(Date.now()/1000) }; return ok(); },
+    removeDeleteReq: function(){ DREQ = null; return ok(); },
+    pinAttempt: function(){ return ok(); }, pinTryOf: function(){ return ok(null); },
     resolveCoinReq: function(id, st){ REQ.forEach(function(r){ if (r.id === id){ r.status = st; r.doneAt = Math.floor(Date.now()/1000); } }); return ok(); },
     absenceReasons: function(){ return ok(ABS.slice()); },
     setAbsenceReason: function(ds, n, r){ ABS = ABS.filter(function(a){ return !(a.date === ds && a.name === n); }); if (String(r||'').trim()) ABS.push({ id:ds+n, date:ds, name:n, reason:String(r).trim() }); return ok(); },
@@ -3090,6 +3184,30 @@ var AM_CLOSE_MIN = 8*60 + 30;   // 08:30 — 마감
    학생을 v2로 옮기는 날 이 값을 그 날짜로 바꿀 것(§8 출시일 체크리스트). */
 var ATT_V2_FROM = '2099-01-01';
 
+/* ═══ 원격 설정 (Firestore settings/app) ═══════════════════════
+   스토어 앱은 화면(v2)을 앱 안에 담고 있어서, 값을 코드에 박아 두면 바꿀 때마다 새 빌드·심사가 필요하다.
+   전환일처럼 "그날 바로" 바뀌어야 하는 값은 서버에서 읽는다.
+     attV2From  'YYYY-MM-DD' — v2가 출결의 원본이 되는 날(없으면 위 기본값 = 전환 전)
+     minBuild   숫자 — 이보다 낮은 APP_BUILD는 업데이트 안내를 띄운다
+   읽은 값은 기기에 적어 두어, 다음에 켤 때 서버 응답을 기다리지 않고 바로 쓴다. */
+var APP_BUILD = 6;               // 웹 묶음 번호 — v2를 고쳐 스토어 빌드를 낼 때마다 올린다
+var APP_CFG_KEY = 'tc_cfg', MIN_BUILD = 0;
+function applyAppConfig(c){
+  if (!c || DEMO_MODE) return;   // 데모는 전환 뒤 모습으로 고정
+  if (/^\d{4}-\d{2}-\d{2}$/.test(String(c.attV2From||''))) ATT_V2_FROM = String(c.attV2From);
+  MIN_BUILD = Number(c.minBuild)||0;
+  var bar = document.getElementById('updBar');
+  if (bar) bar.classList.toggle('hidden', !(isNativeApp() && MIN_BUILD > APP_BUILD));
+}
+try { applyAppConfig(JSON.parse(localStorage.getItem(APP_CFG_KEY)||'null')); } catch(e){}
+async function loadAppConfig(){
+  try {
+    var c = await FS.settings('app');
+    applyAppConfig(c);
+    try { localStorage.setItem(APP_CFG_KEY, JSON.stringify({ attV2From:c.attV2From||'', minBuild:Number(c.minBuild)||0 })); } catch(e){}
+  } catch(e){ /* 못 읽으면 적어 둔 값(없으면 기본값)으로 간다 */ }
+}
+
 var CAL = null;      // 나이스 학사일정 — v2/calendar.json
 var CAL_OFF = {};    // 교사가 지정한 휴업일 — Firestore calendarOff
 
@@ -3144,6 +3262,7 @@ function attStatusOf(ds, ctx){
   //    스트릭이 끊기고 엽전도 -2씩 깎인다. 나이스 학사일정이 있는 지금은
   //    달력을 기록보다 위에 둔다.
   if (!isSchoolDay(ds))         return null;
+  if (ctx.today && ds > ctx.today) return null;         // 아직 오지 않은 날 — 전환 뒤 '이번 주'의 남은 요일이 결석으로 찍히던 것
 
   if (ctx.am && ctx.am[ds])     return verdictFromAt(ctx.am[ds].at, ctx.dorm);
   var leg = ctx.days && ctx.days[ds];
@@ -3162,9 +3281,10 @@ var amToday = null;
 /** 홈 상단의 등교 인증 버튼. 상태에 따라 문구와 동작이 달라진다. */
 function checkinBtn(){
   var today = kstToday();
-  var m = kstMinutes();
+  // 체험 모드(심사용 테스트 학생)는 언제 열어도 인증을 해 볼 수 있게 07:40 수업일로 본다
+  var m = DEMO_STUDENT ? AM_OPEN_MIN + 100 : kstMinutes();
 
-  if (!isSchoolDay(today)){
+  if (!DEMO_STUDENT && !isSchoolDay(today)){
     var why = offReason(today) || (isWeekend(today) ? '주말' : '휴업일');
     return '<div class="checkin" style="background:var(--line-soft);color:var(--ink-soft);cursor:default">'+
       '<div style="text-align:left"><div class="checkin-t">오늘은 쉬는 날</div>'+
@@ -4595,6 +4715,139 @@ async function afterFreezeChange(){
   openStreakModal();
 }
 
+/* ═══ 앱 정보 · 개인정보 처리방침 · 문의 · 계정 삭제 요청 ═══════════════
+   스토어 규정: 개인정보 처리방침과 계정 삭제는 '앱 안에서' 닿을 수 있어야 한다
+   (스토어 등록정보에 주소만 적어 두는 것으로는 부족하다 — 한국사·상담일지 앱 심사에서 배운 것).
+   문서는 앱 안에 함께 담긴 파일을 창 안에 띄운다 — 인터넷이 없어도 열린다. */
+function openDoc(file, title){
+  showModal('<div class="doc-box"><div class="doc-head"><span>'+escapeHtml(title)+'</span>'+
+    '<button class="icon-btn" onclick="closeModal()" aria-label="닫기" style="font-size:1.2rem;line-height:1;padding:8px 12px">✕</button></div>'+
+    '<iframe src="'+file+'" title="'+escapeHtml(title)+'"></iframe></div>');
+}
+async function openAppInfo(){
+  var t = ROLE === 'teacher';
+  var row = function(icon, label, sub, onclick, color){
+    return '<div class="row" style="cursor:pointer;padding:13px 0" onclick="'+onclick+'"><div class="avatar">'+ic(icon,18)+'</div>'+
+      '<div class="row-main"><div class="row-t"'+(color?' style="color:'+color+'"':'')+'>'+label+'</div>'+(sub?'<div class="row-s">'+sub+'</div>':'')+'</div></div>'; };
+  showModal('<div class="modal-box"><div style="font-weight:800;font-size:1.1rem">앱 정보</div>'+
+    '<div style="margin-top:6px">'+
+    row('clipboard','개인정보 처리방침','',"openDoc('privacy.html','개인정보 처리방침')")+
+    row('chat','문의·도움말','',"openDoc('support.html','문의·도움말')")+
+    (t ? '' : '<div id="aiDel">'+row('warn','계정·데이터 삭제 요청','선생님이 확인한 뒤 계정과 기록을 지웁니다','openDeleteRequest()','var(--rose)')+'</div>')+
+    '</div><div class="row-s" id="aiVer" style="margin-top:12px;text-align:center">장원급제반 · 화면 '+APP_BUILD+'</div>'+
+    '<button class="btn btn-outline" style="margin-top:12px" onclick="closeModal()">닫기</button></div>');
+  // 앱 버전은 기기에 물어야 안다 — 늦게 와도 그 자리에 채운다
+  try { var A = window.Capacitor && Capacitor.Plugins && Capacitor.Plugins.App;
+    if (A && isNativeApp()){ var i = await A.getInfo(); var el = document.getElementById('aiVer');
+      if (el) el.textContent = '장원급제반 '+i.version+' ('+i.build+') · 화면 '+APP_BUILD; } } catch(e){}
+  if (!t && ME.name){
+    try { var r = await FS.deleteReqOf(ME.name); var box = document.getElementById('aiDel');
+      if (r && box){ box.innerHTML = row('clock','삭제 요청을 보냈어요','선생님 확인을 기다리는 중 · 탭하면 요청을 취소합니다','cancelDeleteRequest()','var(--orange)'); fillIcoSlots(box); } } catch(e){}
+  }
+}
+/** 되돌릴 수 없는 일은 확인 한 번으로 넘어가지 않게, 글자를 직접 적어야 진행한다.
+    기기마다 모양·동작이 다른 브라우저 입력창(prompt) 대신 앱 안의 창을 쓴다.
+    열려 있는 창(#modal) 위에 한 겹 더 띄우므로 밑의 창과 거기 적던 내용은 그대로 남는다. */
+function confirmTyped(msg, word){
+  return new Promise(function(done){
+    closeConfirmLayer();
+    var el = document.createElement('div');
+    el.className = 'modal-overlay'; el.id = 'modal2'; el.style.zIndex = 9995;
+    el.innerHTML = '<div class="modal-box"><div style="font-size:.9rem;line-height:1.65;white-space:pre-wrap">'+escapeHtml(msg)+'</div>'+
+      '<div class="field" style="margin-top:14px"><label>계속하려면 "'+escapeHtml(word)+'"라고 입력해 주세요</label>'+
+      '<input id="ctIn" type="text" autocomplete="off" autocapitalize="none" placeholder="'+escapeHtml(word)+'"></div>'+
+      '<div id="ctErr" class="login-err hidden"></div>'+
+      '<button class="btn" id="ctOk" style="background:var(--rose)">진행</button>'+
+      '<button class="btn btn-outline" id="ctNo">취소</button></div>';
+    var finish = function(v){ closeConfirmLayer(); done(v); };
+    el.__cancel = function(){ finish(false); };
+    document.body.appendChild(el);
+    var input = el.querySelector('#ctIn'), err = el.querySelector('#ctErr');
+    var go = function(){
+      if (String(input.value||'').trim() === word) return finish(true);
+      err.textContent = '"'+word+'"라고 정확히 입력해 주세요'; err.classList.remove('hidden');
+    };
+    el.querySelector('#ctOk').onclick = go;
+    el.querySelector('#ctNo').onclick = function(){ finish(false); };
+    input.onkeydown = function(ev){ if (ev.key === 'Enter') go(); };
+  });
+}
+function closeConfirmLayer(){ var m = document.getElementById('modal2'); if (m) m.remove(); }
+async function openDeleteRequest(){
+  if (!ME.name) return;
+  if (!(await confirmTyped('계정·데이터 삭제를 요청합니다.\n\n선생님이 확인한 뒤 계정(PIN·기기 연결)과 출결·플래너·엽전·성적·상담 기록을 지웁니다. 지운 뒤에는 되돌릴 수 없습니다.', '삭제'))) return;
+  try {
+    await FS.addDeleteReq(ME.id, ME.name);
+    showModal('<div class="modal-box"><div style="text-align:center;padding:10px 0 6px">'+
+      '<div style="font-size:1.2rem;font-weight:800">삭제 요청을 보냈습니다</div>'+
+      '<div style="font-size:.85rem;color:var(--ink-mute);margin-top:8px;line-height:1.6">선생님이 확인한 뒤 7일 안에 계정과 기록을 지웁니다.<br>마음이 바뀌면 앱 정보에서 요청을 취소할 수 있어요.</div>'+
+      '</div><button class="btn" onclick="closeModal()">확인</button></div>');
+  } catch(e){
+    // 서버가 받지 못했으면 다른 길(메일)을 바로 보여 준다 — 요청할 방법이 없는 상태로 두지 않는다
+    showModal('<div class="modal-box"><div style="text-align:center;padding:10px 0 6px">'+
+      '<div style="font-size:1.2rem;font-weight:800">요청을 보내지 못했습니다</div>'+
+      '<div style="font-size:.85rem;color:var(--ink-mute);margin-top:8px;line-height:1.6">인터넷 연결을 확인하고 다시 해 주세요.<br>계속 안 되면 선생님께 직접 말씀하거나 문의 페이지의 메일로 요청할 수 있어요.</div>'+
+      '</div><button class="btn" onclick="openDoc(\'support.html#delete\',\'문의·도움말\')">삭제 요청 안내 보기</button>'+
+      '<button class="btn btn-outline" onclick="closeModal()">닫기</button></div>');
+  }
+}
+async function cancelDeleteRequest(){
+  if (!confirm('삭제 요청을 취소할까요?')) return;
+  try { await FS.removeDeleteReq(ME.id); openAppInfo(); } catch(e){ alert('취소하지 못했습니다'); }
+}
+/* 교사 홈: 삭제 요청이 있으면 맨 위에 알린다 */
+async function fillDeleteReqs(){
+  var box = document.getElementById('delReqBox'); if (!box) return;
+  var reqs = await soft(FS.deleteReqsAll(), []);
+  if (!document.getElementById('delReqBox')) return;
+  if (!reqs || !reqs.length){ box.innerHTML = ''; return; }
+  box.innerHTML = '<div class="notice" style="background:var(--rose-soft);color:var(--rose);cursor:pointer;border-radius:12px;padding:11px 14px;margin-top:6px" onclick="openDeleteReqs()">'+
+    ic('warn',15)+'<span>계정·데이터 삭제 요청 '+reqs.length+'건 — 확인하기 →</span></div>';
+}
+async function openDeleteReqs(){
+  var reqs = await soft(FS.deleteReqsAll(), []); window.__dreqs = reqs;
+  var day = function(sec){ if (!sec) return ''; var k = new Date(sec*1000 + 9*3600*1000); return (k.getUTCMonth()+1)+'월 '+k.getUTCDate()+'일 요청'; };
+  showModal('<div class="modal-box"><div style="font-weight:800;font-size:1.1rem">계정·데이터 삭제 요청</div>'+
+    '<div class="row-s" style="margin:4px 0 8px;line-height:1.6">요청한 학생의 계정(PIN·기기 연결)을 지웁니다. 출결·플래너·엽전·성적·상담 기록은 명부에서 학생을 뺀 뒤 요청일로부터 7일 안에 지워 주세요.</div>'+
+    (reqs.length ? reqs.map(function(r, i){
+      return '<div style="padding:12px 0;border-top:1px solid var(--line-soft)"><div style="display:flex;justify-content:space-between"><b>'+escapeHtml(r.name)+'</b>'+
+        '<span class="row-s">'+escapeHtml(r.sid)+' · '+day(r.at)+'</span></div>'+
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px">'+
+        '<button class="btn btn-sm" style="margin:0;background:var(--rose)" onclick="resolveDeleteReq('+i+',true)">계정 삭제</button>'+
+        '<button class="btn btn-outline btn-sm" style="margin:0" onclick="resolveDeleteReq('+i+',false)">요청만 지우기</button></div></div>'; }).join('')
+      : '<div class="row-s" style="padding:12px 0">들어온 요청이 없어요</div>')+
+    '<button class="btn btn-outline" style="margin-top:8px" onclick="closeModal()">닫기</button></div>');
+}
+async function resolveDeleteReq(i, del){
+  var r = (window.__dreqs||[])[i]; if (!r) return;
+  if (del && !(await confirmTyped(r.name+' 학생의 계정(PIN·기기 연결)을 지웁니다.\n명부에서도 학생을 빼야 다시 입실할 수 없습니다.', '삭제'))) return;
+  if (!del && !confirm('요청만 지울까요? 계정과 기록은 그대로 남습니다.')) return;
+  try {
+    if (del) await FS.clearPin(r.sid, r.name);
+    await FS.removeDeleteReq(r.sid);
+    openDeleteReqs(); fillDeleteReqs();
+  } catch(e){ alert('처리하지 못했습니다'); }
+}
+
+/* 안드로이드 뒤로가기 — 열려 있는 창을 먼저 닫고, 그다음 홈으로, 홈에서는 앱을 내린다.
+   (손대지 않으면 창이 떠 있어도 뒤로가기가 아무 일도 하지 않는다) */
+(function(){
+  try {
+    var A = window.Capacitor && Capacitor.Plugins && Capacitor.Plugins.App;
+    if (!A || !isNativeApp() || !A.addListener) return;
+    A.addListener('backButton', function(){
+      var top = document.getElementById('modal2');
+      if (top){ if (top.__cancel) top.__cancel(); else top.remove(); return; }
+      if (document.getElementById('modal')){ closeModal(); return; }
+      var app = document.getElementById('app'), tl = document.getElementById('tLogin');
+      if (app && !app.classList.contains('hidden')){
+        if (TAB !== 'home'){ go('home'); return; }
+      } else if (tl && !tl.classList.contains('hidden')){ hideTeacherLogin(); return; }
+      if (A.minimizeApp) A.minimizeApp(); else if (A.exitApp) A.exitApp();
+    });
+  } catch(e){}
+})();
+
 /* 공용 모달 */
 function showModal(inner){
   closeModal();
@@ -4687,7 +4940,7 @@ async function renderAsStudent(v){
   Object.keys(fx).forEach(function(sub){ var st=(fx[sub]||{})[ME.name];
     if (st==='출석') doneSet[sub]=1; else if (st==='결석') delete doneSet[sub]; });
 
-  var min=kstMinutes(), open=min>=AS_START_MIN;
+  var min=kstMinutes(), open=DEMO_STUDENT || min>=AS_START_MIN;
   var html='<div class="sec-label">'+today.slice(5).replace('-','월 ')+'일 방과후</div>';
 
   mine.forEach(function(c){
@@ -4712,7 +4965,7 @@ async function renderAsStudent(v){
 }
 
 async function doAsCheckIn(subject){
-  if(kstMinutes()<AS_START_MIN){alert('18:30부터 체크할 수 있어요.');return;}
+  if(!DEMO_STUDENT && kstMinutes()<AS_START_MIN){alert('18:30부터 체크할 수 있어요.');return;}
   try{
     await FS.checkIn(kstToday(),subject,ME.name,ME.track);
     renderView();
@@ -4851,11 +5104,12 @@ function homeStudent(){
    renderView가 문자열을 받아 넣는 구조라 비동기 값은 자리를 잡아두고 나중에 주입한다. */
 function homeTeacher(){
   setTimeout(renderQuietBanner, 0);
+  setTimeout(fillDeleteReqs, 0);
   setTimeout(fillTeacherHome, 0);
   setTimeout(fillStudentQuick, 0);
   setTimeout(fillHomeExtras, 0);
   return ''+
-  '<div id="quietBox"></div><div id="homeExtra"></div>'+
+  '<div id="quietBox"></div><div id="delReqBox"></div><div id="homeExtra"></div>'+
 
   '<div class="hero">'+
     '<div class="hero-lbl">오늘 출결 <span id="thDate" style="font-weight:500;color:var(--ink-mute)"></span></div>'+
@@ -4976,7 +5230,8 @@ function quick(icon,color,lbl,onclick){
 }
 function stub(){
   return '<div class="empty"><div class="empty-ico">'+ic('clipboard',44)+'</div>'+
-    '<span>이 화면은 다음 단계에서 만듭니다<br>지금은 홈 화면 디자인만 확인해주세요</span></div>';
+    '<span>화면을 찾을 수 없어요</span></div>'+
+    '<button class="btn btn-outline" onclick="go(\'home\')">홈으로</button>';
 }
 
 /* ═══ 전환 ═══ */
@@ -4994,7 +5249,7 @@ function setRole(r){
 function applyRole(){
   var t=ROLE==='teacher';
   document.getElementById('uName').textContent = t?'교사':ME.name;
-  document.getElementById('uRole').textContent = t?(DEMO_MODE?'데모 모드 · 가상 학생 데이터':'장원급제반 담임'):(ME.track+'반');
+  document.getElementById('uRole').textContent = t?(DEMO_MODE?'데모 모드 · 가상 학생 데이터':'장원급제반 담임'):(ME.track+'반'+(DEMO_STUDENT?' · 체험 모드(예시 데이터)':''));
   document.getElementById('uStreak').style.display = t?'none':'';
   document.getElementById('btnBell').style.display = t?'none':'';
   renderTabs();renderView();
@@ -5008,7 +5263,7 @@ function syncHeroStreak(){
 }
 function logout(){
   // 데모 모드였다면 가상 FS가 남지 않게 페이지를 새로 불러 원래 상태로
-  if (DEMO_MODE){ try{ localStorage.removeItem(SKEY); }catch(e){} if(window.AUTH) AUTH.leave().then(function(){ location.reload(); }); else location.reload(); return; }
+  if (DEMO_MODE){ try{ localStorage.removeItem(SKEY); }catch(e){} try{ if (DEMO_STUDENT) disableNotis(); }catch(e){} if(window.AUTH) AUTH.leave().then(function(){ location.reload(); }); else location.reload(); return; }
   document.getElementById('app').classList.add('hidden');
   document.getElementById('login').classList.remove('hidden');
   hideTeacherLogin();
@@ -5035,10 +5290,13 @@ function sShowErr(msg){
 /* 로그인 성공 시 ME를 실데이터로 채운다 */
 async function applyStudent(m){
   ME.id=m.id; ME.name=m.name; ME.track=m.track; ME.coins=m.coins; ME.dorm=m.dorm;
-  await loadCalendar();
+  await Promise.all([ loadCalendar(), loadAppConfig() ]);
   // 서로 기다릴 필요가 없는 셋은 동시에
-  var got = await Promise.all([ loadAmToday(), loadPlannerToday(), buildWeek(m.name) ]);
+  // 엽전은 계산한 잔액을 쓴다 — 전환 뒤에는 명부의 coins(시트 값)가 더 이상 맞지 않는다(전환 전에는 같은 값이 나온다)
+  var got = await Promise.all([ loadAmToday(), loadPlannerToday(), buildWeek(m.name),
+                                soft(loadWallet(m).then(function(w){ return w.balance; }), m.coins) ]);
   ME.week = got[2];
+  ME.coins = got[3];
   streakCache = null;                 // 다른 학생으로 바뀌었을 수 있다
   scheduleLocalNotis();               // 앞으로 3주치 알림을 다시 깐다(앱에서만)
 }
@@ -5076,8 +5334,17 @@ async function studentLogin(){
         bound = true;
       }
     }
-    if (!bound){ sShowErr('PIN이 맞지 않습니다'); return; }
+    if (!bound){
+      // 시도가 너무 잦았으면 그 사실을 알려 준다(규칙이 잠그는 기준과 같은 값)
+      var tr = null; try { tr = await FS.pinTryOf(m.id); } catch(e){}
+      var R = window.PIN_RULE || { windowSec:21600, max:10 };
+      if (tr && tr.n >= R.max && (Date.now()/1000 - tr.at) < R.windowSec)
+        sShowErr('PIN을 너무 여러 번 틀렸습니다. 잠시 뒤 다시 하거나 선생님께 PIN 초기화를 부탁하세요');
+      else sShowErr('PIN이 맞지 않습니다');
+      return;
+    }
 
+    if (isDemoStudent(m)) enterDemoMode(m);   // 심사용 테스트 학생 — 체험 모드
     await applyStudent(m);
     try{ localStorage.setItem(SKEY, JSON.stringify({id:m.id,name:m.name})); }catch(e){}
     enterApp('student');
@@ -5092,6 +5359,8 @@ async function studentLogin(){
     아직 PIN을 안 정한 학생이면 이번 입력값을 그 학생의 PIN으로 등록한다.
     studentPin 생성은 "없을 때만" 되므로 남의 PIN을 덮어쓸 수 없다. */
 async function tryBind(m, pin){
+  // 시도 기록을 먼저 남긴다. 못 남겨도(규칙 잠금·네트워크) 연결 시도는 그대로 한다 — 판정은 규칙이 한다.
+  try { await FS.pinAttempt(m.id, pin); } catch(e){}
   try { await FS.bindStudent(m.id, m.name, pin); return true; }
   catch(e){
     if (!e || e.code !== 'permission-denied') throw e;
@@ -5110,6 +5379,7 @@ async function autoLogin(){
   try{
     var m = await FS.memberById(saved.id);
     if(!m || m.name !== saved.name) return;   // 명단에서 빠졌거나 이름이 바뀐 경우
+    if (isDemoStudent(m)) enterDemoMode(m);
     await applyStudent(m);
     enterApp('student');
   }catch(e){ /* 오프라인이면 그냥 로그인 화면에 머문다 */ }
@@ -5200,6 +5470,7 @@ async function teacherLogin(){
   try{
     await AUTH.signInTeacher(email,pw);
     if (window.FS && FS.__clear) FS.__clear();   // 교사로 바뀌면 볼 수 있는 자료가 늘어난다
+    await loadAppConfig();
     document.getElementById('tPw').value='';
     enterApp('teacher');
   }catch(e){
@@ -5239,7 +5510,7 @@ document.addEventListener('visibilitychange', function(){
 function softRefresh(){
   var app = document.getElementById('app');
   if (!app || app.classList.contains('hidden')) return;
-  if (document.getElementById('modal')) return;
+  if (document.getElementById('modal') || document.getElementById('modal2')) return;
   var a = document.activeElement;
   if (a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)) return;
   var y = window.scrollY;

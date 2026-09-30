@@ -490,6 +490,60 @@ service cloud.firestore {
       allow read: if true;
     }
 
+    // ── 계정·데이터 삭제 요청 ───────────────────────────
+    // 학생이 앱 안에서 삭제를 요청한다(스토어 규정: 앱 안에서 삭제를 시작할 수 있어야 한다).
+    // 문서 ID = 학번. 본인만 만들고 취소할 수 있고, 교사가 읽고 처리(삭제)한다.
+    match /deleteReq/{sid} {
+      allow read: if isTeacher() || isMe(resource.data.name);
+      allow create: if signedIn() && isMe(request.resource.data.name)
+        && request.resource.data.keys().hasOnly(['sid','name','at'])
+        && request.resource.data.sid == sid
+        && request.resource.data.at == request.time;
+      allow update: if false;
+      allow delete: if isTeacher() || isMe(resource.data.name);
+    }
+
+    // ── PIN 시도 기록 ───────────────────────────────────
+    // 4자리 PIN을 차례로 넣어 보는 공격을 세기 위한 기록. 앱은 입실을 시도할 때마다
+    // pinTry(횟수·시각)와 pinGuess(보낸 해시)를 한 묶음으로 쓴다.
+    //   · 6시간 창 안에 10번까지만 쓸 수 있다(그 뒤에는 창이 지나야 다시 1부터).
+    //   · pinGuess는 아무도 못 읽는다 — 방금 맞게 넣은 사람의 해시가 남으므로.
+    //   · 교사가 PIN을 초기화하면 둘 다 지워져 잠금이 풀린다.
+    // ⚠️ 지금은 기록만 한다(1단계). /students 생성 규칙이 아직 이 기록을 요구하지 않는다 —
+    //    이 기록을 안 남기는 옛 빌드(iOS 빌드 5)가 쓰이는 동안 요구하면 그 빌드가 입실을 못 한다.
+    //    옛 빌드가 사라지면 /students create 에 아래 조건을 더해 강제할 것(2단계):
+    //      get(/databases/$(database)/documents/pinGuess/$(request.resource.data.sid)).data.uid == request.auth.uid
+    //      && get(...pinGuess/...).data.hash == request.resource.data.pinHash
+    function guessInBatch(sid) {
+      let g = getAfter(/databases/$(database)/documents/pinGuess/$(sid)).data;
+      return g.at == request.time && g.uid == request.auth.uid;
+    }
+    match /pinTry/{sid} {
+      allow read: if signedIn();
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly(['n','at'])
+        && request.resource.data.n == 1
+        && request.resource.data.at == request.time
+        && guessInBatch(sid);
+      allow update: if signedIn()
+        && request.resource.data.keys().hasOnly(['n','at'])
+        && request.resource.data.at == request.time
+        && guessInBatch(sid)
+        && ( ( request.time > resource.data.at + duration.value(6, 'h') && request.resource.data.n == 1 )
+             || ( resource.data.n < 10 && request.resource.data.n == resource.data.n + 1 ) );
+      allow delete: if isTeacher();
+    }
+    match /pinGuess/{sid} {
+      allow read: if false;
+      allow create, update: if signedIn()
+        && request.resource.data.keys().hasOnly(['uid','hash','at'])
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.hash is string
+        && request.resource.data.at == request.time
+        && getAfter(/databases/$(database)/documents/pinTry/$(sid)).data.at == request.time;
+      allow delete: if isTeacher();
+    }
+
     // ── 그 외 전부 ─────────────────────────────────────
     // 읽기도 쓰기도 막는다. 새 컬렉션을 만들면 위에 명시적으로 열어야 한다.
     // (쓰기는 GAS 서비스 계정이 규칙을 우회하므로 기존 동작에 영향 없음)
