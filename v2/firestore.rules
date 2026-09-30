@@ -498,6 +498,8 @@ service cloud.firestore {
       allow create: if signedIn() && isMe(request.resource.data.name)
         && request.resource.data.keys().hasOnly(['sid','name','at'])
         && request.resource.data.sid == sid
+        // 내 학번으로만 — 남의 학번으로 요청을 만들어 교사가 그 학생의 PIN을 지우게 만드는 일을 막는다
+        && get(/databases/$(database)/documents/students/$(request.auth.uid)).data.sid == sid
         && request.resource.data.at == request.time;
       allow update: if false;
       allow delete: if isTeacher() || isMe(resource.data.name);
