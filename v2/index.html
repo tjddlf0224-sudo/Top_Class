@@ -1251,14 +1251,20 @@ function ascMonth(delta){
   ASC.ym = y+'-'+pad2(m); ASC.pick = ''; renderView();
 }
 function ascPick(ds){ ASC.pick = ds; renderView(); }
+function ascToday(){ ASC.ym = kstToday().slice(0,7); ASC.pick = ''; renderView(); }
 
 async function renderAsCalendar(v){
   if (!ASC.ym) ASC.ym = kstToday().slice(0,7);
   var sched = await FS.schedule();
   var teacher = ROLE === 'teacher', today = kstToday();
   var y = +ASC.ym.slice(0,4), mo = +ASC.ym.slice(5), last = new Date(Date.UTC(y, mo, 0)).getUTCDate();
+  // 오늘 날짜는 늘 보이게 — 주말이면 달력에 칸이 없고, 다른 달을 보고 있을 수도 있으니 제목 아래에 따로 적는다(누르면 이번 달로)
+  var tWd = ['일','월','화','수','목','금','토'][dowOf(today)];
   var html = '<div class="card pad" style="margin-top:10px"><div style="display:flex;align-items:center;justify-content:space-between">'+
-    '<button class="btn btn-outline btn-sm" onclick="ascMonth(-1)">‹ 이전</button><b>'+y+'년 '+mo+'월</b>'+
+    '<button class="btn btn-outline btn-sm" onclick="ascMonth(-1)">‹ 이전</button>'+
+    '<div style="text-align:center"><b>'+y+'년 '+mo+'월</b>'+
+      '<div onclick="ascToday()" style="cursor:pointer;margin-top:3px;font-size:.72rem;font-weight:700;color:var(--accent)">오늘 '+(+today.slice(5,7))+'월 '+(+today.slice(8))+'일 ('+tWd+')'+
+      (isWeekend(today) ? ' · 주말' : '')+'</div></div>'+
     '<button class="btn btn-outline btn-sm" onclick="ascMonth(1)">다음 ›</button></div>'+
     '<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:4px;margin-top:12px">'+
     ['월','화','수','목','금'].map(function(d){ return '<div class="cal-h">'+d+'</div>'; }).join('');
@@ -1273,8 +1279,11 @@ async function renderAsCalendar(v){
       return '<div style="font-size:.58rem;line-height:1.35;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;'+
         'border-left:3px solid '+c+';padding-left:3px;color:'+c+';font-weight:600;width:100%;text-align:left">'+escapeHtml(it.subject)+'</div>'; }).join('');
     if (r.items.length > 3) chips += '<div style="font-size:.56rem;color:var(--ink-mute)">+'+(r.items.length-3)+'</div>';
-    html += '<div class="cal-d'+(ds===today?' today':'')+(ds===ASC.pick?' pick':'')+'" style="align-items:stretch;min-height:64px;background:var(--surface);border-color:'+(ds===today?'var(--accent)':'var(--line-soft)')+'" onclick="ascPick(\''+ds+'\')">'+
-      '<span style="font-weight:700;font-size:.74rem">'+d+'</span>'+chips+'</div>';
+    var isT = ds === today;
+    html += '<div class="cal-d'+(isT?' today':'')+(ds===ASC.pick?' pick':'')+'" style="align-items:stretch;min-height:64px;background:'+(isT?'var(--accent-soft)':'var(--surface)')+';border-color:'+(isT?'var(--accent)':'var(--line-soft)')+'" onclick="ascPick(\''+ds+'\')">'+
+      (isT ? '<span style="display:flex;align-items:center;gap:3px"><span style="font-weight:800;font-size:.72rem;background:var(--accent);color:#fff;border-radius:999px;min-width:19px;height:19px;line-height:19px;text-align:center;padding:0 4px">'+d+'</span>'+
+               '<span style="font-size:.56rem;font-weight:800;color:var(--accent)">오늘</span></span>'
+           : '<span style="font-weight:700;font-size:.74rem">'+d+'</span>')+chips+'</div>';
   }
   html += '</div></div>';
   if (teacher) html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px">'+
