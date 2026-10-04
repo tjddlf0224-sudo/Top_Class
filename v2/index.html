@@ -384,7 +384,11 @@ function _boot(){
       return signInAnonymously(auth).then(function(c){ return c.user; })
                                     .catch(function(){ return null; });
     })
-    .then(async function(u){ _isTeacher = await verifyTeacher(u); return u; });
+    .then(async function(u){
+      // 심사용 데모 교사로 로그인된 채 다시 켠 경우 — 실제 자료 대신 가상 데이터로(signInTeacher 와 같게)
+      if (u && u.uid === DEMO_TEACHER_UID && window.enterDemoMode){ window.enterDemoMode(); _isTeacher = true; return u; }
+      _isTeacher = await verifyTeacher(u); return u;
+    });
 }
 
 /* 인증이 끝내 응답하지 않아도 앱이 멈추면 안 된다 — 조회는 대부분 공개 읽기라
@@ -5381,10 +5385,12 @@ async function tryBind(m, pin){
   } catch(e){ return false; }
 }
 
-/* 기기에 기억된 학생으로 자동 입실 — 매번 학번을 다시 치지 않게 */
+/* 기기에 기억된 학생으로 자동 입실 — 매번 학번을 다시 치지 않게.
+   학생으로 기억된 게 없으면 교사 로그인이 남아 있는지 본다: 교사도 로그아웃을 누르기 전까지는
+   앱을 다시 켤 때 첫 화면 없이 바로 교사 화면으로 들어간다(로그인 상태는 Firebase가 기기에 보관). */
 async function autoLogin(){
-  var saved; try{ saved=JSON.parse(localStorage.getItem(SKEY)||'null'); }catch(e){ return; }
-  if(!saved || !saved.id) return;
+  var saved; try{ saved=JSON.parse(localStorage.getItem(SKEY)||'null'); }catch(e){ saved = null; }
+  if(!saved || !saved.id){ await autoTeacher(); return; }
   try{
     var m = await FS.memberById(saved.id);
     if(!m || m.name !== saved.name) return;   // 명단에서 빠졌거나 이름이 바뀐 경우
@@ -5392,6 +5398,18 @@ async function autoLogin(){
     await applyStudent(m);
     enterApp('student');
   }catch(e){ /* 오프라인이면 그냥 로그인 화면에 머문다 */ }
+}
+
+async function autoTeacher(){
+  if (!window.AUTH) return;
+  try { await AUTH.ready(); } catch(e){ return; }
+  if (!AUTH.isTeacher()) return;
+  // 그사이 사용자가 직접 입실·로그인을 시작했으면 끼어들지 않는다
+  var login = document.getElementById('login');
+  if (!login || login.classList.contains('hidden') || ME.name) return;
+  if (FS.__clear) FS.__clear();
+  await loadAppConfig();
+  enterApp('teacher');
 }
 
 /* 이번 주(월~금) 출결 점 — 기록이 없는 지난 수업일은 결석으로 본다.
