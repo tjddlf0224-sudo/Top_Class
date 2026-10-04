@@ -13,6 +13,8 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="장원급제반">
 <style>
+/* 아이폰은 가로 화면에서 글자를 멋대로 키운다(text-size-adjust 기본값 auto) — 막는다 */
+html{-webkit-text-size-adjust:100%;text-size-adjust:100%;}
 @font-face{
   font-family:'Pretendard';
   src:url('fonts/PretendardVariable.woff2') format('woff2');
@@ -3203,7 +3205,7 @@ var ATT_V2_FROM = '2099-01-01';
      attV2From  'YYYY-MM-DD' — v2가 출결의 원본이 되는 날(없으면 위 기본값 = 전환 전)
      minBuild   숫자 — 이보다 낮은 APP_BUILD는 업데이트 안내를 띄운다
    읽은 값은 기기에 적어 두어, 다음에 켤 때 서버 응답을 기다리지 않고 바로 쓴다. */
-var APP_BUILD = 6;               // 웹 묶음 번호 — v2를 고쳐 스토어 빌드를 낼 때마다 올린다
+var APP_BUILD = 7;               // 웹 묶음 번호 — v2를 고쳐 스토어 빌드를 낼 때마다 올린다
 var APP_CFG_KEY = 'tc_cfg', MIN_BUILD = 0;
 function applyAppConfig(c){
   if (!c || DEMO_MODE) return;   // 데모는 전환 뒤 모습으로 고정
