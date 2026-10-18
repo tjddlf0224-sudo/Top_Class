@@ -675,7 +675,8 @@ window.FS = {
     const out = [];
     snap.forEach(d => { const v = d.data();
       const n = String(v.name||'').trim();
-      if (n && n !== '교사' && n !== '테스트' && v.role !== 'teacher')
+      // '활동종료'(3학년 2학기 등, 구앱 집무실에서 지정)는 모든 명단·출결·엽전 계산에서 뺀다
+      if (n && n !== '교사' && n !== '테스트' && v.role !== 'teacher' && v.role !== '활동종료')
         out.push({ id:d.id, name:n, track:String(v.track||'공무원').trim(),
                    coins:Number(v.coins)||0,
                    dorm: v.dorm === true });   // 기숙사생은 08:30 전이면 지각이 없다
@@ -5330,6 +5331,7 @@ async function studentLogin(){
     var m = await FS.memberById(id);
     if(!m)            { sShowErr('학번을 찾을 수 없습니다'); return; }
     if(m.name !== nm) { sShowErr('학번과 이름이 맞지 않습니다'); return; }
+    if(m.role === '활동종료') { sShowErr('활동이 종료된 학생입니다. 담당 선생님께 문의해 주세요.'); return; }
 
     // 이 기기를 이 학생으로 연결한다. PIN이 틀리면 보안규칙이 막는다
     // (해시 대조를 규칙 안에서 하므로 앱이 정답을 알 필요가 없다).
@@ -5396,6 +5398,7 @@ async function autoLogin(){
   try{
     var m = await FS.memberById(saved.id);
     if(!m || m.name !== saved.name) return;   // 명단에서 빠졌거나 이름이 바뀐 경우
+    if(m.role === '활동종료'){ try{ localStorage.removeItem(SKEY); }catch(e){} return; }   // 활동 종료 — 자동 입실하지 않는다
     if (isDemoStudent(m)) enterDemoMode(m);
     await applyStudent(m);
     enterApp('student');

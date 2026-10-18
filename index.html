@@ -827,6 +827,21 @@ input::placeholder, textarea::placeholder { color: #BDB19A; }
     </div>
 </div>
 
+<!-- 활동 종료 관리 모달 (2026-10-18) -->
+<div id="active-overlay" class="hidden"
+     style="position:fixed; inset:0; z-index:1000; background:rgba(0,0,0,0.45);
+            display:flex; align-items:center; justify-content:center; padding:18px;"
+     onclick="if(event.target===this) closeAdminModal('active')">
+    <div style="background:var(--hanji); border-radius:16px; max-width:400px; width:100%; max-height:86vh; overflow-y:auto; padding:20px; box-shadow:0 10px 40px rgba(0,0,0,0.3);">
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:6px;">
+            <div style="font-family:'Nanum Myeongjo',serif; font-size:1.15rem; font-weight:800; color:var(--ink);">🚪 활동 종료 관리</div>
+            <button onclick="closeAdminModal('active')" style="background:none;border:none;font-size:1.4rem;cursor:pointer;color:var(--muted);">×</button>
+        </div>
+        <p style="font-size:0.84rem; color:#777; margin:0 0 12px 0; line-height:1.6;">3학년 2학기처럼 반 활동이 끝난 학생을 <strong>활동 종료</strong>로 두면 자동 결석·플래너 차감, 출결·엽전 목록, 알림에서 빠지고 엽전은 0이 됩니다. 지난 기록은 남고, 복귀하면 다시 관원이 됩니다.</p>
+        <div id="active-list"></div>
+    </div>
+</div>
+
 <!-- 기숙사생 관리 모달 -->
 <div id="dorm-overlay" class="hidden"
      style="position:fixed; inset:0; z-index:1000; background:rgba(0,0,0,0.45);
@@ -1325,6 +1340,7 @@ input::placeholder, textarea::placeholder { color: #BDB19A; }
                 <button class="btn" style="background:#5D6D7E; margin:0;" onclick="openDormModal()">🏠 기숙사생 관리</button>
                 <button class="btn" style="background:#00695C; margin:0;" onclick="openDdayManager()">🗓️ 시험 D-day</button>
                 <button class="btn" style="background:#4527A0; margin:0;" onclick="openWeeklyReport()">📊 주간 리포트</button>
+                <button class="btn" style="background:#78909C; margin:0; grid-column:1 / -1;" onclick="openActiveModal()">🚪 활동 종료 관리 (3학년 2학기 등)</button>
             </div>
 
             <hr>
@@ -6172,6 +6188,54 @@ async function openAssignRoleModal() {
             sel.appendChild(opt);
         });
     } catch(e) { sel.innerHTML = '<option>불러오기 실패</option>'; }
+}
+
+/* ===== 활동 종료 관리 (2026-10-18) ===== */
+function _escActive(t) { return String(t).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+async function openActiveModal() {
+    document.getElementById('active-overlay').classList.remove('hidden');
+    await renderActiveList();
+}
+async function renderActiveList() {
+    const box = document.getElementById('active-list');
+    if (!box) return;
+    box.innerHTML = '<p style="text-align:center;color:#999;">불러오는 중...</p>';
+    let data = null;
+    try { data = await callApi('getAdminData'); } catch(e) {}
+    if (!data) { box.innerHTML = '<p style="text-align:center;color:#C62828;">불러오지 못했습니다. 다시 열어 주세요.</p>'; return; }
+    const active   = (data.members || []).filter(m => m.name !== '교사' && m.role !== 'teacher')
+                                         .sort((a, b) => String(a.name).localeCompare(String(b.name), 'ko'));
+    const inactive = (data.inactive || []).sort((a, b) => String(a.name).localeCompare(String(b.name), 'ko'));
+    const row = (m, on) => `
+        <div style="display:flex; justify-content:space-between; align-items:center;
+                    background:white; border-radius:8px; padding:8px 12px; border:1px solid ${on ? '#eee' : '#CFD8DC'};">
+            <span style="font-size:0.9rem; color:${on ? 'inherit' : '#78909C'};">${_escActive(String(m.name))}
+                <span style="font-size:0.75rem; color:#999; margin-left:4px;">${_escActive(String(m.track || ''))}반</span></span>
+            <button onclick="setMemberActive('${String(m.name).replace(/'/g, "\\'")}', ${!on})"
+                    style="background:${on ? '#ECEFF1' : '#E8F5E9'}; color:${on ? '#455A64' : '#2E7D32'};
+                           border:1px solid ${on ? '#CFD8DC' : '#C8E6C9'}; border-radius:12px; padding:4px 12px;
+                           font-size:0.78rem; cursor:pointer; font-family:inherit;">${on ? '활동 종료' : '복귀'}</button>
+        </div>`;
+    let html = '<div style="font-size:0.8rem; font-weight:700; color:#555; margin:4px 0 6px;">활동 중 ' + active.length + '명</div>' +
+               '<div style="display:flex; flex-direction:column; gap:6px;">' + active.map(m => row(m, true)).join('') + '</div>';
+    html += '<div style="font-size:0.8rem; font-weight:700; color:#555; margin:14px 0 6px;">활동 종료 ' + inactive.length + '명</div>' +
+            (inactive.length ? '<div style="display:flex; flex-direction:column; gap:6px;">' + inactive.map(m => row(m, false)).join('') + '</div>'
+                             : '<p style="font-size:0.82rem; color:#999; margin:0;">아직 없습니다</p>');
+    box.innerHTML = html;
+}
+async function setMemberActive(name, active) {
+    const msg = active
+        ? `${name} 학생을 다시 활동 중(관원)으로 되돌릴까요?\n자동 결석·플래너 차감과 목록에 다시 포함됩니다.`
+        : `${name} 학생을 활동 종료할까요?\n\n· 엽전이 0으로 초기화됩니다(되돌리지 않음)\n· 자동 결석·플래너 차감, 출결·엽전 목록, 알림에서 빠집니다\n· 지난 기록은 그대로 남습니다`;
+    if (!confirm(msg)) return;
+    try {
+        await callApi('adminAction', { type: 'setActive', targetName: name, active: !!active });
+    } catch(e) { return; }   // callApi가 오류 토스트를 표시함
+    AppCache.invalidate('getAdminData', {});
+    AppCache.invalidate('getAllMemberPoints', {});
+    fetchToCache('getAdminData', {});
+    showToast(active ? `${name} 학생이 활동에 복귀했습니다.` : `${name} 학생을 활동 종료했습니다.`);
+    renderActiveList();
 }
 
 async function openDormModal() {
