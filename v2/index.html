@@ -5159,6 +5159,8 @@ function homeStudent(){
   var p=ME.planner, has=!!p, pct=has?Math.round(p.done/p.total*100):0;
   var ok=ME.week.filter(function(d){return d.s==='ok';}).length;
   setTimeout(fillNews, 0); setTimeout(fillHomeExtras, 0);
+  // 등교 인증 뒤처럼 연속출석을 다시 셀 때가 되면(streakCache 비움) 홈을 그린 뒤 채운다 — 안 하면 '–일'로 남았다
+  if (!streakCache) setTimeout(function(){ refreshStreakChip().then(syncHeroStreak); }, 0);
   return homeLayout([
   ['side', notiBanner()],
   ['side', '<div id="newsBox"></div><div id="homeExtra"></div>'],
