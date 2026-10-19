@@ -235,6 +235,58 @@ main{padding:6px 18px calc(96px + var(--safe-bottom));}
 #proto button{background:none;border:none;color:rgba(255,255,255,.55);font-family:inherit;
   font-size:0.74rem;font-weight:600;padding:7px 14px;border-radius:18px;cursor:pointer;white-space:nowrap;}
 #proto button.on{background:rgba(255,255,255,.16);color:#fff;}
+
+/* ══ 태블릿 레이아웃 (2026-10-19, 상담일지 앱과 같은 기준) ══════════════════
+   ① 600px 이상·높이 500px 이상(아이패드 세로 등): 한 단을 760px까지 넓힌다. 높이 조건은 폰 가로(높이 ~430)를 거른다.
+   ② 900px 이상·높이 600px 이상(아이패드 가로, 12.9형 세로): 왼쪽 사이드바 메뉴 + 넓은 본문.
+      ②는 body.wide 로 건다 — JS(WIDE_MQ)가 메뉴·하위 메뉴 자리를 옮기면서 같은 조건으로 붙인다(조건을 바꾸면 둘 다). */
+@media (min-width:600px) and (min-height:500px){
+  #app{max-width:760px;}
+  .tab-bar{max-width:760px;}
+  /* 로그인은 화면 가운데 카드로 */
+  body:has(#login:not(.hidden)){align-items:center;}
+  #login{max-width:440px;min-height:auto;margin:40px auto;border-radius:22px;box-shadow:var(--shadow-md);padding:40px 34px 34px;}
+  .modal-box{max-width:440px;}
+  .cal-d{min-height:56px;}
+}
+body.wide #app{max-width:1180px;padding-left:248px;position:relative;}
+body.wide #app .header{position:fixed;top:0;bottom:0;left:max(0px, calc((100vw - 1180px) / 2));width:248px;
+  padding:calc(22px + var(--safe-top)) 16px calc(18px + var(--safe-bottom));border-bottom:none;border-right:1px solid var(--line);
+  display:flex;flex-direction:column;gap:20px;overflow-y:auto;z-index:100;}
+body.wide .header-top{flex-direction:column;align-items:stretch;gap:14px;padding-bottom:0;}
+body.wide .header-top > div:last-child{justify-content:flex-start;gap:4px !important;}
+body.wide .h-name{font-size:1.35rem;}
+body.wide .h-meta{flex-wrap:wrap;row-gap:6px;}
+body.wide #tabBar{position:static;transform:none;width:auto;max-width:none;flex-direction:column;gap:4px;
+  background:none;-webkit-backdrop-filter:none;backdrop-filter:none;border-top:none;padding:0;}
+body.wide .tab-btn{flex:0 0 auto;flex-direction:row;justify-content:flex-start;gap:12px;padding:12px 14px;border-radius:12px;
+  font-size:0.95rem;font-weight:600;color:var(--ink-soft);}
+body.wide .tab-btn.active{background:var(--accent-soft);color:var(--accent);}
+body.wide .tab-btn.active .ico{transform:none;}
+@media (hover:hover){ body.wide .tab-btn:hover:not(.active){background:var(--line-soft);} }
+body.wide #subBar{position:sticky;top:0;z-index:60;background:var(--bg);padding:max(var(--safe-top),18px) 32px 12px;}
+body.wide #subBar .sub-btn{flex:0 0 auto;padding:9px 18px;font-size:0.86rem;}
+body.wide #updBar{margin:18px 32px 0;}
+body.wide main{padding:max(var(--safe-top),12px) 32px calc(48px + var(--safe-bottom));}
+body.wide #subBar:not(.hidden) ~ main{padding-top:6px;}
+/* 목록 화면은 읽기 좋은 폭으로 가운데에, 홈·달력은 본문 폭을 다 쓴다 */
+body.wide #view > div{max-width:780px;margin:0 auto;}
+body.wide #view.view-wide > div{max-width:none;}
+body.wide .home-grid{display:grid;grid-template-columns:minmax(0,1fr) 340px;column-gap:32px;align-items:start;}
+body.wide .hg-side{position:sticky;top:20px;}
+body.wide .hg-side > .notice:first-child{margin-top:14px;}
+body.wide .hero-num{font-size:3.2rem;}
+/* 학생 명단 두 단은 왼쪽 단이 충분히 넓을 때만(가로 1150px 이상). 12.9형 세로(1032)는 왼쪽 단이 ~360px라 한 단 */
+@media (min-width:1150px){
+  body.wide #thRoster{display:grid;grid-template-columns:1fr 1fr;column-gap:36px;}
+}
+@media (max-width:1149px){
+  body.wide .home-grid{grid-template-columns:minmax(0,1fr) 300px;column-gap:24px;}
+}
+body.wide .cal-d{min-height:96px !important;padding:8px 7px !important;}
+body.wide .cal-d > span{font-size:.86rem !important;}
+body.wide .cal-d > div{font-size:.7rem !important;}
+body.wide .modal-box{max-width:480px;}
 </style>
 </head>
 <body>
@@ -1198,6 +1250,35 @@ function fillIcoSlots(root){
 
 /* ═══ 상태 ═══ */
 var ROLE='student', TAB='home';
+
+/* ═══ 넓은 화면(사이드바) 레이아웃 — CSS body.wide 규칙과 같은 조건 ═══
+   넓으면 주 메뉴(#tabBar)를 헤더(왼쪽 사이드바) 안으로, 하위 메뉴(#subBar)를 본문 위로 옮긴다.
+   좁아지면(아이패드 분할 화면·회전) 원래 자리로 되돌린다. */
+var WIDE_MQ = window.matchMedia('(min-width:900px) and (min-height:600px)');
+function isWide(){ return WIDE_MQ.matches; }
+function applyWideLayout(){
+  var wide = isWide(), app = document.getElementById('app');
+  var hdr = app && app.querySelector('.header'), tb = document.getElementById('tabBar'),
+      sb = document.getElementById('subBar'), upd = document.getElementById('updBar');
+  if (!hdr || !tb || !sb || !upd) return;
+  if (wide){
+    if (tb.parentNode !== hdr) hdr.appendChild(tb);
+    if (sb.parentNode === hdr) app.insertBefore(sb, upd);
+  } else {
+    if (tb.parentNode === hdr) app.appendChild(tb);
+    if (sb.parentNode !== hdr) hdr.appendChild(sb);
+  }
+  document.body.classList.toggle('wide', wide);
+}
+applyWideLayout();
+(function(){
+  var onChange = function(){
+    applyWideLayout();
+    var app = document.getElementById('app');
+    if (app && !app.classList.contains('hidden') && !document.getElementById('modal')){ renderTabs(); renderView(); }
+  };
+  if (WIDE_MQ.addEventListener) WIDE_MQ.addEventListener('change', onChange); else if (WIDE_MQ.addListener) WIDE_MQ.addListener(onChange);
+})();
 /* 로그인한 학생. 값은 전부 Firestore에서 채운다(예전엔 특정 학생 이름이
    고정값으로 박혀 있었고, 그 탓에 누가 방과후 체크인을 해도 그 이름으로 기록됐다).
    planner는 아직 시트에만 있어 Firestore에 없다 — null이면 화면에서 '–'로 표시한다. */
@@ -3166,6 +3247,9 @@ function renderView(){
   var root=document.getElementById('view');
   var v=document.createElement('div');
   root.replaceChildren(v);
+  // 넓은 화면에서 본문 폭을 다 쓰는 화면(홈 두 단·달력). 나머지 목록 화면은 읽기 좋은 폭으로 가운데에 둔다
+  var su = subOf();
+  root.classList.toggle('view-wide', TAB==='home' || su==='cal');
   var p=renderViewInner(v);
   // 조회가 실패하면 '불러오는 중'에서 영영 멈춰 있지 않게 다시 시도 버튼을 보여준다
   if (p && p.then) p.then(null, function(e){ showLoadError(v, e); });
@@ -5075,11 +5159,11 @@ function homeStudent(){
   var p=ME.planner, has=!!p, pct=has?Math.round(p.done/p.total*100):0;
   var ok=ME.week.filter(function(d){return d.s==='ok';}).length;
   setTimeout(fillNews, 0); setTimeout(fillHomeExtras, 0);
-  return ''+
-  notiBanner()+
-  '<div id="newsBox"></div><div id="homeExtra"></div>'+
+  return homeLayout([
+  ['side', notiBanner()],
+  ['side', '<div id="newsBox"></div><div id="homeExtra"></div>'],
 
-  '<div class="hero">'+
+  ['main', '<div class="hero">'+
     '<div class="hero-lbl">내 엽전</div>'+
     '<div class="hero-num" style="color:'+(ME.coins<0?'var(--rose)':'var(--ink)')+'">'+ME.coins+'<small>냥</small></div>'+
     '<div class="hero-inline">'+
@@ -5088,11 +5172,11 @@ function homeStudent(){
       '<div style="cursor:pointer" onclick="openStreakModal()">연속 출석'+
         '<b id="heroStreak">'+(streakCache ? streakCache.streak : '–')+'일</b></div>'+
     '</div>'+
-  '</div>'+
+  '</div>'],
 
-  checkinBtn()+
+  ['main', checkinBtn()],
 
-  '<div class="sec-label">오늘</div>'+
+  ['main', '<div class="sec-label">오늘</div>'+
   '<div class="card">'+
     '<div class="blk" onclick="openPlanner()" style="cursor:pointer"><div class="blk-head">'+
       '<div><div class="row-t">오늘의 플래너</div>'+
@@ -5107,13 +5191,22 @@ function homeStudent(){
         var txt=d.s==='ok'?'출':d.s==='late'?'지':d.s==='no'?'결':'·';
         return '<div class="day"><div class="day-lbl">'+d.d+'</div><div class="day-dot '+cls+'">'+txt+'</div></div>';
       }).join('')+'</div></div>'+
-  '</div>'+
+  '</div>'],
 
-  '<div class="sec-label">바로가기</div>'+
+  ['side', '<div class="sec-label">바로가기</div>'+
   '<div class="quick">'+
     quick('memo','','플래너','openPlanner()')+quick('coin','y','엽전 안내','openCoinGuide()')+
     quick('calendar','s','방과후',"go('after')")+quick('chart','o','내 성적',"go('exam')")+
-  '</div>';
+  '</div>']
+  ]);
+}
+
+/** 홈 화면 조각 배치 — 폰·태블릿 세로는 적힌 순서대로 한 줄, 넓은 화면(사이드바 레이아웃)은
+    'main'은 왼쪽 넓은 단, 'side'는 오른쪽 좁은 단으로 나눈다. 순서는 각 단 안에서 그대로 지킨다. */
+function homeLayout(parts){
+  if (!isWide()) return parts.map(function(p){ return p[1]; }).join('');
+  var col = function(k){ return parts.filter(function(p){ return p[0] === k; }).map(function(p){ return p[1]; }).join(''); };
+  return '<div class="home-grid"><div class="hg-main">'+col('main')+'</div><div class="hg-side">'+col('side')+'</div></div>';
 }
 
 /* 교사 홈 — 틀만 먼저 그리고 조회가 끝나면 채운다.
@@ -5124,10 +5217,10 @@ function homeTeacher(){
   setTimeout(fillTeacherHome, 0);
   setTimeout(fillStudentQuick, 0);
   setTimeout(fillHomeExtras, 0);
-  return ''+
-  '<div id="quietBox"></div><div id="delReqBox"></div><div id="homeExtra"></div>'+
+  return homeLayout([
+  ['side', '<div id="quietBox"></div><div id="delReqBox"></div><div id="homeExtra"></div>'],
 
-  '<div class="hero">'+
+  ['main', '<div class="hero">'+
     '<div class="hero-lbl">오늘 출결 <span id="thDate" style="font-weight:500;color:var(--ink-mute)"></span></div>'+
     '<div class="hero-num" id="thPresent">–</div>'+
     '<div class="hero-inline">'+
@@ -5135,18 +5228,18 @@ function homeTeacher(){
       '<div>결석<b id="thAbsent" style="color:var(--rose)">–</b></div>'+
       '<div>이번 주 상담<b id="thCounsel">–</b></div>'+
     '</div>'+
-  '</div>'+
+  '</div>'],
 
-  '<div class="sec-label">학생 현황 <span id="thQuickCnt" style="font-weight:500"></span></div>'+
+  ['main', '<div class="sec-label">학생 현황 <span id="thQuickCnt" style="font-weight:500"></span></div>'+
   '<div class="card pad"><select id="thQuickSel" onchange="thWho(this.value)"><option value="">학생을 고르세요</option></select>'+
-    '<div id="thQuick"></div></div>'+
+    '<div id="thQuick"></div></div>'],
 
-  '<div class="sec-label">학생</div>'+
+  ['main', '<div class="sec-label">학생</div>'+
   '<div class="card" id="thRoster">'+
     '<div class="blk"><div class="row-s">불러오는 중…</div></div>'+
-  '</div>'+
+  '</div>'],
 
-  '<div class="sec-label">관리</div>'+
+  ['side', '<div class="sec-label">관리</div>'+
   '<div class="quick">'+
     quick('coin','y','엽전 지급',"go('coin')")+quick('market','o','저잣거리',"go('market')")+
     quick('calendar','s','방과후 출석',"go('after')")+quick('chat','r','상담',"go('counsel')")+
@@ -5158,7 +5251,8 @@ function homeTeacher(){
   '<div class="quick" style="margin-top:10px">'+
     quick('memo','s','교사일지','openTeacherLog()')+quick('clock','o','시험 D-day','openDdayManager()')+
     quick('people','y','명부 등록','openAddMember()')+quick('cap','r','학년도 전환','openPromote()')+
-  '</div>';
+  '</div>']
+  ]);
 }
 
 /** 교사 홈의 실데이터 채우기 */
