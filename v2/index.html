@@ -30,7 +30,9 @@ html{-webkit-text-size-adjust:100%;text-size-adjust:100%;}
   --rose:#f43f5e; --rose-soft:#ffe4e6;
   --sky:#0ea5e9; --sky-soft:#e0f2fe;
   --gold:#b8860b; --gold-soft:#fdf3d8;
-  --safe-top:env(safe-area-inset-top,0px); --safe-bottom:env(safe-area-inset-bottom,0px);
+  /* 안전 영역 — iOS·새 안드로이드 웹뷰는 env(), 옛 안드로이드 웹뷰는 Capacitor SystemBars 가 넣어 주는 --safe-area-inset-* 를 쓴다(2026-10-19 edge-to-edge) */
+  --safe-top:max(var(--safe-area-inset-top,0px), env(safe-area-inset-top,0px));
+  --safe-bottom:max(var(--safe-area-inset-bottom,0px), env(safe-area-inset-bottom,0px));
   --radius:14px; --radius-sm:8px;
   --shadow:0 2px 12px rgba(26,26,46,0.07); --shadow-md:0 4px 24px rgba(26,26,46,0.1);
 }
@@ -3282,7 +3284,7 @@ var AM_CLOSE_MIN = 8*60 + 30;   // 08:30 — 마감
 /* ⚠️ v2가 출결의 원본이 되는 날. 전환 전까지는 학생이 구앱으로 인증하므로
    v2에 기록이 없는 게 당연하다 — 그걸 결석으로 세면 안 된다.
    학생을 v2로 옮기는 날 이 값을 그 날짜로 바꿀 것(§8 출시일 체크리스트). */
-var ATT_V2_FROM = '2099-01-01';
+var ATT_V2_FROM = '2026-10-23';   // 2026-10-22 전환(성일님). settings/app.attV2From 과 같은 값 — 원격 설정을 못 읽는 옛 빌드·웹용
 
 /* ═══ 원격 설정 (Firestore settings/app) ═══════════════════════
    스토어 앱은 화면(v2)을 앱 안에 담고 있어서, 값을 코드에 박아 두면 바꿀 때마다 새 빌드·심사가 필요하다.
@@ -3290,7 +3292,7 @@ var ATT_V2_FROM = '2099-01-01';
      attV2From  'YYYY-MM-DD' — v2가 출결의 원본이 되는 날(없으면 위 기본값 = 전환 전)
      minBuild   숫자 — 이보다 낮은 APP_BUILD는 업데이트 안내를 띄운다
    읽은 값은 기기에 적어 두어, 다음에 켤 때 서버 응답을 기다리지 않고 바로 쓴다. */
-var APP_BUILD = 8;               // 웹 묶음 번호 — v2를 고쳐 스토어 빌드를 낼 때마다 올린다
+var APP_BUILD = 9;               // 웹 묶음 번호 — v2를 고쳐 스토어 빌드를 낼 때마다 올린다
 var APP_CFG_KEY = 'tc_cfg', MIN_BUILD = 0;
 function applyAppConfig(c){
   if (!c || DEMO_MODE) return;   // 데모는 전환 뒤 모습으로 고정
@@ -3444,6 +3446,7 @@ async function doAmCheckIn(){
     streakCache = null;
     ME.week = await buildWeek(ME.name);
     renderView();
+    scheduleLocalNotis();                // 오늘 아침 알림을 지우고 저녁 것(남았으면)을 깐다
     var ok = amToday.status === '출석';
     showModal('<div class="modal-box"><div style="text-align:center;padding:10px 0 6px">'+
       '<div style="font-size:2.4rem;line-height:1">'+(ok?'✅':'⏰')+'</div>'+
@@ -3724,6 +3727,7 @@ async function savePlannerNow(){
     ME.planner = { done: planTasks.filter(function(t){return t.status===3;}).length,
                    total: planTasks.length };
     closeModal(); renderView();
+    scheduleLocalNotis();                // 플래너를 다 했으면 오늘 저녁 알림이 빠진다
   } catch(e){
     btn.disabled = false; btn.textContent = '저장';
     err.textContent = (e && e.code === 'permission-denied')
@@ -4305,10 +4309,134 @@ async function renderAmTeacher(v){
    시험주간에 알림이 울리면 안 되는데 반복 예약은 달력을 모르기 때문이다.
    앱을 열 때마다 앞으로 3주치를 다시 깐다(iOS 대기 알림 상한 64개). */
 var NOTI_KEY        = 'tc_noti';
-var NOTI_AM_HOUR    = 7, NOTI_AM_MIN = 50;   // 등교 인증(08:10 마감 전)
+var NOTI_AM_HOUR    = 7, NOTI_AM_MIN = 50;   // 등교 인증(08:10 마감 전) — 매일 가는 기본 알림
 var NOTI_DAYS_AHEAD = 21;
 var NOTI_ID_BASE    = 71000;
 var NOTI_ID_MAX     = 60;
+
+/* ── 엽전이 알림 (2026-10-20 성일님 "듀오링고처럼, 성실하게 안 할 때만 하루 1개") ──
+   기본 알림(07:50 등교 인증·18:30 방과후 출석체크)과는 별개로, 엽전이 알림은 날마다 많아야 하나다.
+   할 일을 하면 그날 엽전이 알림은 지워진다(기본 알림은 그대로).
+     아침: 등교 인증 마감 10분 전(일반 08:00, 기숙사 08:20). 인증하면 앱이 다시 깔면서 빠진다.
+     저녁: 오늘 등교는 했는데 방과후 체크(우선)나 플래너가 남았으면 21:00에 하나.
+   미래 날짜는 "앱을 안 열면 계속 결석"이라고 가정하고 날이 갈수록 말투가 세진다
+   (부탁 → 울먹 → 삐짐 → 유령). 앱을 열면 실제 기록으로 처음부터 다시 깐다.
+   그림: 안드로이드는 res/drawable-nodpi/yeop_*.png(largeIcon), iOS는 public/noti/yeop_*.png(첨부).
+   원본 시트는 art/yeopjeon_sheet_v1.png(제미나이). */
+var NOTI_EVE_MIN = 21*60;
+var NOTI_MSG = {
+  fire: [
+    ['{연속}일 연속 출석이 위태로워요', '{마감}까지 등교 인증 하나면 지켜져요. 불씨가 꺼지기 직전이에요!'],
+    ['불씨가 꺼져 가요…', '{이름}님의 {연속}일 연속 출석, 10분 남았어요. 엽전이가 두 손으로 지키고 있어요.'],
+    ['{연속}일 쌓은 거 아깝잖아요', '지금 인증하면 {다음}일이 돼요. {마감}까지!'],
+    ['엽전이 손이 뜨거워요', '{연속}일째 불씨를 들고 있어요. 등교 인증으로 받아 주세요!'],
+    ['오늘 끊기면 0일부터예요', '{연속}일 연속 기록, 등교 인증 한 번이면 이어져요.'],
+    ['연속 {연속}일, 여기서 멈출 거예요?', '{마감} 전에 인증하면 출석 +1냥도 같이 와요.']
+  ],
+  clock: [
+    ['10분 남았어요!', '{마감}까지 등교 인증하면 출석 +1냥이에요.'],
+    ['똑딱똑딱… 엽전이 시계가 울려요', '아직 등교 인증 전이에요. 지금 누르면 출석이에요!'],
+    ['{이름}님, 아직 안 오셨어요?', '{마감}이 지나면 지각이에요. 엽전이가 시계 들고 기다리는 중.'],
+    ['지금이 그 시간이에요', '등교 인증할 시간이에요. {시험} {D}, 오늘도 한 칸 채워요.'],
+    ['엽전 1냥이 기다려요', '{마감} 전에 인증하면 +1냥, 지각하면 -1냥이에요.'],
+    ['아침 자습 시작 10분 전!', '인증 버튼 한 번이면 끝나요.']
+  ],
+  plead: [
+    ['간절히 부탁할게요', '지난번엔 못 봤어요. 오늘은 {마감}까지 등교 인증해 주세요. 제 심장을 편안하게 해 주세요.'],
+    ['{이름}님, 오늘은 와 주실 거죠?', '엽전이가 두 손 모으고 기다려요. 등교 인증 한 번이면 돼요.'],
+    ['결석한 거 엽전이는 알아요', '괜찮아요, 오늘 다시 시작하면 돼요. {마감}까지 인증!'],
+    ['제발요오오오', '오늘 등교 인증하면 연속 출석을 다시 쌓을 수 있어요.'],
+    ['딱 한 번만요', '{마감} 전에 인증 버튼만 눌러 주세요. 나머지는 엽전이가 할게요.'],
+    ['다시 시작하기 딱 좋은 날이에요', '{시험} {D}. 오늘 출석으로 불씨를 다시 켜요.']
+  ],
+  cry: [
+    ['벌써 {일}일째예요…', '엽전이 눈물이 멈추지 않아요. 오늘은 등교 인증해 줄 거죠?'],
+    ['제가 뭘 잘못했나요?', '{일}일 동안 등교 인증이 없어요. 오늘 {마감}까지 와 주세요.'],
+    ['{이름}님이 보고 싶어요', '결석이 {일}일째예요. 엽전도 하루 2냥씩 줄고 있어요.'],
+    ['엉엉… 아침마다 기다렸어요', '오늘은 꼭 만나요. 등교 인증 한 번이면 돼요.'],
+    ['{일}일 연속 결석, 이제 그만해요', '{시험}까지 {D}. 다시 시작할 수 있어요.'],
+    ['엽전이 지갑이 가벼워져요', '결석하면 하루 2냥씩 빠져요. 오늘 인증으로 멈춰요.']
+  ],
+  sulk: [
+    ['흥, 이제 안 기다릴 거예요', '…라고 하면 거짓말이에요. {일}일째 결석, 오늘은 와요.'],
+    ['제가 너무 심하게 했나요?', '{일}일째 등교 인증이 없어요. 출석하면 이 알림은 안 와요.'],
+    ['엽전이 삐졌어요', '{일}일 동안 한 번도 안 왔잖아요. 오늘 {마감}까지 오면 풀어 줄게요.'],
+    ['알림 읽는 거 다 알아요', '읽기만 하지 말고 등교 인증도 눌러 줘요.'],
+    ['{이름}님, 저 기억하세요?', '장원급제반 엽전이에요. {일}일째 못 봤어요.'],
+    ['모른 척하기 있기 없기', '결석 {일}일째. 오늘 인증하면 엽전이도 다 잊어 줄게요.']
+  ],
+  ghost: [
+    ['아직 계신가요?', '마지막으로 등교 인증한 지 {일}일이 지났어요…'],
+    ['엽전이가 늙어 가고 있어요…', '{일}일째 기다리다 거미줄이 쳐졌어요. 오늘 와 주실래요?'],
+    ['{일}일 연속 결석이라뇨!!!', '엽전이가 생각한 연속 기록은 그런 게 아니에요.'],
+    ['저를 잊은 건 아니죠?', '{시험}까지 {D}. 지금 다시 시작해도 늦지 않아요.'],
+    ['유령이 돼 버렸어요', '등교 인증 한 번이면 엽전이가 다시 살아나요.'],
+    ['천천히 다시 시작해 봐요', '오늘 {마감}까지 등교 인증, 딱 하나만 해요.']
+  ],
+  brush: [
+    ['오늘 플래너, 아직이에요', '100% 달성하면 +2냥! 자기 전에 체크해요.'],
+    ['붓 들고 기다리는 중', '오늘 한 일을 플래너에 체크해요. 다 하면 +2냥이에요.'],
+    ['하루를 마무리할 시간이에요', '플래너를 펼쳐 오늘 공부를 정리해요. 3분이면 돼요.'],
+    ['{이름}님, 플래너 펼쳐 볼까요?', '등교는 했는데 플래너가 아직 100%가 아니에요.'],
+    ['오늘 공부, 기록해야 내 거예요', '플래너 체크하고 자요. 100%면 +2냥!'],
+    ['엽전이 2냥 들고 대기 중', '플래너 100% 달성하면 바로 드려요.']
+  ],
+  bag: [
+    ['방과후 출석체크 안 했어요!', '{과목} 출석체크, 자정이 지나면 결석이에요.'],
+    ['책가방 챙겼으면 체크도요', '오늘 {과목} 방과후 출석체크가 아직이에요.'],
+    ['{이름}님, 오늘 {과목} 들었죠?', '앱에서 출석체크를 눌러야 출석이에요. 자정까지!'],
+    ['방과후 결석 처리 3시간 전', '{과목} 출석체크 지금 해 두세요.']
+  ]
+};
+/** 결석이 이어진 날 수로 말투를 고른다 */
+function notiTier(run, streak){
+  if (run <= 0) return streak >= 2 ? 'fire' : 'clock';
+  if (run <= 2) return 'plead';
+  if (run <= 4) return 'cry';
+  if (run <= 9) return 'sulk';
+  return 'ghost';
+}
+/** 날짜마다 다른 문구 — 빈 값({시험} 없음 등)이 들어가는 문구는 건너뛴다 */
+function notiText(kind, ds, v){
+  var pool = (NOTI_MSG[kind] || []).filter(function(m){
+    return !/\{(\S+?)\}/.test(m.join('')) || m.join('').match(/\{(\S+?)\}/g).every(function(t){
+      var k = t.slice(1,-1); return v[k] !== undefined && v[k] !== null && v[k] !== '';
+    });
+  });
+  if (!pool.length) pool = NOTI_MSG[kind];
+  var day = Math.round(new Date(ds+'T12:00:00Z').getTime() / 86400000);
+  var m = pool[day % pool.length];
+  var fill = function(s){ return s.replace(/\{(\S+?)\}/g, function(t,k){ return v[k] != null ? String(v[k]) : ''; }); };
+  return { title: fill(m[0]), body: fill(m[1]) };
+}
+function notiPlat(){ return window.Capacitor && Capacitor.getPlatform ? Capacitor.getPlatform() : ''; }
+function notiItem(id, kind, ds, hm, v){
+  var t = notiText(kind, ds, v);
+  var it = { id: id, title: t.title, body: t.body, extra: { yeop: kind },
+             schedule: { at: new Date(ds+'T'+hm+':00+09:00'), allowWhileIdle: true } };
+  if (notiPlat() === 'android') it.largeIcon = 'yeop_' + kind;
+  return it;
+}
+/** iOS 첨부 그림 — 시스템이 첨부 파일을 '옮겨' 가므로 앱 묶음(읽기 전용) 그림을 바로 쓰지 않고
+    알림마다 캐시 폴더에 사본을 만들어 붙인다. 실패하면 그림 없이 보낸다(알림이 빠지는 것보다 낫다). */
+async function notiAttachIos(list){
+  var FSY = window.Capacitor && Capacitor.Plugins && Capacitor.Plugins.Filesystem;
+  if (notiPlat() !== 'ios' || !FSY) return;
+  var b64 = {};
+  for (var i = 0; i < list.length; i++){
+    var it = list[i], k = it.extra && it.extra.yeop;
+    if (!k) continue;
+    try {
+      if (!b64[k]){
+        var blob = await (await fetch('noti/yeop_' + k + '.png')).blob();
+        b64[k] = await new Promise(function(ok, no){ var r = new FileReader();
+          r.onload = function(){ ok(String(r.result).split(',')[1]); }; r.onerror = no; r.readAsDataURL(blob); });
+      }
+      var w = await FSY.writeFile({ path: 'noti/n' + it.id + '.png', data: b64[k], directory: 'CACHE', recursive: true });
+      it.attachments = [{ id: 'yeop', url: w.uri }];
+    } catch(e){}
+  }
+}
 
 function isNativeApp(){
   return !!(window.Capacitor && window.Capacitor.isNativePlatform
@@ -4339,21 +4467,72 @@ function notiIds(){
   var a=[]; for (var i=0;i<NOTI_ID_MAX;i++) a.push({ id: NOTI_ID_BASE + i }); return a;
 }
 
+/** 여러 곳(입실·인증·플래너·앞으로 나옴)에서 거의 동시에 불려도 한 번에 하나씩만 깐다 */
+var notiChain = Promise.resolve();
+function scheduleLocalNotis(){
+  notiChain = notiChain.then(scheduleLocalNotisNow, scheduleLocalNotisNow);
+  return notiChain;
+}
+
 /** 앞으로 3주치 알림을 다시 깐다. 켜져 있고 설치된 앱일 때만. */
-async function scheduleLocalNotis(){
+async function scheduleLocalNotisNow(){
   var LN = capLN();
-  if (!LN || !isNativeApp() || !notiOn() || !ME.name) return 'skip';
+  if (!LN || !isNativeApp() || !notiOn() || !ME.name || ROLE === 'teacher') return 'skip';
   try { await LN.cancel({ notifications: notiIds() }); } catch(e){}   // 우리 것만 지운다
 
   await loadCalendar(true);
-  var sched = { weekly:[], exceptions:[] };
-  try { sched = await FS.schedule(); } catch(e){}
+  var today = kstToday();
+  var got = await Promise.all([
+    soft(FS.schedule(), { weekly:[], exceptions:[] }),
+    soft(FS.settings('dday'), {}),
+    soft(loadStreak(true), null),
+    loadAmToday(), loadPlannerToday()
+  ]);
+  var sched = got[0], st = got[2] || { streak:0, missed:0 };
+  var exam = (got[1].list || []).filter(function(x){ return x.date >= today && (!x.track || x.track==='공통' || x.track===ME.track); })
+                                .sort(function(a,b){ return a.date < b.date ? -1 : 1; })[0];
+  var nm = String(ME.name || '');
+  var v = { 이름: nm.length >= 3 ? nm.slice(1) : nm, 마감: ME.dorm ? '08:30' : '08:10',
+            시험: exam ? exam.name : '', 연속: st.streak, 다음: st.streak + 1 };
+  var nagHM = ME.dorm ? '08:20' : '08:00', nagMin = ME.dorm ? 8*60+20 : 8*60;
+  var nowMin = kstMinutes();
+  var checked = !!(amToday && amToday.status);
 
-  var list = [], n = 0, today = kstToday();
-  for (var d = 1; d <= NOTI_DAYS_AHEAD && n < NOTI_ID_MAX - 1; d++){
+  var list = [], n = 0;
+  var mine = function(ds){ return classesOn(sched, ds).filter(function(c){ var t = classTrack(c); return t === '공통' || t === ME.track; }); };
+
+  if (isSchoolDay(today)){
+    if (!checked && nowMin < nagMin){
+      // 오늘 아침 — 아직 인증 전
+      v.D = exam ? ddayLabel(exam.date) : ''; v.일 = st.missed;
+      list.push(notiItem(NOTI_ID_BASE + (n++), notiTier(st.missed, st.streak), today, nagHM, v));
+    } else if (checked && nowMin < NOTI_EVE_MIN){
+      // 오늘 저녁 — 등교는 했는데 방과후 체크(먼저)나 플래너가 남았으면
+      var cls = mine(today), left = null;
+      if (cls.length){
+        try {
+          var both = await Promise.all([ FS.checkIns(today), soft(FS.asOverrides(today), {}) ]);
+          var done = {};
+          both[0].forEach(function(r){ if (r.name === ME.name) done[r.subject] = 1; });
+          Object.keys(both[1]).forEach(function(sub){ var s2 = (both[1][sub]||{})[ME.name];
+            if (s2 === '출석') done[sub] = 1; else if (s2 === '결석') delete done[sub]; });
+          left = cls.filter(function(c){ return !done[c.subject]; })[0] || null;
+        } catch(e){}
+      }
+      if (left){ v.과목 = left.subject; list.push(notiItem(NOTI_ID_BASE + (n++), 'bag', today, '21:00', v)); }
+      else if (!ME.planner || ME.planner.done < ME.planner.total)
+        list.push(notiItem(NOTI_ID_BASE + (n++), 'brush', today, '21:00', v));
+    }
+  }
+
+  // 앞으로의 수업일 — 앱을 안 열면 계속 결석이라고 보고 날마다 한 칸씩 세게
+  var run = checked ? 0 : (isSchoolDay(today) ? st.missed + 1 : st.missed);
+  var streakNext = checked ? st.streak : (isSchoolDay(today) ? 0 : st.streak);
+  for (var d = 1; d <= NOTI_DAYS_AHEAD && n < NOTI_ID_MAX - 2; d++){
     var ds = shiftDay(today, d);
     if (!isSchoolDay(ds)) continue;            // 주말·공휴일·휴업일·자습없는날 제외
 
+    // 기본 알림 — 매 수업일 07:50 등교 인증, 방과후 수업 있는 날 18:30 출석체크
     list.push({
       id: NOTI_ID_BASE + (n++),
       title: '등교 인증하세요',
@@ -4361,22 +4540,33 @@ async function scheduleLocalNotis(){
       schedule: { at: new Date(ds+'T'+pad2(NOTI_AM_HOUR)+':'+pad2(NOTI_AM_MIN)+':00+09:00'),
                   allowWhileIdle: true }
     });
-
-    var mine = classesOn(sched, ds).filter(function(c){
-      var t = classTrack(c); return t === '공통' || t === ME.track;
-    });
-    if (mine.length && n < NOTI_ID_MAX){
+    var cls2 = mine(ds);
+    if (cls2.length){
       list.push({
         id: NOTI_ID_BASE + (n++),
         title: '방과후 출석체크',
-        body: mine[0].subject + ' 시작 — 자정까지 체크하지 않으면 결석이에요.',
+        body: cls2[0].subject + ' 시작 — 자정까지 체크하지 않으면 결석이에요.',
         schedule: { at: new Date(ds+'T18:30:00+09:00'), allowWhileIdle: true }
       });
     }
+
+    // 엽전이 알림
+    var left2 = exam ? Math.round((new Date(exam.date+'T12:00:00Z') - new Date(ds+'T12:00:00Z')) / 86400000) : -1;
+    v.D = left2 > 0 ? 'D-' + left2 : (left2 === 0 ? 'D-DAY' : '');
+    v.일 = run; v.연속 = streakNext; v.다음 = streakNext + 1;
+    list.push(notiItem(NOTI_ID_BASE + (n++), notiTier(run, streakNext), ds, nagHM, v));
+    run++; streakNext = 0;
   }
   if (!list.length) return 'none';
+  await notiAttachIos(list);
   try { await LN.schedule({ notifications: list }); return 'ok:' + list.length; }
-  catch(e){ return 'error:' + ((e && e.message) || e); }
+  catch(e){
+    // 그림 때문에 실패했을 수 있다 — 그림을 빼고 한 번 더
+    try {
+      list.forEach(function(it){ delete it.attachments; delete it.largeIcon; });
+      await LN.schedule({ notifications: list }); return 'ok-noimg:' + list.length;
+    } catch(e2){ return 'error:' + ((e2 && e2.message) || e2); }
+  }
 }
 
 function notiModal(emoji, title, body){
@@ -4408,6 +4598,7 @@ async function enableNotis(){
     notiModal('🔔','알림을 켰어요',
       '수업일 아침 '+pad2(NOTI_AM_HOUR)+':'+pad2(NOTI_AM_MIN)+'에 등교 인증을,<br>'+
       '방과후 수업이 있는 날 18:30에 출석체크를 알려드려요.<br>'+
+      '등교 인증·플래너를 안 한 날엔 엽전이도 한 번 찾아가요.<br>'+
       '<span style="color:var(--ink-mute)">쉬는 날에는 울리지 않습니다.</span>');
   } catch(e){
     notiModal('⚠️','알림을 켜지 못했어요','잠시 후 다시 시도해주세요.');
@@ -4694,8 +4885,15 @@ async function loadStreak(force){
               dorm: m ? m.dorm : ME.dorm, am: am, ov: ov };
 
   var r = calcStreak(ctx, freezeSet, today);
+  // 어제부터 거꾸로 이어진 결석 일수(수업일만) — 알림 말투를 고를 때 쓴다
+  var missed = 0, md = shiftDay(today, -1);
+  for (var mi = 0; mi < 120; mi++, md = shiftDay(md, -1)){
+    if (!isSchoolDay(md)) continue;
+    if (attStatusOf(md, ctx) === '결석') missed++; else break;
+  }
   streakCache = {
     streak:   r.streak,
+    missed:   missed,
     brokenAt: r.brokenAt,
     longest:  Math.max(r.streak, calcLongest(ctx, freezeSet, today)),
     atRisk:   calcAtRisk(ctx, today, r.streak),
@@ -5069,6 +5267,7 @@ async function doAsCheckIn(subject){
   try{
     await FS.checkIn(kstToday(),subject,ME.name,ME.track);
     renderView();
+    scheduleLocalNotis();
   }catch(e){
     alert('체크인하지 못했습니다.\n' + (e.message||e));
   }
