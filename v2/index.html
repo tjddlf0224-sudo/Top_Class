@@ -289,6 +289,11 @@ body.wide .cal-d{min-height:96px !important;padding:8px 7px !important;}
 body.wide .cal-d > span{font-size:.86rem !important;}
 body.wide .cal-d > div{font-size:.7rem !important;}
 body.wide .modal-box{max-width:480px;}
+/* 큰 모니터 확대(applyWideZoom) 중엔 vw·vh 가 배율만큼 한 번 더 커진다 → JS 가 넣는 실제 크기(--zvw/--zvh)로 바꿔 계산 */
+html.zoomed body{min-height:var(--zvh);}
+html.zoomed #login{min-height:var(--zvh);}
+html.zoomed .doc-box{height:calc(var(--zvh) * .86);}
+html.zoomed body.wide #app .header{left:max(0px, calc((var(--zvw) - 1180px) / 2));}
 </style>
 </head>
 <body>
@@ -1271,8 +1276,22 @@ function applyWideLayout(){
     if (sb.parentNode !== hdr) hdr.appendChild(sb);
   }
   document.body.classList.toggle('wide', wide);
+  applyWideZoom();
+}
+/* 큰 모니터(PC·맥 웹, 크롬 웹앱, 맥에서 도는 아이패드 앱)는 넓은 배치에서 화면 전체를 비율대로 키운다(2026-10-22 성일님
+   "글자크기도 작고 … 모니터 화면에 맞게"). 1366×768 이하·아이패드(1194·1366폭이라도 높이 768 미만이면)는 1배 그대로,
+   1920×1080 창은 약 1.25~1.4배, 2560×1440 은 1.7배까지. 넓은 배치가 아니면(폰·태블릿 세로) 손대지 않는다.
+   rem 만 키우면 px 로 잡힌 여백·사이드바·최대 폭이 안 따라와서, 전체 zoom 으로 한꺼번에 키운다. */
+function applyWideZoom(){
+  var z = 1;
+  if (isWide()) z = Math.min(1.7, Math.max(1, Math.min(window.innerWidth / 1366, window.innerHeight / 768)));
+  var v = z > 1.02 ? z.toFixed(3) : '', h = document.documentElement;
+  if (h.style.zoom !== v) h.style.zoom = v;
+  h.classList.toggle('zoomed', !!v);
+  if (v){ h.style.setProperty('--zvw', (window.innerWidth / z) + 'px'); h.style.setProperty('--zvh', (window.innerHeight / z) + 'px'); }
 }
 applyWideLayout();
+window.addEventListener('resize', function(){ clearTimeout(applyWideZoom._t); applyWideZoom._t = setTimeout(applyWideZoom, 150); });
 (function(){
   var onChange = function(){
     applyWideLayout();
