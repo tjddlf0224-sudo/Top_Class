@@ -422,6 +422,16 @@ body.wide .sc-c{min-height:74px;} body.wide .sc-t{font-size:.78rem;}
 .wk-b{text-align:center;} .wk-v{font-size:.95rem;font-weight:700;color:var(--ink-soft);height:16px;}
 .wk-col{height:110px;background:var(--line-soft);border-radius:8px;display:flex;align-items:flex-end;overflow:hidden;}
 .wk-col i{display:block;width:100%;background:var(--accent);border-radius:8px;}
+.aw-img{flex:none;object-fit:contain;display:inline-block;vertical-align:middle;}
+.bdg{flex:none;object-fit:contain;display:inline-block;vertical-align:middle;} .bdg.locked{filter:grayscale(1);opacity:.3;}
+.bdg-shelf{display:grid;grid-template-columns:repeat(3,1fr);gap:12px 8px;}
+.bdg-cell{display:flex;flex-direction:column;align-items:center;gap:2px;text-align:center;} .bdg-cell b{font-size:1rem;color:var(--ink-mute);} .bdg-cell.got b{color:var(--ink);}
+.fame-bdg{display:block;font-weight:600;}
+.aw-coin{font-style:normal;font-weight:800;color:var(--gold);white-space:nowrap;}
+.aw-how .aw-coin{margin-left:auto;}
+.aw-reveal-coin{font-size:1.05rem;margin:-4px 0 14px;color:var(--ink-soft);} .aw-reveal-coin b{color:var(--gold);}
+.aw-newbdg{flex-direction:row!important;gap:14px!important;justify-content:center;text-align:left;background:var(--gold-soft);border-radius:16px;padding:12px 16px;margin-bottom:16px;}
+.aw-newbdg b{font-size:1.15rem;}
 .aw-reveal{text-align:center;} .aw-reveal-t{font-size:1.35rem;font-weight:900;margin:6px 0 14px;}
 .aw-reveal-list{display:flex;flex-wrap:wrap;justify-content:center;gap:14px;margin-bottom:18px;}
 .aw-pop{display:flex;flex-direction:column;align-items:center;gap:4px;opacity:0;animation:awPop .6s cubic-bezier(.2,1.6,.4,1) forwards;}
@@ -483,7 +493,7 @@ body.wide .big-txt .sc-c{min-height:86px;} body.wide .big-txt .sc-t{font-size:1r
 .big-txt .st-no{width:34px;height:34px;font-size:.95rem;}
 .big-txt .st-go,#studyHome .st-go{font-size:1rem;}
 .big-txt .hero-lbl{font-size:1rem;} .big-txt .hero-inline div{font-size:1rem;}
-.big-txt .fame-badge .aw-medal{width:28px!important;height:28px!important;font-size:13px!important;}
+.big-txt .fame-badge .aw-medal,.big-txt .fame-badge .aw-img{width:28px!important;height:28px!important;font-size:13px!important;}
 
 /* 만회 미션 카드 (2026-10-23) */
 .mk-card{border:1.5px solid var(--orange);background:var(--orange-soft);cursor:pointer;margin-bottom:8px;}
@@ -3985,7 +3995,7 @@ async function loadWallet(m){
     FS.ledgerOf(name), FS.attendanceOf(name),
     soft(FS.amCheckInsOf(name), {}), soft(FS.amOverridesOf(name), {}),
     soft(FS.marketBuys(), []), soft(FS.freezeOf(name), { bought:0 }),
-    soft(FS.plannerOf(name), {}), soft(FS.studySince(MAKEUP_FROM), [])
+    soft(FS.plannerOf(name), {}), soft(FS.studySince(ST_FROM), []), soft(FS.members(), [])
   ]);
   var ledger = got[0];
   var ledgerSum = ledger.reduce(function(a,b){ return a + b.amount; }, 0);
@@ -4028,13 +4038,24 @@ async function loadWallet(m){
   var plannerByDate = got[6] || {};
   var pl = coinFromPlanner(from, today, plannerByDate, ctx);
 
-  var items = att.items.concat(pl.items).concat(freezeItems).concat(marketItems2)
+  // 주간 시상 엽전 — 명예의 전당과 같은 계산(stData 와 같은 명부 거르기). 개시일 다음날부터 발표된 상만
+  var awTotal = 0, awItems = [];
+  try {
+    var mm = {}; (got[8] || []).forEach(function(x){ if (DEMO_MODE || String(x.id) !== DEMO_STUDENT_SID) mm[x.name] = 1; });
+    stAllAwards((got[7] || []).filter(function(r){ return mm[r.name]; }), today).forEach(function(a){
+      if (a.name !== name || a.date < from) return;
+      var c = AW_COIN[a.k] || 0; awTotal += c;
+      awItems.push({ date:a.date, amount:c, reason:'주간 시상: '+awardName(a)+' ('+a.mon.slice(5).replace('-','/')+' 주)', by:'계산' });
+    });
+  } catch(e){}
+
+  var items = att.items.concat(pl.items).concat(awItems).concat(freezeItems).concat(marketItems2)
               .concat(ledger.map(function(l){
     return { date:l.date, amount:l.amount, reason:l.reason, by:l.by||'교사' };
   })).sort(function(a,b){ return a.date < b.date ? 1 : -1; });
 
   return { mode:'계산',
-           balance: open.coins + ledgerSum + att.total + pl.total + freezeCost + marketCost,
+           balance: open.coins + ledgerSum + att.total + pl.total + awTotal + freezeCost + marketCost,
            items: items, opening: open };
 }
 
@@ -6067,6 +6088,8 @@ function openCoinGuide(){
     row('결석 만회', '감점 없음', '결석한 날 자정까지 공부 타이머 '+(MAKEUP_SEC.결석/60)+'분')+
     row('지각 만회', '감점 없음', '지각한 날 자정까지 공부 타이머 '+(MAKEUP_SEC.지각/60)+'분')+
     row('플래너 만회', '감점 없음', '플래너를 못 쓴 날 자정까지 공부 타이머 '+(MAKEUP_SEC.플래너미작성/60)+'분')+
+    '<div class="sec-label">주간 시상 — 월요일에 지난주 상과 함께 받아요</div>'+
+    ['gold','silver','bronze','full','growth','steady','focus','subj'].map(function(k){ return row(AWARDS[k].t, AW_COIN[k], AWARDS[k].d); }).join('')+
     '<div class="sec-label">그 밖에</div>'+
     row('스트릭 프리즈', -FREEZE_COST, '연속 출석이 끊기지 않게 하루를 지켜 줌')+
     '<div class="row-s" style="margin-top:12px;line-height:1.6">쉬는 날(주말·공휴일·학교 휴업일)은 계산하지 않습니다. 선생님이 직접 주거나 뺀 엽전과 저잣거리 구매는 엽전 내역에서 볼 수 있어요.</div>'+
@@ -6231,11 +6254,36 @@ function stAwards(recs, mon){
   Object.keys(subs).forEach(function(s){ out.push({ k:'subj', name:subs[s].name, v:s+' '+fmtDur(subs[s].sec), sub:s }); });
   return out;
 }
-/** 상 배지 — 그림(제미나이 아이콘)이 오기 전까지 글자 메달로 그린다 */
-var AW_MARK = { gold:'1', silver:'2', bronze:'3', full:'완', steady:'꾸', growth:'성', focus:'집', subj:'왕' };
+/** 상 그림(제미나이, awards/*.png) */
 function awardImg(k, size, sub){ size = size || 56;
-  var t = k === 'subj' && sub ? String(sub).slice(0,1) : AW_MARK[k];
-  return '<span class="aw-medal aw-'+k+'" style="width:'+size+'px;height:'+size+'px;font-size:'+Math.round(size*0.42)+'px">'+escapeHtml(t)+'</span>'; }
+  return '<img class="aw-img" src="awards/'+k+'.png" width="'+size+'" height="'+size+'" alt="'+escapeHtml(k === 'subj' && sub ? sub+'왕' : AWARDS[k].t)+'">'; }
+function awardName(a){ return a.k === 'subj' ? a.sub+'왕' : AWARDS[a.k].t; }
+
+/* 상 엽전 · 배지 (2026-10-23 성일님 "상 받으면 엽전도, 상이 쌓이면 배지도") — 둘 다 공부 기록에서 계산한다(따로 저장하지 않는다).
+   명예의 전당과 같은 stAwards 라 화면에 보이는 상과 받은 엽전이 어긋나지 않는다. */
+var AW_COIN = { gold:5, silver:4, bronze:3, full:3, growth:3, steady:2, focus:2, subj:2 };
+var BADGES = [ { n:1,  k:'b1', t:'새내기 유생' }, { n:3,  k:'b2', t:'진사' }, { n:5,  k:'b3', t:'생원' },
+               { n:10, k:'b4', t:'급제' },       { n:20, k:'b5', t:'어사화' }, { n:30, k:'b6', t:'장원급제' } ];
+/** 끝난 모든 주의 시상 — a.mon = 그 주 월요일, a.date = 발표일(다음 주 월요일) */
+function stAllAwards(recs, today){
+  var out = [], mon = weekMon(today);
+  for (var w = weekMon(ST_FROM); w < mon; w = shiftDay(w,7))
+    stAwards(recs, w).forEach(function(a){ a.mon = w; a.date = shiftDay(w,7); out.push(a); });
+  return out;
+}
+function badgeOf(n){ var b = null; BADGES.forEach(function(x){ if (n >= x.n) b = x; }); return b; }
+function badgeNext(n){ return BADGES.filter(function(x){ return n < x.n; })[0] || null; }
+function badgeImg(b, size, locked){ size = size || 56;
+  return '<img class="bdg'+(locked?' locked':'')+'" src="awards/'+b.k+'.png" width="'+size+'" height="'+size+'" alt="'+escapeHtml(b.t)+' 배지">'; }
+/** 배지 모음 — 받은 것은 색, 남은 것은 흐리게 + 다음 배지까지 */
+function badgeShelf(n){
+  var nx = badgeNext(n);
+  return '<div class="card pad"><div class="bdg-shelf">'+BADGES.map(function(b){ var got = n >= b.n;
+      return '<div class="bdg-cell'+(got?' got':'')+'">'+badgeImg(b, 64, !got)+'<b>'+escapeHtml(b.t)+'</b><span class="row-s">상 '+b.n+'개</span></div>'; }).join('')+'</div>'+
+    (nx ? '<div class="row-s" style="margin-top:12px">다음 배지 <b>'+escapeHtml(nx.t)+'</b>까지 상 '+(nx.n-n)+'개 남았어요</div>'+
+          '<div class="bar" style="margin-top:6px"><i style="width:'+Math.round(n/nx.n*100)+'%"></i></div>'
+        : '<div class="row-s" style="margin-top:12px">배지를 모두 모았어요. 장원급제!</div>')+'</div>';
+}
 
 /* ── 화면 ───────────────────────────────────────── */
 async function renderStudy(v){
@@ -6334,7 +6382,8 @@ function stFameView(v, data){
       : '<div class="card pad"><div class="row-s">지난주에는 받을 사람이 없었어요. 한 주에 1시간 넘게 공부하면 순위 상을, 5일 넘게 30분씩 하면 꾸준상을 받아요</div></div>')+
     '<div class="sec-label">명예의 전당 · 지금까지 받은 상</div>'+
     (board.length ? '<div class="card pad">'+board.map(function(t, i){
-        return '<div class="fame-row"><div class="st-no'+(i<3?' top':'')+'">'+(i+1)+'</div><b>'+escapeHtml(t.name)+'</b>'+
+        var bd = badgeOf(t.n);
+        return '<div class="fame-row"><div class="st-no'+(i<3?' top':'')+'">'+(i+1)+'</div>'+(bd ? badgeImg(bd, 34) : '')+'<b>'+escapeHtml(t.name)+(bd ? '<span class="row-s fame-bdg">'+escapeHtml(bd.t)+'</span>' : '')+'</b>'+
           '<div class="fame-badges">'+Object.keys(AWARDS).filter(function(k){ return t.by[k]; }).map(function(k){
             return '<span class="fame-badge">'+awardImg(k, 28)+'<i>'+t.by[k]+'</i></span>'; }).join('')+'</div>'+
           '<div class="st-val">'+t.n+'개</div></div>'; }).join('')+'</div>'
@@ -6347,8 +6396,11 @@ function stFameView(v, data){
       rec('누적 1위', cum && cum.name, cum && fmtDur(cum.total), '')+
     '</div>'+
     '<div class="card pad" style="margin-top:14px"><div class="row-t" style="margin-bottom:8px">상 받는 방법</div>'+
-      Object.keys(AWARDS).map(function(k){ return '<div class="aw-how">'+awardImg(k, 32)+'<b>'+AWARDS[k].t+'</b><span class="row-s">'+AWARDS[k].d+'</span></div>'; }).join('')+
-      '<div class="row-s" style="margin-top:8px">순위 상은 한 주 1시간 이상, 집중·성장·과목왕은 1시간 이상일 때 줘요. 매주 월요일에 발표해요.</div></div>';
+      Object.keys(AWARDS).map(function(k){ return '<div class="aw-how">'+awardImg(k, 32)+'<b>'+AWARDS[k].t+'</b><span class="row-s">'+AWARDS[k].d+'</span><em class="aw-coin">+'+AW_COIN[k]+'냥</em></div>'; }).join('')+
+      '<div class="row-s" style="margin-top:8px">순위 상은 한 주 1시간 이상, 집중·성장·과목왕은 1시간 이상일 때 줘요. 매주 월요일에 발표하고, 엽전도 그날 같이 들어가요.</div></div>'+
+    '<div class="sec-label">배지 — 상이 쌓이면 받아요</div>'+
+    (ROLE === 'student' ? badgeShelf(stAllAwards(data.recs, today).filter(function(a){ return a.name === ME.name; }).length)
+      : '<div class="card pad"><div class="bdg-shelf">'+BADGES.map(function(b){ return '<div class="bdg-cell got">'+badgeImg(b, 64)+'<b>'+escapeHtml(b.t)+'</b><span class="row-s">상 '+b.n+'개</span></div>'; }).join('')+'</div></div>');
 }
 function stMineView(v, data){
   var today = kstToday(), mine = data.recs.filter(function(r){ return r.name === ME.name; });
@@ -6378,9 +6430,11 @@ function stMineView(v, data){
   var streak = 0, s0 = (byDate[today] && byDate[today].total >= 1800) ? today : shiftDay(today,-1);
   for (var s = s0; byDate[s] && byDate[s].total >= 1800; s = shiftDay(s,-1)) streak++;
   var all = mine.reduce(function(a,r){ return a + r.total; }, 0);
+  var myAw = stAllAwards(data.recs, today).filter(function(a){ return a.name === ME.name; }).length;
   v.innerHTML =
     '<div class="hero" style="margin-bottom:6px"><div class="hero-lbl">지금까지 공부한 시간</div><div class="hero-num">'+fmtDur(all)+'</div>'+
     '<div class="hero-inline"><div>연속 공부<b>'+streak+'일</b></div><div>공부한 날<b>'+mine.filter(function(r){ return r.total>=1800; }).length+'일</b></div></div></div>'+
+    '<div class="sec-label">내 배지 · 받은 상 '+myAw+'개</div>'+badgeShelf(myAw)+
     '<div class="sec-label">공부 달력 · 날짜를 누르면 과목별 시간</div>'+
     '<div class="card pad">'+calHead+'<div class="sc-g">'+cells+'</div></div>'+
     '<div class="sec-label">주별 공부 시간</div>'+
@@ -6426,7 +6480,8 @@ async function fillStudyHome(){
         '<div style="flex:1"><div class="row-t">지난주 시상 '+aw.length+'개</div><div class="row-s">'+escapeHtml(AWARDS[top.k].t)+' '+escapeHtml(top.name)+(aw.length>1?' 외':'')+'</div></div><b class="st-go">명예의 전당 →</b></div>';
     }
     box.innerHTML = html;
-    if (ROLE === 'student') stRevealAwards(aw.filter(function(a){ return a.name === ME.name; }), last);
+    if (ROLE === 'student') stRevealAwards(aw.filter(function(a){ return a.name === ME.name; }), last,
+      stAllAwards(data.recs, today).filter(function(a){ return a.name === ME.name; }).length);
   } catch(e){ box.innerHTML = ''; }
 }
 /** 홈 '만회 미션' 카드 — 오늘 감점이 생겼거나 생길 참이면, 공부로 지울 수 있다고 알려 준다 */
@@ -6449,15 +6504,19 @@ function makeupHomeHtml(sec){
       '<b class="st-go" style="display:block;margin-top:8px">타이머 켜고 만회하기 →</b></div>';
   }).join('');
 }
-function stRevealAwards(mine, lastMon){
+function stRevealAwards(mine, lastMon, total){
   if (!mine.length) return;
   var seen = ''; try { seen = localStorage.getItem(ST_SEEN_KEY+':'+ME.name) || ''; } catch(e){}
   if (seen === lastMon || document.getElementById('modal')) return;
   try { localStorage.setItem(ST_SEEN_KEY+':'+ME.name, lastMon); } catch(e){}
+  var nb = total ? badgeOf(total) : null; if (nb && badgeOf(total - mine.length) === nb) nb = null;   // 이번 주 상으로 단계가 올랐을 때만
   showModal('<div class="modal-box aw-reveal big-txt"><div class="row-s">'+lastMon.slice(5).replace('-','/')+' 주 시상</div>'+
     '<div class="aw-reveal-t">축하해요, '+escapeHtml(ME.name)+'!</div>'+
     '<div class="aw-reveal-list">'+mine.map(function(a, i){ return '<div class="aw-pop" style="animation-delay:'+(0.25+i*0.35)+'s">'+awardImg(a.k, 84, a.sub)+
-      '<b>'+(a.k==='subj'?escapeHtml(a.sub)+'왕':AWARDS[a.k].t)+'</b><span class="row-s">'+escapeHtml(a.v)+'</span></div>'; }).join('')+'</div>'+
+      '<b>'+(a.k==='subj'?escapeHtml(a.sub)+'왕':AWARDS[a.k].t)+'</b><span class="row-s">'+escapeHtml(a.v)+'</span><em class="aw-coin">+'+(AW_COIN[a.k]||0)+'냥</em></div>'; }).join('')+'</div>'+
+    '<div class="aw-reveal-coin">엽전 <b>+'+mine.reduce(function(s, a){ return s + (AW_COIN[a.k]||0); }, 0)+'냥</b> 받았어요</div>'+
+    (nb ? '<div class="aw-newbdg aw-pop" style="animation-delay:'+(0.4+mine.length*0.35)+'s">'+badgeImg(nb, 96)+'<div><div class="row-s">새 배지!</div><b>'+escapeHtml(nb.t)+'</b>'+
+          '<div class="row-s">지금까지 상 '+total+'개</div></div></div>' : '')+
     '<button class="btn" onclick="closeModal();go(\'study\',\'fame\')">명예의 전당 보기</button>'+
     '<button class="btn btn-outline" style="margin-top:8px" onclick="closeModal()">닫기</button></div>');
   confetti(2600);
