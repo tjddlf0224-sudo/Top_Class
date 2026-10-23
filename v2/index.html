@@ -118,6 +118,55 @@ input::placeholder{color:#b4b4c8;}
   padding-top:calc(20px + var(--safe-top));padding-bottom:calc(20px + var(--safe-bottom));overflow-y:auto;}
 .modal-box{background:var(--surface);border-radius:18px;padding:22px;width:100%;max-width:380px;
   box-shadow:0 20px 60px rgba(26,26,46,.2);margin-top:auto;margin-bottom:auto;}
+/* 상담 — 상담일지 앱 카드·유형 배지·입력 창(2026-10-23), 색·글자는 장원급제반 기준 */
+.ccard{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:14px 16px;margin-top:10px;box-shadow:var(--shadow);}
+.ccard-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px;}
+.ccard-date{font-size:1rem;color:var(--ink-soft);}
+.ccard-name{font-size:1.05rem;color:var(--ink);cursor:pointer;}
+.ccard-body{font-size:1rem;line-height:1.7;color:var(--ink);white-space:pre-wrap;word-break:break-word;}
+.ccard-body mark,.ccard-note mark{background:#fde047;}
+.ccard-note{display:flex;gap:6px;align-items:flex-start;margin-top:10px;padding:8px 10px;background:var(--line-soft);border-radius:var(--radius-sm);
+  font-size:1rem;color:var(--ink-soft);line-height:1.6;white-space:pre-wrap;word-break:break-word;}
+.ccard-note .ico{flex-shrink:0;margin-top:3px;color:var(--ink-mute);}
+.ccard-act{display:flex;gap:8px;justify-content:flex-end;margin-top:12px;}
+.ccard-del{color:var(--rose)!important;border-color:var(--rose-soft)!important;}
+.ctype{display:inline-flex;align-items:center;font-size:.95rem;font-weight:700;padding:3px 10px;border-radius:999px;white-space:nowrap;border:1.5px solid transparent;}
+.ctype-0{background:#e0f2fe;color:#0369a1;} .ctype-1{background:#dcfce7;color:#15803d;} .ctype-2{background:#ffedd5;color:#c2410c;}
+.ctype-3{background:#ffe4e6;color:#be123c;} .ctype-4{background:#ede9fe;color:#6d28d9;} .ctype-5{background:#ccfbf1;color:#0f766e;} .ctype-6{background:#f1f1f6;color:#5c5c78;}
+.cs-daynav{display:flex;align-items:center;gap:8px;}
+.cs-daylbl{flex:1;position:relative;text-align:center;font-size:1.05rem;cursor:pointer;}
+.cs-daylbl input{position:absolute;inset:0;opacity:0;width:100%;cursor:pointer;}
+.cs-search{width:100%;margin-top:10px;padding:12px 14px;border:1.5px solid var(--line);border-radius:var(--radius-sm);background:var(--surface);font-size:1rem;}
+.cs-chips{display:flex;flex-wrap:wrap;gap:8px;}
+.cs-chip{font:inherit;font-size:1rem;font-weight:600;padding:8px 12px;border-radius:999px;border:1.5px dashed var(--line);background:var(--surface);color:var(--ink-soft);cursor:pointer;}
+.cs-chip:hover{border-color:var(--accent);color:var(--accent);}
+.cs-hist{position:fixed;inset:0;z-index:9000;background:var(--bg);display:flex;flex-direction:column;}
+.cs-hist-head{display:flex;align-items:center;gap:10px;background:var(--accent);color:#fff;padding:12px 14px;padding-top:calc(12px + var(--safe-top));}
+.cs-hist-back{background:rgba(255,255,255,.18);border:none;color:#fff;font-size:1.6rem;line-height:1;width:40px;height:40px;border-radius:10px;cursor:pointer;}
+.cs-hist-who{flex:1;min-width:0;display:flex;flex-direction:column;}
+.cs-hist-who b{font-size:1.2rem;} .cs-hist-who span{font-size:.95rem;opacity:.85;}
+.cs-hist-add{font:inherit;font-size:1rem;font-weight:700;background:#fff;color:var(--accent);border:none;border-radius:999px;padding:9px 14px;cursor:pointer;white-space:nowrap;}
+.cs-hist-body{flex:1;overflow-y:auto;padding:6px 16px calc(24px + var(--safe-bottom));max-width:720px;width:100%;margin:0 auto;box-sizing:border-box;}
+.cs-hist-types{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:12px;}
+.cs-hist-types i{font-style:normal;font-size:.95rem;font-weight:700;color:var(--ink-soft);margin-right:8px;}
+.cs-edit{max-width:520px!important;}
+.cs-edit-title{font-size:1.2rem;font-weight:800;text-align:center;margin-bottom:14px;}
+.cs-edit-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.cs-types{display:flex;flex-wrap:wrap;gap:6px;}
+.cs-types .ctype{cursor:pointer;font:inherit;font-size:.95rem;font-weight:700;padding:7px 12px;opacity:.55;}
+.cs-types .ctype.on{opacity:1;border-color:currentColor;}
+.cs-tools{display:flex;gap:4px;margin-bottom:6px;}
+.cs-tools button{font:inherit;font-size:1rem;min-width:40px;height:36px;padding:0 8px;border:1.5px solid var(--line);border-radius:8px;background:var(--surface);color:var(--ink);cursor:pointer;}
+.cs-tools button mark{background:#fde047;padding:0 2px;}
+.cs-rich{min-height:140px;max-height:45vh;overflow-y:auto;padding:12px 14px;border:1.5px solid var(--line);border-radius:var(--radius-sm);
+  font-size:1rem;line-height:1.7;background:var(--surface);outline:none;white-space:pre-wrap;word-break:break-word;}
+.cs-rich.small{min-height:70px;}
+.cs-rich:focus{border-color:var(--accent);}
+.cs-rich:empty::before{content:attr(data-ph);color:var(--ink-mute);}
+.cs-donut{display:flex;align-items:center;gap:16px;flex-wrap:wrap;justify-content:center;}
+.cs-donut-legend{display:flex;flex-direction:column;gap:6px;min-width:150px;}
+.cs-donut-legend div{display:flex;align-items:center;gap:8px;font-size:1rem;}
+.cs-donut-legend b{margin-left:auto;}
 .icon-btn{background:none;border:none;cursor:pointer;padding:6px;color:var(--ink-mute);
   border-radius:8px;transition:background .15s,color .15s;position:relative;}
 .icon-btn:hover{background:var(--line-soft);color:var(--ink);}
@@ -572,6 +621,13 @@ const db   = getFirestore(fbApp);
 const auth = initializeAuth(fbApp, {
   persistence: [indexedDBLocalPersistence, browserLocalPersistence]
 });
+
+/** 상담 문서 모양 — 규칙(firestore.rules counseling)의 칸 목록과 같아야 한다 */
+function _counselDoc(r){
+  return { date:String(r.date), name:String(r.name), done:true, memo:String(r.memo||'').slice(0,20000),
+           type:String(r.type||'기타'), rich:String(r.rich||'').slice(0,40000), note:String(r.note||'').slice(0,20000),
+           at: serverTimestamp() };
+}
 
 /* ═══ 신원 확인 ═══════════════════════════════════════
    학생 = 익명 인증. 화면에는 아무것도 드러나지 않고, 보안규칙이
@@ -1179,8 +1235,25 @@ window.FS = {
     const out = [];
     snap.forEach(d => { const v = d.data();
       out.push({ id:d.id, date:String(v.date||''), name:String(v.name||''),
-                 done: v.done === true, memo:String(v.memo||'') }); });
-    return out.sort((a,b) => b.date.localeCompare(a.date));
+                 done: v.done === true, memo:String(v.memo||''),
+                 type:String(v.type||'기타'), rich:String(v.rich||''), note:String(v.note||''),
+                 at: v.at && v.at.seconds ? v.at.seconds : 0 }); });
+    // 날짜 내림차순, 같은 날은 늦게 쓴 것이 위
+    return out.sort((a,b) => b.date.localeCompare(a.date) || b.at - a.at);
+  },
+  /* 2026-10-23 상담일지식 — 하루 여러 건(문서 ID 자동), 유형·꾸민 본문(rich, 정리된 HTML)·비고(note).
+     memo 에는 본문 글자만 넣어 둔다 — 홈·주간 리포트·학생 현황 같은 옛 화면이 그대로 읽게. */
+  async addCounsel(rec){
+    await _authReady;
+    await addDoc(collection(db,'counseling'), _counselDoc(rec));
+  },
+  async updateCounsel(id, rec){
+    await _authReady;
+    await setDoc(doc(db,'counseling',id), _counselDoc(rec));
+  },
+  async deleteCounsel(id){
+    await _authReady;
+    await deleteDoc(doc(db,'counseling',id));
   },
   async saveCounsel(dateStr, name, memo){
     await _authReady;
@@ -2692,7 +2765,8 @@ function enterDemoMode(stu){
   led('김민준','2026-09-11', 3, '청소 도움'); led('이서연','2026-09-15', 2, '발표 우수'); led('최수아','2026-09-17', -2, '휴대폰 사용');
   led('정예준','2026-09-22', 3, '청소 도움'); led('박지훈','2026-09-24', 1, '과제 우수');
   if (stu){ led(stu.name,'2026-09-09', 2, '발표 우수'); led(stu.name,'2026-09-18', 3, '청소 도움'); }
-  var cns = function(date, name, memo){ CNS.push({ id:date+'_'+name, date:date, name:name, done:true, memo:memo }); };
+  var cns = function(date, name, memo){ var mt = /^\[(.+?)\]\s*/.exec(memo), t = mt && CTYPES.indexOf(mt[1]) >= 0 ? mt[1] : '기타';
+    CNS.push({ id:date+'_'+name, date:date, name:name, done:true, memo:memo.replace(/^\[.+?\]\s*/,''), type:t, rich:'', note:'', at:0 }); };
   cns('2026-09-03','김민준','[학업] 9급 국어 목표 점수 설정, 주간 계획 점검'); cns('2026-09-08','최수아','[진로] 공기업 지원 기관 3곳 정리');
   cns('2026-09-10','박지훈','[생활] 지각이 잦아 기상 시간 조정 약속'); cns('2026-09-16','이서연','[학업] 영어 단어 학습법 상담');
   cns('2026-09-18','정예준','[진로] NCS 모의고사 결과 분석'); cns('2026-09-23','한지우','[심리] 시험 불안, 호흡법 안내');
@@ -2786,6 +2860,9 @@ function enterDemoMode(stu){
     setCalendarOff: function(){ return ok(); }, clearCalendarOff: function(){ return ok(); },
     setDorm: function(id, on){ STU.forEach(function(s){ if (s.id === String(id)) s.dorm = !!on; }); return ok(); },
     counselAll: function(){ return ok(CNS.slice().sort(function(a,b){ return b.date.localeCompare(a.date); })); },
+    addCounsel: function(r){ CNS.push({ id:'C'+Date.now()+Math.random(), date:r.date, name:r.name, done:true, memo:r.memo||'', type:r.type||'기타', rich:r.rich||'', note:r.note||'', at:Math.floor(Date.now()/1000) }); return ok(); },
+    updateCounsel: function(id, r){ CNS = CNS.map(function(c){ return c.id === id ? { id:id, date:r.date, name:r.name, done:true, memo:r.memo||'', type:r.type||'기타', rich:r.rich||'', note:r.note||'', at:Math.floor(Date.now()/1000) } : c; }); return ok(); },
+    deleteCounsel: function(id){ CNS = CNS.filter(function(c){ return c.id !== id; }); return ok(); },
     saveCounsel: function(ds, n, m){ CNS = CNS.filter(function(c){ return !(c.date === ds && c.name === n); });
       CNS.push({ id:ds+'_'+n, date:ds, name:n, done:String(m).trim().length > 0, memo:String(m) }); return ok(); },
     schedule: function(){ return ok(JSON.parse(JSON.stringify(SCHED))); },
@@ -3333,7 +3410,7 @@ async function renderCounselSub(v){
   try { got = await Promise.all([ FS.members(), FS.counselAll() ]); }
   catch(e){ v.innerHTML = emptyBox('chat','교사로 로그인해야 볼 수 있습니다'); fillIcoSlots(v); return; }
   var mem = got[0], recs = got[1];
-  counselCache = recs;
+  counselCache = recs; counselMem = mem;
   if (sub === 'daily')     v.innerHTML = counselDaily(mem, recs);
   else if (sub === 'list') v.innerHTML = counselList(mem, recs);
   else if (sub === 'cal')  v.innerHTML = await counselCal(mem, recs);
@@ -3341,48 +3418,27 @@ async function renderCounselSub(v){
   fillIcoSlots(v);
 }
 
-function memoBox(t){
-  return t ? '<div style="font-size:1rem;color:var(--ink-soft);background:var(--line-soft);border-radius:8px;padding:8px 10px;margin-top:8px;white-space:pre-wrap;line-height:1.6">'+escapeHtml(t)+'</div>' : '';
-}
-
-/* 일별 조회 — 그날 모든 학생의 상담 여부 */
-function counselDaily(mem, recs){
-  var day = {}; recs.forEach(function(r){ if (r.date === CS.date) day[r.name] = r; });
-  var rows = mem.map(function(m){ return { m:m, r:day[m.name] }; })
-                .sort(function(a,b){ return (a.r&&a.r.done?1:0) - (b.r&&b.r.done?1:0); });
-  var done = rows.filter(function(x){ return x.r && x.r.done; }).length;
-  return '<div class="card pad" style="margin-top:10px"><label style="display:block;font-size:.95rem;font-weight:600;color:var(--ink-soft);margin-bottom:6px">날짜</label>'+
-    '<input type="date" value="'+CS.date+'" onchange="csDate(this.value)" style="width:100%;padding:12px 14px;border:1.5px solid var(--line);border-radius:8px"></div>'+
-    '<div class="sec-label">전체 '+mem.length+'명 · 완료 <span style="color:#16a34a">'+done+'</span> · 미완료 '+(mem.length-done)+'</div><div class="card">'+
-    rows.map(function(x){
-      var ok = x.r && x.r.done;
-      return '<div class="row" style="flex-wrap:wrap;cursor:pointer" onclick="openCounsel(\''+escapeHtml(x.m.name)+'\',\''+CS.date+'\')">'+
-        '<div class="avatar">'+x.m.name.charAt(0)+'</div><div class="row-main"><div class="row-t">'+escapeHtml(x.m.name)+'</div></div>'+
-        '<span class="chip" style="'+(ok?'background:var(--green-soft);color:#16a34a':'background:var(--line-soft);color:var(--ink-mute)')+'">'+(ok?'상담완료':'대기')+'</span>'+
-        (x.r && x.r.memo ? '<div style="flex-basis:100%">'+memoBox(x.r.memo)+'</div>' : '')+'</div>';
-    }).join('')+'</div>';
-}
-
-/* 학생 명단 — 이번 달 학생별 상담 건수 */
+/* 학생 명단 — 이번 달 학생별 상담 건수. 누르면 그 학생 전체 이력 */
 function counselList(mem, recs){
-  var ym = kstToday().slice(0,7), cnt = {}, last = {};
+  var ym = kstToday().slice(0,7), cnt = {}, all = {}, last = {};
   recs.forEach(function(r){
     if (!last[r.name]) last[r.name] = r;                       // recs는 날짜 내림차순
-    if (r.date.slice(0,7) === ym){ var c = cnt[r.name] = cnt[r.name] || { t:0, d:0 }; c.t++; if (r.done) c.d++; }
+    all[r.name] = (all[r.name]||0) + 1;
+    if (r.date.slice(0,7) === ym) cnt[r.name] = (cnt[r.name]||0) + 1;
   });
-  var sorted = mem.slice().sort(function(a,b){ return ((cnt[b.name]||{}).t||0) - ((cnt[a.name]||{}).t||0); });
-  var tAll = 0, dAll = 0; sorted.forEach(function(m){ var c = cnt[m.name]; if (c){ tAll += c.t; dAll += c.d; } });
-  return '<div class="sec-label">'+(+ym.slice(5))+'월 상담 현황 · 완료 <span style="color:#16a34a">'+dAll+'</span> / 전체 '+tAll+'건</div><div class="card">'+
+  var sorted = mem.slice().sort(function(a,b){ return (cnt[b.name]||0) - (cnt[a.name]||0); });
+  var tAll = 0; sorted.forEach(function(m){ tAll += cnt[m.name]||0; });
+  return '<div class="sec-label">'+(+ym.slice(5))+'월 상담 '+tAll+'건 · 이름을 누르면 전체 이력</div><div class="card">'+
     sorted.map(function(m){
-      var c = cnt[m.name] || { t:0, d:0 }, r = last[m.name];
+      var c = cnt[m.name] || 0, r = last[m.name];
       var days = r ? Math.floor((new Date(kstToday()) - new Date(r.date)) / 86400000) : null;
       var warn = (days === null || days > 30);
-      return '<div class="row" style="cursor:pointer" onclick="csToCal(\''+escapeHtml(m.name)+'\')">'+
+      return '<div class="row" style="cursor:pointer" onclick="openCounselHistory(\''+escapeHtml(m.name)+'\')">'+
         '<div class="avatar">'+m.name.charAt(0)+'</div><div class="row-main"><div class="row-t">'+escapeHtml(m.name)+
         ' <span style="font-weight:500;color:var(--ink-mute);font-size:.95rem">'+m.track+'반</span></div>'+
-        '<div class="row-s" style="'+(warn?'color:var(--rose)':'')+'">'+(r ? '최근 '+r.date+' · '+days+'일 전' : '상담 기록 없음')+'</div>'+
-        (c.t ? '<div class="bar" style="margin-top:6px"><i style="width:'+Math.round(c.d/c.t*100)+'%;background:'+(c.d===c.t?'var(--green)':'var(--orange)')+'"></i></div>' : '')+
-        '</div><span class="row-v" style="font-size:1rem;color:'+(c.t?'var(--ink)':'var(--ink-mute)')+'">'+(c.t ? c.d+'/'+c.t+'건' : '없음')+'</span></div>';
+        '<div class="row-s" style="'+(warn?'color:var(--rose)':'')+'">'+(r ? '최근 '+r.date.slice(5).replace('-','/')+' · '+days+'일 전 '+ctypeBadge(r.type) : '상담 기록 없음')+'</div>'+
+        '</div><span class="row-v" style="font-size:1rem;text-align:right;color:'+(c?'var(--ink)':'var(--ink-mute)')+'">'+(c ? '이번 달 '+c+'건' : '이번 달 없음')+
+        (all[m.name] ? '<br><span style="font-size:.95rem;font-weight:500;color:var(--ink-mute)">전체 '+all[m.name]+'건</span>' : '')+'</span></div>';
     }).join('')+'</div>';
 }
 
@@ -3432,20 +3488,12 @@ async function counselCal(mem, recs){
     (all ? '' : '<span><span style="display:inline-block;width:10px;height:10px;border-radius:3px;border:2px solid var(--orange)"></span> 지각</span>'+
                 '<span><span style="display:inline-block;width:10px;height:10px;border-radius:3px;border:2px solid var(--rose)"></span> 결석</span>')+
     '</div></div>';
-  // 고른 날의 상담
+  // 고른 날의 상담 — 상담일지 카드 그대로(하루 여러 건)
   if (CS.pick){
     var sel = byDay[CS.pick] || [];
-    html += '<div class="sec-label">'+CS.pick+(!all && att[CS.pick] ? ' · '+att[CS.pick] : '')+'</div><div class="card pad">';
-    if (all){
-      html += sel.length ? sel.map(function(r){ return '<div style="padding:8px 0;border-top:1px solid var(--line-soft)"><b>'+escapeHtml(r.name)+'</b>'+memoBox(r.memo)+
-        '<button class="btn btn-outline btn-sm" style="margin-top:8px" onclick="openCounsel(\''+escapeHtml(r.name)+'\',\''+CS.pick+'\')">수정</button></div>'; }).join('')
-        : '<div class="row-s">이 날 상담 기록이 없어요</div>';
-    } else {
-      var r0 = sel[0];
-      html += (r0 ? memoBox(r0.memo) : '<div class="row-s">상담 기록이 없어요</div>')+
-        '<button class="btn" style="margin-top:12px" onclick="openCounsel(\''+escapeHtml(CS.who)+'\',\''+CS.pick+'\')">'+(r0?'수정':'상담 입력')+'</button>';
-    }
-    html += '</div>';
+    html += '<div class="sec-label">'+(+CS.pick.slice(5,7))+'월 '+(+CS.pick.slice(8))+'일'+(!all && att[CS.pick] ? ' · '+att[CS.pick] : '')+' · 상담 '+sel.length+'건</div>'+
+      (sel.length ? sel.map(function(r){ return counselCard(r, { showName:all }); }).join('') : '<div class="card pad"><div class="row-s">이 날 상담 기록이 없어요</div></div>')+
+      '<button class="btn" style="margin-top:12px" onclick="openCounselEdit(\'\',\''+(all ? '' : escapeHtml(CS.who))+'\',\''+CS.pick+'\')">＋ 상담 입력</button>';
   }
   return html;
 }
@@ -3507,6 +3555,7 @@ async function counselStats(mem, recs){
       '<text x="'+(x+w/2)+'" y="'+(H-5)+'" font-size="11" text-anchor="middle" fill="#9a9ab0">'+(i+1)+'</text>';
   });
   html += '<div class="sec-label">월별 상담 건수</div><div class="card pad"><svg viewBox="0 0 '+W+' '+H+'" style="width:100%;height:auto;display:block">'+svg+'</svg></div>';
+  html += counselTypeDonut(yd);
 
   var pre = kstToday() < ATT_V2_FROM;
   var rankRows = function(items, why){
@@ -4101,47 +4150,197 @@ async function savePlannerNow(){
    구앱과 같은 규칙: 메모를 쓰면 곧 상담완료 — 별도 체크 없음. */
 var counselCache = null;
 
-function openCounsel(name, date){
-  var mine = (counselCache||[]).filter(function(r){ return r.name === name; });
-  var today = date || kstToday();
-  var todayRec = mine.filter(function(r){ return r.date === today; })[0];
-
-  var html = '<div class="modal-box">'+
-    '<div style="text-align:center;padding:4px 0 14px">'+
-      '<div style="font-size:1.25rem;font-weight:800">'+escapeHtml(name)+'</div>'+
-      '<div style="font-size:1rem;color:var(--ink-mute);margin-top:4px">'+today+' 상담</div></div>'+
-    '<div class="field"><label>상담 내용</label>'+
-      '<textarea id="cMemo" rows="5" placeholder="상담 내용을 적으면 상담완료로 기록됩니다" '+
-      'style="width:100%;padding:12px 14px;border:1.5px solid var(--line);border-radius:8px;'+
-      'font-family:inherit;font-size:.92rem;resize:vertical">'+
-      escapeHtml(todayRec ? todayRec.memo : '')+'</textarea></div>'+
-    '<div id="cErr" class="login-err hidden"></div>'+
-    '<button class="btn" id="cGo" onclick="applyCounsel(\''+escapeHtml(name)+'\',\''+today+'\')">저장</button>'+
-    '<button class="btn btn-outline" onclick="closeModal()">닫기</button>';
-
-  var past = mine.filter(function(r){ return r.date !== today; });
-  if (past.length){
-    html += '<div class="sec-label">지난 상담</div><div class="card">';
-    html += past.slice(0,8).map(function(r){
-      return '<div class="row" style="cursor:default"><div class="row-main">'+
-        '<div class="row-t">'+r.date+'</div>'+
-        '<div class="row-s">'+escapeHtml(r.memo)+'</div></div></div>';
-    }).join('') + '</div>';
-  }
-  html += '</div>';
-  showModal(html);
+/* ═══ 상담 화면 공통 (2026-10-23 상담일지 앱과 같은 모양·기능, 장원급제반 글자 기준) ═══════════
+   상담 기록 = 유형 + 꾸민 본문(rich) + 비고(note). 하루 여러 건(문서 ID 자동). 옛 기록(memo 만)은 '기타'로 보인다. */
+var CTYPES = ['학업','생활','진로','심리','학부모상담','관찰','기타'];
+function ctypeLabel(t){ return t === '학부모상담' ? '학부모' : (t || '기타'); }
+function ctypeBadge(t){ t = CTYPES.indexOf(t) >= 0 ? t : '기타';
+  return '<span class="ctype ctype-'+CTYPES.indexOf(t)+'">'+escapeHtml(ctypeLabel(t))+'</span>'; }
+/** 꾸민 본문 정리 — 허용한 태그·서식(굵게·기울임·밑줄·취소선·형광펜)만 남긴다(XSS 방어, 상담일지 sanitizeHtml 축약) */
+var CS_TAGS = { B:1, STRONG:1, I:1, EM:1, U:1, S:1, STRIKE:1, BR:1, DIV:1, P:1, SPAN:1, MARK:1, UL:1, OL:1, LI:1 };
+function csSanitize(html){
+  var tpl = document.createElement('template'); tpl.innerHTML = String(html || '');
+  (function walk(node){
+    var again = true;
+    while (again){ again = false;
+      Array.prototype.slice.call(node.childNodes).forEach(function(ch){
+        if (ch.parentNode !== node) return;
+        if (ch.nodeType === 8){ node.removeChild(ch); return; }
+        if (ch.nodeType !== 1) return;
+        if (!CS_TAGS[ch.tagName]){ while (ch.firstChild) node.insertBefore(ch.firstChild, ch); node.removeChild(ch); again = true; return; }
+        var st = ch.getAttribute('style') || '', keep = [];
+        Array.prototype.slice.call(ch.attributes).forEach(function(a){ ch.removeAttribute(a.name); });
+        var probe = document.createElement('span'); probe.setAttribute('style', st);
+        var ps = probe.style;
+        if (/bold|[6-9]00/.test(ps.fontWeight)) keep.push('font-weight:700');
+        if (ps.fontStyle === 'italic') keep.push('font-style:italic');
+        var td = (ps.textDecorationLine || ps.textDecoration || '');
+        if (/underline/.test(td) && /line-through/.test(td)) keep.push('text-decoration:underline line-through');
+        else if (/underline/.test(td)) keep.push('text-decoration:underline'); else if (/line-through/.test(td)) keep.push('text-decoration:line-through');
+        if (ps.backgroundColor && ps.backgroundColor !== 'transparent' && !/rgba\(0, 0, 0, 0\)/.test(ps.backgroundColor)) keep.push('background-color:#fde047');
+        if (keep.length) ch.setAttribute('style', keep.join(';'));
+        walk(ch);
+      });
+    }
+  })(tpl.content);
+  return tpl.innerHTML;
+}
+function csBodyHtml(r){ return r.rich ? csSanitize(r.rich) : escapeHtml(r.memo || ''); }
+/** 상담 카드 — showName(일별·달력 전체)/showDate(이력) */
+function counselCard(r, opt){
+  opt = opt || {};
+  return '<div class="ccard">'+
+    '<div class="ccard-head">'+(opt.showDate ? '<b class="ccard-date">'+r.date.slice(5).replace('-','/')+'</b>' : '')+
+      (opt.showName ? '<b class="ccard-name" onclick="openCounselHistory(\''+escapeHtml(r.name)+'\')">'+escapeHtml(r.name)+'</b>' : '')+ctypeBadge(r.type)+'</div>'+
+    '<div class="ccard-body">'+csBodyHtml(r)+'</div>'+
+    (r.note ? '<div class="ccard-note">'+ic('memo',15)+'<span>'+csSanitize(r.note)+'</span></div>' : '')+
+    '<div class="ccard-act"><button class="btn btn-outline btn-sm" onclick="openCounselEdit(\''+escapeHtml(r.id)+'\')">수정</button>'+
+      '<button class="btn btn-outline btn-sm ccard-del" onclick="deleteCounselRec(\''+escapeHtml(r.id)+'\')">삭제</button></div></div>';
+}
+/* 초성 검색(상담일지 getChosung 과 같다) */
+var CS_CHO = ['ㄱ','ㄲ','ㄴ','ㄷ','ㄸ','ㄹ','ㅁ','ㅂ','ㅃ','ㅅ','ㅆ','ㅇ','ㅈ','ㅉ','ㅊ','ㅋ','ㅌ','ㅍ','ㅎ'];
+function csChosung(s){ s = String(s||''); var o = ''; for (var i = 0; i < s.length; i++){ var c = s.charCodeAt(i); o += (c >= 0xAC00 && c <= 0xD7A3) ? CS_CHO[Math.floor((c-0xAC00)/588)] : s[i]; } return o; }
+function csMatch(r, q){
+  if (!q) return true;
+  if (/^[ㄱ-ㅎ]+$/.test(q)) return csChosung(r.name).indexOf(q) >= 0;
+  q = q.toLowerCase();
+  return (r.name + ' ' + r.memo + ' ' + ctypeLabel(r.type) + ' ' + (r.note||'').replace(/<[^>]+>/g,'')).toLowerCase().indexOf(q) >= 0;
+}
+function csDayMove(d){ CS.date = shiftDay(CS.date, d); renderView(); }
+function csSearch(v){ CS.q = v; var box = document.getElementById('csDayList'); if (box) box.innerHTML = counselDayCards(); }
+var counselMem = [];
+function counselDayCards(){
+  var q = (CS.q || '').trim();
+  var recs = (counselCache || []).filter(function(r){ return q ? csMatch(r, q) : r.date === CS.date; });
+  if (!recs.length) return '<div class="card pad"><div class="row-s">'+(q ? '찾는 상담이 없어요' : '이 날 상담 기록이 없어요')+'</div></div>';
+  return recs.map(function(r){ return counselCard(r, { showName:true, showDate:!!q }); }).join('');
 }
 
-async function applyCounsel(name, date){
-  var memo = (document.getElementById('cMemo').value||'').trim();
-  var err  = document.getElementById('cErr');
-  if (!memo){ err.textContent='상담 내용을 입력해주세요'; err.classList.remove('hidden'); return; }
-  var btn = document.getElementById('cGo'); btn.disabled=true; btn.textContent='저장 중...';
-  try { await FS.saveCounsel(date || kstToday(), name, memo); closeModal(); renderView(); }
-  catch(e){ btn.disabled=false; btn.textContent='저장';
-    err.textContent = (e && e.code==='permission-denied')
-      ? '교사로 로그인해야 합니다' : '저장하지 못했습니다';
-    err.classList.remove('hidden'); }
+/* 일별 — 날짜 넘기기 · 검색(이름·내용·유형, 초성) · 그날 상담 카드 · 아직 상담 안 한 학생 */
+function counselDaily(mem, recs){
+  counselMem = mem;
+  var today = kstToday(), wd = ['일','월','화','수','목','금','토'][dowOf(CS.date)];
+  var dayNames = {}; recs.forEach(function(r){ if (r.date === CS.date) dayNames[r.name] = (dayNames[r.name]||0) + 1; });
+  var not = mem.filter(function(m){ return !dayNames[m.name]; });
+  return '<div class="card pad cs-daynav" style="margin-top:10px">'+
+      '<button class="btn btn-outline btn-sm" onclick="csDayMove(-1)">‹</button>'+
+      '<label class="cs-daylbl"><b>'+(+CS.date.slice(5,7))+'월 '+(+CS.date.slice(8))+'일 ('+wd+')</b>'+
+        '<input type="date" value="'+CS.date+'" onchange="csDate(this.value)"></label>'+
+      '<button class="btn btn-outline btn-sm" onclick="csDayMove(1)">›</button>'+
+      (CS.date !== today ? '<button class="btn btn-outline btn-sm" onclick="csDate(\''+today+'\')">오늘</button>' : '')+
+    '</div>'+
+    '<input type="search" class="cs-search" placeholder="이름·내용·유형 검색 (초성도 돼요: ㅂㅎㅅ)" value="'+escapeHtml(CS.q||'')+'" oninput="csSearch(this.value)">'+
+    '<div class="sec-label">상담 '+Object.keys(dayNames).length+'명 · '+recs.filter(function(r){ return r.date === CS.date; }).length+'건</div>'+
+    '<div id="csDayList">'+counselDayCards()+'</div>'+
+    '<button class="btn" style="margin-top:12px" onclick="openCounselEdit(\'\',\'\',\''+CS.date+'\')">＋ 상담 기록 추가</button>'+
+    (not.length ? '<div class="sec-label">이 날 상담 안 한 학생 '+not.length+'명</div><div class="cs-chips">'+
+      not.map(function(m){ return '<button class="cs-chip" onclick="openCounselEdit(\'\',\''+escapeHtml(m.name)+'\',\''+CS.date+'\')">＋ '+escapeHtml(m.name)+'</button>'; }).join('')+'</div>' : '');
+}
+
+/* 학생 전체 이력 — 상담일지 학생 이력 화면처럼(머리띠 + 건수 + 기록 추가 + 날짜 내림차순 카드) */
+function openCounselHistory(name){
+  var recs = (counselCache || []).filter(function(r){ return r.name === name; });
+  var m = (counselMem || []).filter(function(x){ return x.name === name; })[0] || {};
+  var ov = document.getElementById('csHist'); if (ov) ov.remove();
+  ov = document.createElement('div'); ov.id = 'csHist'; ov.className = 'cs-hist';
+  var types = {}; recs.forEach(function(r){ types[r.type] = (types[r.type]||0) + 1; });
+  ov.innerHTML = '<div class="cs-hist-head"><button class="cs-hist-back" onclick="closeCounselHistory()" aria-label="뒤로">‹</button>'+
+      '<div class="cs-hist-who"><b>'+escapeHtml(name)+'</b><span>'+(m.track ? escapeHtml(m.track)+'반 · ' : '')+'상담 '+recs.length+'건</span></div>'+
+      '<button class="cs-hist-add" onclick="openCounselEdit(\'\',\''+escapeHtml(name)+'\',\''+kstToday()+'\')">＋ 기록 추가</button></div>'+
+    '<div class="cs-hist-body">'+
+      (recs.length ? '<div class="cs-hist-types">'+CTYPES.filter(function(t){ return types[t]; }).map(function(t){ return ctypeBadge(t)+'<i>'+types[t]+'</i>'; }).join('')+'</div>' : '')+
+      (recs.length ? recs.map(function(r){ return counselCard(r, { showDate:true }); }).join('')
+                   : '<div class="card pad"><div class="row-s">아직 상담 기록이 없어요</div></div>')+
+    '</div>';
+  document.body.appendChild(ov); fillIcoSlots(ov);
+  ov.__cancel = closeCounselHistory;
+}
+function closeCounselHistory(){ var ov = document.getElementById('csHist'); if (ov) ov.remove(); }
+async function refreshCounselViews(){
+  try { counselCache = await FS.counselAll(); } catch(e){}
+  var h = document.getElementById('csHist');
+  if (h){ var who = h.querySelector('.cs-hist-who b'); if (who) openCounselHistory(who.textContent); }
+  if (TAB === 'counsel') renderView();
+}
+
+/* 입력·수정 창 — 학생·날짜·유형·꾸민 본문·비고. 서식: 굵게·기울임·밑줄·취소선·형광펜(상담일지와 같은 다섯 가지) */
+function openCounselEdit(id, name, date){
+  var r = id ? (counselCache || []).filter(function(x){ return x.id === id; })[0] : null;
+  if (id && !r) return;
+  name = r ? r.name : (name || ''); date = r ? r.date : (date || kstToday());
+  var type = r ? r.type : '학업';
+  var tool = function(ed){ return '<div class="cs-tools" data-ed="'+ed+'">'+
+    [['bold','<b>B</b>','굵게'],['italic','<i>I</i>','기울임'],['underline','<u>U</u>','밑줄'],['strikeThrough','<s>S</s>','취소선'],['hilite','<mark>형광</mark>','형광펜']]
+      .map(function(b){ return '<button type="button" onmousedown="event.preventDefault()" onclick="csFmt(\''+ed+'\',\''+b[0]+'\')" aria-label="'+b[2]+'">'+b[1]+'</button>'; }).join('')+'</div>'; };
+  var memOpts = (counselMem && counselMem.length ? counselMem : []).map(function(m){ return '<option value="'+escapeHtml(m.name)+'"'+(m.name===name?' selected':'')+'>'+escapeHtml(m.name)+'</option>'; }).join('');
+  showModal('<div class="modal-box cs-edit">'+
+    '<div class="cs-edit-title">'+(r ? '상담 기록 수정' : '상담 기록')+'</div>'+
+    '<div class="cs-edit-row"><div class="field"><label>학생</label>'+
+      (r || !memOpts ? '<input type="text" id="ceName" value="'+escapeHtml(name)+'" '+(r?'readonly':'')+'>'
+                     : '<select id="ceName"><option value="">학생을 고르세요</option>'+memOpts+'</select>')+'</div>'+
+      '<div class="field"><label>날짜</label><input type="date" id="ceDate" value="'+date+'"></div></div>'+
+    '<div class="field"><label>유형</label><div class="cs-types" id="ceTypes">'+
+      CTYPES.map(function(t, i){ return '<button type="button" class="ctype ctype-'+i+(t===type?' on':'')+'" data-t="'+t+'" onclick="csPickType(this)">'+ctypeLabel(t)+'</button>'; }).join('')+'</div></div>'+
+    '<div class="field"><label>상담 내용</label>'+tool('ceBody')+
+      '<div id="ceBody" class="cs-rich" contenteditable="true" role="textbox" aria-multiline="true" data-ph="상담 내용을 적어 주세요">'+(r ? csBodyHtml(r) : '')+'</div></div>'+
+    '<div class="field"><label>비고 / 메모</label>'+tool('ceNote')+
+      '<div id="ceNote" class="cs-rich small" contenteditable="true" role="textbox" aria-multiline="true" data-ph="추가 메모(선택)">'+(r && r.note ? csSanitize(r.note) : '')+'</div></div>'+
+    '<div id="cErr" class="login-err hidden"></div>'+
+    '<button class="btn" id="cGo" onclick="saveCounselRec(\''+(r ? escapeHtml(r.id) : '')+'\')">저장하기</button>'+
+    (r ? '<button class="btn btn-outline ccard-del" onclick="deleteCounselRec(\''+escapeHtml(r.id)+'\')">삭제</button>' : '')+
+    '<button class="btn btn-outline" onclick="closeModal()">닫기</button></div>');
+  try { document.execCommand('styleWithCSS', false, true); } catch(e){}
+}
+/** 옛 화면들이 부르던 이름 — 그 학생·날짜의 새 기록 창을 연다 */
+function openCounsel(name, date){ openCounselEdit('', name, date); }
+function csPickType(b){ document.querySelectorAll('#ceTypes .ctype').forEach(function(x){ x.classList.toggle('on', x === b); }); }
+function csFmt(edId, cmd){
+  var ed = document.getElementById(edId); if (!ed) return; ed.focus();
+  try { document.execCommand('styleWithCSS', false, true); } catch(e){}
+  if (cmd === 'hilite'){
+    var cur = ''; try { cur = document.queryCommandValue('hiliteColor') || document.queryCommandValue('backColor') || ''; } catch(e){}
+    var on = /253, ?224, ?71|fde047/i.test(cur);
+    try { if (!document.execCommand('hiliteColor', false, on ? 'transparent' : '#fde047')) document.execCommand('backColor', false, on ? 'transparent' : '#fde047'); } catch(e){}
+  } else { try { document.execCommand(cmd, false, null); } catch(e){} }
+}
+async function saveCounselRec(id){
+  var err = document.getElementById('cErr'), show = function(t){ err.textContent = t; err.classList.remove('hidden'); };
+  var name = (document.getElementById('ceName').value || '').trim(), date = document.getElementById('ceDate').value;
+  var tb = document.querySelector('#ceTypes .ctype.on'), type = tb ? tb.getAttribute('data-t') : '기타';
+  var body = document.getElementById('ceBody'), note = document.getElementById('ceNote');
+  var text = (body.innerText || '').replace(/ /g,' ').trim();
+  if (!name){ show('학생을 골라 주세요'); return; }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)){ show('날짜를 골라 주세요'); return; }
+  if (!text){ show('상담 내용을 적어 주세요'); return; }
+  var rec = { date:date, name:name, type:type, memo:text, rich:csSanitize(body.innerHTML),
+              note:(note.innerText||'').trim() ? csSanitize(note.innerHTML) : '' };
+  var btn = document.getElementById('cGo'); btn.disabled = true; btn.textContent = '저장 중…';
+  try {
+    if (id) await FS.updateCounsel(id, rec); else await FS.addCounsel(rec);
+    closeModal(); CS.date = date; await refreshCounselViews();
+  } catch(e){
+    btn.disabled = false; btn.textContent = '저장하기';
+    show(e && e.code === 'permission-denied' ? '교사로 로그인해야 합니다' : '저장하지 못했습니다');
+  }
+}
+async function deleteCounselRec(id){
+  var r = (counselCache || []).filter(function(x){ return x.id === id; })[0]; if (!r) return;
+  if (!confirm(r.name+' · '+r.date+' 상담 기록을 지울까요?\n지운 기록은 되돌릴 수 없어요.')) return;
+  try { await FS.deleteCounsel(id); closeModal(); await refreshCounselViews(); }
+  catch(e){ alert('지우지 못했습니다'); }
+}
+/** 통계 — 유형별 도넛(그 해) */
+function counselTypeDonut(yd){
+  var cnt = {}; yd.forEach(function(r){ var t = CTYPES.indexOf(r.type) >= 0 ? r.type : '기타'; cnt[t] = (cnt[t]||0) + 1; });
+  var total = yd.length; if (!total) return '';
+  var COL = ['#0ea5e9','#22c55e','#f97316','#f43f5e','#8b5cf6','#14b8a6','#9494b0'];
+  var R = 54, C = 2*Math.PI*R, off = 0, arcs = '';
+  CTYPES.forEach(function(t, i){ var n = cnt[t] || 0; if (!n) return; var len = C*n/total;
+    arcs += '<circle r="'+R+'" cx="70" cy="70" fill="none" stroke="'+COL[i]+'" stroke-width="22" stroke-dasharray="'+len+' '+(C-len)+'" stroke-dashoffset="'+(-off)+'" transform="rotate(-90 70 70)"/>'; off += len; });
+  return '<div class="sec-label">유형별 상담</div><div class="card pad cs-donut"><svg viewBox="0 0 140 140" width="140" height="140">'+arcs+
+    '<text x="70" y="66" text-anchor="middle" font-size="22" font-weight="800" fill="#1a1a2e">'+total+'</text><text x="70" y="88" text-anchor="middle" font-size="13" fill="#9a9ab0">건</text></svg>'+
+    '<div class="cs-donut-legend">'+CTYPES.filter(function(t){ return cnt[t]; }).map(function(t){
+      return '<div>'+ctypeBadge(t)+'<b>'+cnt[t]+'건</b><span class="row-s">'+Math.round(cnt[t]/total*100)+'%</span></div>'; }).join('')+'</div></div>';
 }
 
 /* ═══ 성적 ═══════════════════════════════════════════
@@ -5503,6 +5702,7 @@ async function resolveDeleteReq(i, del){
       var top = document.getElementById('modal2');
       if (top){ if (top.__cancel) top.__cancel(); else top.remove(); return; }
       if (document.getElementById('modal')){ closeModal(); return; }
+      if (document.getElementById('csHist')){ closeCounselHistory(); return; }
       var app = document.getElementById('app'), tl = document.getElementById('tLogin');
       if (app && !app.classList.contains('hidden')){
         if (TAB !== 'home'){ go('home'); return; }

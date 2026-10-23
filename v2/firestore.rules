@@ -422,10 +422,13 @@ service cloud.firestore {
     // 과거 기록 이전은 GAS 편집기 일회성 스크립트로 한다(migrate_counseling.gs).
     match /counseling/{docId} {
       allow read:  if isTeacher();
+      // 2026-10-23 상담일지식: 하루 여러 건(자동 ID)·유형(type)·꾸민 본문(rich HTML)·비고(note) 추가
       allow write: if isTeacher()
                    && ( request.resource == null
-                        || request.resource.data.keys()
-                             .hasOnly(['date','name','done','memo','at']) );
+                        || ( request.resource.data.keys()
+                               .hasOnly(['date','name','done','memo','at','type','rich','note'])
+                             && (!('rich' in request.resource.data) || request.resource.data.rich.size() <= 40000)
+                             && (!('note' in request.resource.data) || request.resource.data.note.size() <= 20000) ) );
     }
 
     // ── 읽기만 열어두는 것들 ────────────────────────────
