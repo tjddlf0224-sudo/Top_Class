@@ -3697,7 +3697,7 @@ var ATT_V2_FROM = '2026-10-23';   // 2026-10-22 전환(성일님). settings/app.
      attV2From  'YYYY-MM-DD' — v2가 출결의 원본이 되는 날(없으면 위 기본값 = 전환 전)
      minBuild   숫자 — 이보다 낮은 APP_BUILD는 업데이트 안내를 띄운다
    읽은 값은 기기에 적어 두어, 다음에 켤 때 서버 응답을 기다리지 않고 바로 쓴다. */
-var APP_BUILD = 9;               // 웹 묶음 번호 — v2를 고쳐 스토어 빌드를 낼 때마다 올린다
+var APP_BUILD = 10;              // 웹 묶음 번호 — v2를 고쳐 스토어 빌드를 낼 때마다 올린다
 var APP_CFG_KEY = 'tc_cfg', MIN_BUILD = 0;
 function applyAppConfig(c){
   if (!c || DEMO_MODE) return;   // 데모는 전환 뒤 모습으로 고정
