@@ -356,6 +356,34 @@ html.zoomed body.wide #app .header{left:max(0px, calc((var(--zvw) - 1180px) / 2)
 .aw-pop{display:flex;flex-direction:column;align-items:center;gap:4px;opacity:0;animation:awPop .6s cubic-bezier(.2,1.6,.4,1) forwards;}
 @keyframes awPop{0%{opacity:0;transform:scale(.3) rotate(-20deg);}100%{opacity:1;transform:scale(1) rotate(0);}}
 .confetti{position:fixed;inset:0;width:100vw;height:100vh;pointer-events:none;z-index:4000;}
+
+/* 지역인재 영단어 진단 · 앱 소개 (2026-10-23) */
+.vt-intro{text-align:center;} .vt-badge{display:inline-block;background:var(--accent-soft);color:var(--accent);font-weight:800;font-size:.78rem;padding:4px 10px;border-radius:20px;}
+.vt-title{font-size:1.5rem;font-weight:900;margin:8px 0 10px;}
+.vt-past{display:grid;grid-template-columns:90px 60px 1fr;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid var(--line-soft);font-size:.9rem;}
+.vt-past:last-child{border-bottom:none;}
+.vt-top{display:flex;justify-content:space-between;align-items:center;}
+.vt-x{background:none;border:none;color:var(--ink-mute);font-size:.88rem;padding:6px 0;cursor:pointer;}
+.vt-q{text-align:center;padding:28px 18px;} .vt-word{font-size:2.3rem;font-weight:900;letter-spacing:.5px;margin-top:8px;word-break:break-all;}
+.vt-choices{display:flex;flex-direction:column;gap:9px;margin-top:14px;}
+.vt-ch{padding:15px 14px;border-radius:13px;border:1px solid var(--line);background:var(--surface);color:var(--ink);font-size:1rem;font-weight:600;text-align:left;cursor:pointer;}
+.vt-ch:active{background:var(--accent-soft);border-color:var(--accent);}
+.vt-dk{text-align:center;color:var(--ink-mute);background:var(--line-soft);border-color:transparent;}
+.vt-gauge{position:relative;height:10px;background:var(--line-soft);border-radius:6px;margin:12px 0 4px;}
+.vt-gauge i{display:block;height:100%;background:var(--accent);border-radius:6px;}
+.vt-gauge b{position:absolute;top:-4px;width:2px;height:18px;background:var(--rose);}
+.vt-gl{display:flex;justify-content:space-between;font-size:.72rem;margin-bottom:10px;}
+.vt-bars{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;align-items:end;}
+.vt-bb{text-align:center;} .vt-bv{font-size:.72rem;font-weight:800;color:var(--ink-soft);height:16px;}
+.vt-bc{height:110px;background:var(--line-soft);border-radius:8px;display:flex;align-items:flex-end;overflow:hidden;}
+.vt-bc i{display:block;width:100%;background:var(--accent);border-radius:8px;} .vt-bc i.g{background:var(--green);} .vt-bc i.w{background:var(--orange);}
+.vt-bb .row-s{font-size:.66rem;margin-top:4px;}
+.vt-wrong{display:grid;grid-template-columns:1fr 1fr;gap:6px 14px;}
+.vt-wrong div{display:flex;flex-direction:column;padding:6px 0;border-bottom:1px solid var(--line-soft);} .vt-wrong span{font-size:.8rem;color:var(--ink-soft);}
+.vt-tr{grid-template-columns:1.1fr .9fr 1fr 1fr .6fr;}
+.app-card{margin-bottom:12px;} .app-head{display:flex;align-items:center;gap:14px;} .app-head img{border-radius:15px;box-shadow:0 2px 8px rgba(26,26,46,.12);}
+.app-name{font-size:1.1rem;font-weight:800;margin-bottom:2px;}
+.app-btns{display:flex;gap:8px;} .app-btns .btn{flex:1;text-decoration:none;}
 </style>
 </head>
 <body>
@@ -3427,6 +3455,8 @@ function renderViewInner(v){
   if(TAB==='home'){v.innerHTML=ROLE==='student'?homeStudent():homeTeacher();fillIcoSlots(v);return;}
   if(TAB==='after'){return renderAfterSchool(v);}
   if(TAB==='study'){return renderStudy(v);}
+  if(TAB==='vocab'){return renderVocab(v);}
+  if(TAB==='apps'){renderApps(v);return;}
   if(TAB==='att' && ROLE==='teacher'){ var su=subOf();
     return su==='off' ? renderOffDays(v) : su==='dorm' ? renderDorm(v) : su==='plan' ? renderPlannerTeacher(v) : renderAmTeacher(v); }
   if(TAB==='coin'){return ROLE==='student'?renderCoinStudent(v):renderCoinTeacher(v);}
@@ -5570,6 +5600,7 @@ function homeStudent(){
   '</div>'+
   '<div class="quick" style="margin-top:10px">'+
     quick('clock','r','공부 타이머',"go('study')")+quick('cap','o','명예의 전당',"go('study');goSub('fame')")+
+    quick('clipboard','s','단어 진단',"go('vocab')")+quick('info','y','추천 앱',"go('apps')")+
   '</div>']
   ]);
 }
@@ -5627,6 +5658,7 @@ function homeTeacher(){
   '</div>'+
   '<div class="quick" style="margin-top:10px">'+
     quick('clock','s','공부 기록',"go('study')")+quick('cap','o','명예의 전당',"go('study');goSub('fame')")+
+    quick('clipboard','y','단어 진단',"go('vocab')")+quick('info','r','앱 소개',"go('apps')")+
   '</div>']
   ]);
 }
@@ -6073,6 +6105,198 @@ function confetti(ms){
   })(t0);
 }
 
+/* ═══ 지역인재 9급 영단어 진단 (2026-10-23 성일님 "오로지 지역인재9급 영단어로만") ═══════════
+   문항은 2015~2026 지역인재 9급 영어 기출 지문에 실제로 나온 단어만 쓴다(수능·국가직 단어 없음).
+   단어를 일상 빈도 순위로 7구간(301~1000위 … 7001~10000위)에 나누고 구간마다 10개씩 묻는다.
+   구간별로 아는 비율 × 그 구간이 기출 지문에서 차지하는 비율을 더해 "지문 단어를 몇 % 아는가"를 추정한다.
+   · 1~300위(the·have·people 같은 기본어)는 다 안다고 본다 — 기출 지문 단어의 61.8%.
+   · 사람·나라 이름 1.45%는 몰라도 읽히므로 아는 것으로 센다.
+   · 10001위 밖(2.04%)은 묻지 않고 7001~10000위 아는 비율의 절반으로 잡는다.
+   · 4지선다라 찍어서 맞히는 몫을 뺀다: (맞힌 수 − 틀린 수/3) ÷ 문항 수. "모르겠어요"는 틀림으로 세지 않는다.
+   목표 95%: 지문 단어의 95%를 알면 모르는 단어를 문맥으로 짐작하며 읽을 수 있다(2026-10-21 분석, 약 5,250단어). */
+var VT_BANDS = [
+  { k:'A', lo:301,  hi:1000,  share:14.19, words:[['offer','제공하다, 제안하다'],['cause','원인; 일으키다'],['society','사회'],['create','창조하다, 만들어 내다'],['develop','발전시키다, 개발하다'],['require','요구하다, 필요로 하다'],['provide','제공하다'],['process','과정, 절차'],['effect','효과, 영향'],['possible','가능한'],['positive','긍정적인'],['lose','잃다, 지다'],['seem','~처럼 보이다'],['often','자주, 흔히'],['almost','거의'],['modern','현대의']] },
+  { k:'B', lo:1001, hi:2000,  share:8.68,  words:[['separate','분리된; 분리하다'],['labor','노동, 노동력'],['environment','환경'],['negative','부정적인'],['regard','여기다, 간주하다'],['maintain','유지하다'],['customer','고객, 손님'],['destroy','파괴하다'],['improve','개선하다, 향상시키다'],['influence','영향; 영향을 미치다'],['effort','노력'],['produce','생산하다'],['reduce','줄이다, 감소시키다'],['purchase','구매하다; 구매'],['treat','대하다; 치료하다'],['advantage','이점, 장점']] },
+  { k:'C', lo:2001, hi:3000,  share:4.13,  words:[['depend','의존하다, ~에 달려 있다'],['encourage','격려하다, 장려하다'],['tend','~하는 경향이 있다'],['contribute','기여하다, 공헌하다'],['instance','사례, 경우'],['occur','일어나다, 발생하다'],['solve','해결하다, 풀다'],['aspect','측면, 양상'],['confident','자신 있는, 확신하는'],['celebrate','기념하다, 축하하다'],['decline','감소, 쇠퇴; 거절하다'],['attend','참석하다, 다니다'],['efficient','효율적인'],['decade','10년'],['anxiety','불안, 걱정'],['obtain','얻다, 획득하다']] },
+  { k:'D', lo:3001, hi:4000,  share:2.65,  words:[['explore','탐험하다, 탐구하다'],['habit','습관'],['disappear','사라지다'],['consumption','소비'],['complain','불평하다'],['indicate','나타내다, 가리키다'],['attract','끌어들이다'],['creature','생물, 동물'],['expand','확장하다, 확대하다'],['tension','긴장, 갈등'],['colleague','동료'],['preserve','보존하다'],['cooperation','협력'],['grateful','감사하는'],['conclude','결론짓다'],['furthermore','게다가, 더욱이']] },
+  { k:'E', lo:4001, hi:5000,  share:1.90,  words:[['translate','번역하다'],['assess','평가하다'],['fascinating','매우 흥미로운'],['warn','경고하다'],['invention','발명, 발명품'],['cognitive','인지의'],['mysterious','신비로운'],['predict','예측하다'],['distinction','구별, 차이'],['simultaneously','동시에'],['intensity','강렬함, 강도'],['divide','나누다'],['calculate','계산하다'],['crop','농작물'],['examine','조사하다, 검토하다'],['obligation','의무']] },
+  { k:'F', lo:5001, hi:7000,  share:1.84,  words:[['prescription','처방전, 처방'],['renew','갱신하다'],['consume','소비하다'],['borrow','빌리다'],['convenience','편리, 편의'],['infant','유아, 아기'],['harmful','해로운'],['creativity','창의성'],['adapt','적응하다'],['persuade','설득하다'],['interrupt','방해하다, 가로막다'],['evident','분명한, 명백한'],['overlook','간과하다'],['harvest','수확; 수확하다'],['utilize','활용하다'],['curiosity','호기심']] },
+  { k:'G', lo:7001, hi:10000, share:1.36,  words:[['weaken','약화시키다'],['nutrient','영양소'],['distraction','주의 산만, 방해 요소'],['vanish','사라지다'],['compel','강요하다'],['shrink','줄어들다'],['postpone','연기하다, 미루다'],['disregard','무시하다'],['ecosystem','생태계'],['predator','포식자'],['inspect','점검하다, 검사하다'],['metabolism','신진대사'],['adolescent','청소년'],['susceptible','~에 취약한'],['extinction','멸종'],['resemble','닮다']] }
+];
+var VT_BASE = 61.76 + 1.45, VT_TAIL = 2.04, VT_PER = 10, VT_GOAL = 95;
+var VT = null;   // 진행 중인 시험 { items:[{w,m,band,choices}], i, ans:[] }
+
+function vtShuffle(a){ a = a.slice(); for (var i = a.length-1; i > 0; i--){ var j = Math.floor(Math.random()*(i+1)); var t = a[i]; a[i] = a[j]; a[j] = t; } return a; }
+function vtBuild(){
+  var items = [];
+  VT_BANDS.forEach(function(b, bi){
+    var pick = vtShuffle(b.words).slice(0, VT_PER);
+    pick.forEach(function(w){
+      // 오답 보기는 같은 구간·옆 구간의 다른 뜻에서 고른다(쉬운 말만 섞여 정답이 티 나지 않게)
+      var pool = [];
+      [bi-1, bi, bi+1].forEach(function(x){ if (VT_BANDS[x]) VT_BANDS[x].words.forEach(function(o){ if (o[0] !== w[0]) pool.push(o[1]); }); });
+      var ch = vtShuffle(vtShuffle(pool).slice(0,3).concat([w[1]]));
+      items.push({ w:w[0], m:w[1], band:b.k, choices:ch });
+    });
+  });
+  return items;   // 쉬운 구간부터 차례로
+}
+/** 결과 계산 — 구간별 아는 비율 → 지문 단어 커버율 */
+function vtScore(items, ans){
+  var by = {};
+  VT_BANDS.forEach(function(b){ by[b.k] = { ok:0, bad:0, n:0 }; });
+  items.forEach(function(it, i){ var a = ans[i], x = by[it.band]; x.n++;
+    if (a === it.m) x.ok++; else if (a !== null) x.bad++; });
+  var rate = {}, cov = VT_BASE;
+  VT_BANDS.forEach(function(b){ var x = by[b.k];
+    rate[b.k] = x.n ? Math.max(0, Math.min(1, (x.ok - x.bad/3) / x.n)) : 0;
+    cov += b.share * rate[b.k]; });
+  cov += VT_TAIL * rate.G * 0.5;
+  // 95%까지: 쉬운 구간부터 모르는 단어를 다 외운다고 치고 몇 단어가 필요한지
+  var need = 0, c = cov;
+  for (var i = 0; i < VT_BANDS.length && c < VT_GOAL; i++){
+    var b = VT_BANDS[i], miss = 1 - rate[b.k], gain = b.share * miss;
+    if (gain <= 0) continue;
+    var size = b.hi - b.lo + 1;
+    if (c + gain >= VT_GOAL){ need += Math.ceil(size * miss * (VT_GOAL - c) / gain); c = VT_GOAL; }
+    else { need += Math.round(size * miss); c += gain; }
+  }
+  var wrong = items.filter(function(it, i){ return ans[i] !== it.m; }).map(function(it){ return [it.w, it.m]; });
+  return { cov: Math.round(cov*10)/10, rate: rate, need: c >= VT_GOAL ? need : need + 1000, wrong: wrong,
+           ok: items.filter(function(it, i){ return ans[i] === it.m; }).length, n: items.length, date: kstToday() };
+}
+
+async function renderVocab(v){
+  if (ROLE === 'teacher') return vtTeacherView(v);
+  if (VT && VT.done) return vtResultView(v, VT.result, true);
+  if (VT) return vtQuestionView(v);
+  v.innerHTML = '<div class="empty"><span>불러오는 중…</span></div>';
+  var past = []; try { past = await FS.vocabTestsOf(ME.name); } catch(e){}
+  var last = past[0];
+  v.innerHTML =
+    '<div class="card pad vt-intro">'+
+      '<div class="vt-badge">지역인재 9급</div>'+
+      '<div class="vt-title">영단어 진단</div>'+
+      '<div class="row-s" style="line-height:1.7">2015~2026 지역인재 9급 영어 기출 지문에 나온 단어로만 냈어요.<br>'+
+      VT_BANDS.length*VT_PER+'문제 · 약 7분. 모르면 찍지 말고 <b>모르겠어요</b>를 눌러 주세요 — 찍어서 맞힌 몫은 빼고 계산해요.</div>'+
+      '<button class="btn" style="margin-top:16px" onclick="vtStart()">진단 시작</button>'+
+    '</div>'+
+    (last ? '<div class="sec-label">지난 결과</div><div class="card pad">'+past.slice(0,5).map(function(p, i){
+        var r = p.result || {};
+        return '<div class="vt-past"'+(i===0?' onclick="vtShowPast(0)" style="cursor:pointer"':'')+'><span>'+escapeHtml(r.date||'')+'</span><b>'+(r.cov!=null?r.cov+'%':'–')+'</b><span class="row-s">'+
+          (r.cov >= VT_GOAL ? '목표 달성' : '95%까지 약 '+(r.need||0).toLocaleString()+'단어')+'</span></div>'; }).join('')+'</div>' : '')+
+    '<div class="card pad" style="margin-top:14px"><div class="row-t" style="margin-bottom:6px">이렇게 계산해요</div>'+
+      '<div class="row-s" style="line-height:1.7">기출 지문 단어를 쉬운 것부터 7구간으로 나눠 구간마다 10개씩 물어요. 구간별로 아는 비율을 그 구간이 지문에서 차지하는 비율과 곱해 더하면 '+
+      '<b>"기출 지문 단어를 몇 % 아는가"</b>가 나와요. 95%를 넘으면 모르는 단어를 앞뒤 문맥으로 짐작하며 읽을 수 있어요.</div></div>';
+  VT_PAST = past;
+}
+var VT_PAST = [];
+function vtShowPast(i){ var p = VT_PAST[i]; if (!p) return; VT = { done:true, result:p.result, saved:true }; renderView(); }
+function vtStart(){ VT = { items: vtBuild(), i: 0, ans: [] }; renderView(); window.scrollTo(0,0); }
+function vtQuit(){ if (VT && !VT.done && VT.i > 0 && !confirm('지금 그만두면 결과가 남지 않아요. 그만둘까요?')) return; VT = null; renderView(); }
+function vtQuestionView(v){
+  var it = VT.items[VT.i], n = VT.items.length;
+  v.innerHTML =
+    '<div class="vt-top"><button class="vt-x" onclick="vtQuit()">그만하기</button><span class="row-s">'+(VT.i+1)+' / '+n+'</span></div>'+
+    '<div class="bar" style="margin:6px 0 18px"><i style="width:'+Math.round(VT.i/n*100)+'%"></i></div>'+
+    '<div class="card pad vt-q"><div class="row-s">이 단어의 뜻은?</div><div class="vt-word">'+escapeHtml(it.w)+'</div></div>'+
+    '<div class="vt-choices">'+it.choices.map(function(c, k){
+      return '<button class="vt-ch" onclick="vtAnswer('+k+')">'+escapeHtml(c)+'</button>'; }).join('')+
+      '<button class="vt-ch vt-dk" onclick="vtAnswer(-1)">모르겠어요</button></div>';
+}
+async function vtAnswer(k){
+  if (!VT || VT.done) return;
+  var it = VT.items[VT.i];
+  VT.ans.push(k < 0 ? null : it.choices[k]);
+  VT.i++;
+  if (VT.i < VT.items.length){ renderView(); return; }
+  VT.done = true; VT.result = vtScore(VT.items, VT.ans);
+  renderView(); window.scrollTo(0,0);
+  try { await FS.saveVocabTest(ME.name, VT.result); VT.saved = true; } catch(e){ stToast('결과를 저장하지 못했어요 — 인터넷을 확인해 주세요'); }
+}
+function vtResultView(v, r, mine){
+  var cov = r.cov, gap = Math.max(0, Math.round((VT_GOAL - cov)*10)/10);
+  var perSent = Math.round((100 - cov) / 100 * 15 * 10) / 10;   // 15단어 문장 하나에 모르는 단어
+  var days = r.need ? Math.ceil(r.need / 30) : 0;
+  var bars = VT_BANDS.map(function(b){ var p = Math.round((r.rate[b.k]||0)*100);
+    return '<div class="vt-bb"><div class="vt-bv">'+p+'%</div><div class="vt-bc"><i class="'+(p>=80?'g':p>=50?'':'w')+'" style="height:'+Math.max(3,p)+'%"></i></div>'+
+      '<div class="row-s">'+(b.lo>=1000?Math.round(b.lo/100)/10+'천':b.lo)+'~</div></div>'; }).join('');
+  v.innerHTML =
+    (mine ? '<div class="vt-top"><button class="vt-x" onclick="VT=null;renderView()">처음으로</button><span class="row-s">'+escapeHtml(r.date||'')+'</span></div>' : '')+
+    '<div class="hero vt-hero"><div class="hero-lbl">기출 지문 단어 중 아는 비율(추정)</div>'+
+      '<div class="hero-num" style="color:'+(cov>=VT_GOAL?'var(--green)':cov>=90?'var(--accent)':'var(--orange)')+'">'+cov+'<small>%</small></div>'+
+      '<div class="vt-gauge"><i style="width:'+Math.min(100, Math.max(0,(cov-60)/40*100))+'%"></i><b style="left:'+((VT_GOAL-60)/40*100)+'%"></b></div>'+
+      '<div class="vt-gl row-s"><span>60%</span><span>목표 95%</span><span>100%</span></div>'+
+      '<div class="hero-inline"><div>맞힌 문제<b>'+r.ok+' / '+r.n+'</b></div><div>목표까지<b>'+(gap ? gap+'%p' : '달성')+'</b></div>'+
+      '<div>외울 단어<b>'+(gap ? '약 '+r.need.toLocaleString() : '–')+'</b></div></div></div>'+
+    '<div class="card pad" style="margin-top:12px"><div class="row-t">이게 무슨 뜻이냐면</div><div class="row-s" style="line-height:1.75;margin-top:6px">'+
+      '지역인재 기출 지문에서 15단어짜리 문장 하나에 모르는 단어가 <b>평균 '+perSent+'개</b> 나오는 셈이에요. '+
+      (gap ? '95%가 되려면 쉬운 구간부터 모르는 단어를 <b>약 '+r.need.toLocaleString()+'개</b> 더 외우면 돼요. 하루 30개씩이면 <b>'+days+'일</b>(약 '+Math.ceil(days/7)+'주)이에요.'
+           : '이미 지문 단어의 95% 이상을 알아요. 이제는 단어보다 독해 속도와 문제 유형 연습이 점수를 올려요.')+
+    '</div></div>'+
+    '<div class="sec-label">구간별로 아는 비율 · 왼쪽이 쉬운 단어</div>'+
+    '<div class="card pad"><div class="vt-bars">'+bars+'</div>'+
+      '<div class="row-s" style="margin-top:10px">숫자는 일상 영어에서 몇 번째로 자주 쓰는 단어인지(빈도 순위)예요. 초록 막대가 80% 이상, 주황은 50% 미만.</div></div>'+
+    (r.wrong && r.wrong.length ? '<div class="sec-label">모르거나 틀린 단어 '+r.wrong.length+'개</div><div class="card pad vt-wrong">'+
+      r.wrong.map(function(w){ return '<div><b>'+escapeHtml(w[0])+'</b><span>'+escapeHtml(w[1])+'</span></div>'; }).join('')+'</div>' : '')+
+    (mine ? '<div class="card pad st-home" style="margin-top:14px" onclick="go(\'apps\')"><img src="apps/vocab.png" width="44" height="44" style="border-radius:11px" alt="">'+
+      '<div style="flex:1"><div class="row-t">보카바리스타로 외우기</div><div class="row-s">공무원·지역인재 기출 영단어를 카페 게임으로</div></div><b class="st-go">보기 →</b></div>'+
+      '<button class="btn btn-outline" style="margin-top:12px" onclick="vtStart()">다시 진단하기</button>' : '');
+}
+async function vtTeacherView(v){
+  v.innerHTML = '<div class="empty"><span>불러오는 중…</span></div>';
+  var got = await Promise.all([ FS.vocabTestsAll(), soft(FS.members(), []) ]);
+  var latest = {}, cnt = {};
+  got[0].forEach(function(t){ cnt[t.name] = (cnt[t.name]||0) + 1; if (!latest[t.name]) latest[t.name] = t; });
+  var names = got[1].map(function(m){ return m.name; });
+  names.sort(function(a,b){ return ((latest[b]||{result:{}}).result.cov||-1) - ((latest[a]||{result:{}}).result.cov||-1); });
+  v.innerHTML = '<div class="sec-label">지역인재 영단어 진단 · 학생별 최근 결과</div><div class="card pad">'+
+    '<div class="st-tr st-th vt-tr"><span>이름</span><span>날짜</span><span>아는 비율</span><span>외울 단어</span><span>횟수</span></div>'+
+    names.map(function(n){ var t = latest[n], r = t ? t.result : null;
+      return '<div class="st-tr vt-tr"'+(t?' style="cursor:pointer" onclick="vtTeacherOpen(\''+escapeHtml(n)+'\')"':'')+'><b>'+escapeHtml(n)+'</b><span>'+(r?escapeHtml((r.date||'').slice(5).replace('-','/')):'–')+'</span>'+
+        '<span>'+(r?r.cov+'%':'안 봄')+'</span><span>'+(r?(r.cov>=VT_GOAL?'달성':(r.need||0).toLocaleString()):'–')+'</span><span>'+(cnt[n]||0)+'</span></div>'; }).join('')+
+    '</div><div class="row-s" style="margin-top:8px">목표는 기출 지문 단어의 95%(약 5,250단어). 이름을 누르면 자세한 결과를 봐요.</div>';
+  VT_ALL = got[0];
+}
+var VT_ALL = [];
+function vtTeacherOpen(n){
+  var t = VT_ALL.filter(function(x){ return x.name === n; })[0]; if (!t) return;
+  var box = document.createElement('div');
+  vtResultView(box, t.result, false);
+  showModal('<div class="modal-box" style="max-width:520px"><div class="row-t" style="margin-bottom:10px">'+escapeHtml(n)+' · 영단어 진단</div>'+box.innerHTML+
+    '<button class="btn btn-outline" style="margin-top:14px" onclick="closeModal()">닫기</button></div>');
+}
+
+/* ═══ 함께 쓰면 좋은 앱 (2026-10-23 성일님 "보카바리스타, 타임슬립한국사, 전산회계오락실만") ═══
+   스토어 링크는 장원급제반에서 온 것을 알 수 있게 캠페인 표시(ct=topclass)를 붙인다.
+   앱(Capacitor) 안에서 바깥 주소는 시스템이 App Store·Play 앱으로 연다. */
+var MY_APPS = [
+  { k:'vocab', name:'보카바리스타', tag:'영어 · 공무원 영단어',
+    desc:'카페를 운영하며 영단어를 외우는 게임이에요. 공무원·지역인재 기출에 나온 영단어를 담았어요. 영단어 진단에서 모른 단어를 여기서 채우세요.',
+    ios:'https://apps.apple.com/kr/app/apple-store/id6788029120?pt=128946368&ct=topclass&mt=8',
+    and:'https://play.google.com/store/apps/details?id=com.yunsis.vocabbarista&referrer=utm_source%3Dtopclass%26utm_campaign%3Dtopclass' },
+  { k:'history', name:'타임슬립 한국사', tag:'한국사 · 한능검·공무원',
+    desc:'시대를 넘나드는 이야기 속에서 한국사를 배우는 게임이에요. 한능검과 공무원 한국사에 자주 나오는 개념을 맵과 스토리로 익혀요.',
+    ios:'https://apps.apple.com/kr/app/apple-store/id6813351584?pt=128946368&ct=topclass&mt=8',
+    and:'https://play.google.com/store/apps/details?id=com.yunsis.koreanhistorygame&referrer=utm_source%3Dtopclass%26utm_campaign%3Dtopclass' },
+  { k:'accounting', name:'전산회계 오락실', tag:'회계 · 전산회계 1·2급',
+    desc:'분개와 이론 문제를 오락실 게임처럼 풀며 전산회계 자격증을 준비해요. 공기업·회계 직무를 준비한다면 같이 해 보세요.',
+    ios:'https://apps.apple.com/kr/app/apple-store/id6772735613?pt=128946368&ct=topclass&mt=8',
+    and:'https://play.google.com/store/apps/details?id=com.teacherYun.accountingmaster&referrer=utm_source%3Dtopclass%26utm_campaign%3Dtopclass' }
+];
+function renderApps(v){
+  var ua = navigator.userAgent || '', and = /Android/i.test(ua),
+      ios = /iPhone|iPad|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1) || document.documentElement.classList.contains('on-mac');
+  v.innerHTML = '<div class="sec-label">함께 쓰면 좋은 앱</div>'+MY_APPS.map(function(a){
+    return '<div class="card pad app-card"><div class="app-head"><img src="apps/'+a.k+'.png" width="64" height="64" alt="">'+
+      '<div><div class="app-name">'+a.name+'</div><div class="row-s">'+a.tag+'</div></div></div>'+
+      '<div class="row-s" style="line-height:1.7;margin:10px 0 12px">'+a.desc+'</div>'+
+      '<div class="app-btns">'+
+        (and ? '' : '<a class="btn" href="'+a.ios+'" target="_blank" rel="noopener">App Store에서 받기</a>')+
+        (ios ? '' : '<a class="btn'+(and?'':' btn-outline')+'" href="'+a.and+'" target="_blank" rel="noopener">Google Play에서 받기</a>')+
+      '</div></div>'; }).join('');
+}
+
 /* ═══ 전환 ═══ */
 function enterApp(role){ROLE=role;TAB='home';
   document.getElementById('login').classList.add('hidden');
@@ -6110,6 +6334,7 @@ function logout(){
   var pf=document.getElementById('sPin'); if(pf) pf.value='';
   disableNotis();                                   // 남의 기기에 알림이 남지 않게
   if (ST) stStop(Date.now(), 'quiet');
+  VT = null;
   ME={id:'',name:'',track:'공무원',coins:0,dorm:false,week:[],planner:null};
   streakCache=null; sShowErr('');
   if(window.FS && FS.__clear) FS.__clear();   // 사람이 바뀌면 볼 수 있는 자료도 다르다
