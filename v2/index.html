@@ -5375,6 +5375,8 @@ function openDoc(file, title){
     '<iframe src="'+file+'" title="'+escapeHtml(title)+'"></iframe></div>');
 }
 async function openAppInfo(){
+  // 지문 로그인 직후엔 로그인 준비 전이라 '계정 연결' 줄이 비어 있을 수 있다 — 준비를 잠깐 기다린다(최대 3초)
+  if (window.AUTH){ try { await Promise.race([AUTH.ready(), new Promise(function(r){ setTimeout(r, 3000); })]); } catch(e){} }
   var t = ROLE === 'teacher';
   var row = function(icon, label, sub, onclick, color){
     return '<div class="row" style="cursor:pointer;padding:13px 0" onclick="'+onclick+'"><div class="avatar">'+ic(icon,18)+'</div>'+
@@ -6849,7 +6851,19 @@ function officialAppleButton(btn){
   img.src = 'https://appleid.cdn-apple.com/appleid/button?type=continue&color=white&border=true&border_radius=12&height='+h+'&width='+w+'&scale=3&locale=ko_KR';
 }
 function socialName(k){ return k === 'google' ? '구글' : '애플'; }
-function socialCancelled(e){ var c = String((e && (e.code || e.message)) || ''); return /cancel|popup-closed|canceled|12501|1001/i.test(c); }
+/* 확실한 '사용자 취소'만 조용히 넘긴다 — /cancel/ 처럼 넓게 잡으면 안드로이드 Credential Manager 오류
+   (GetCredentialCancellationException 등)까지 삼켜 '눌러도 반응 없음'이 된다(10/23 팀장 지적) */
+function socialCancelled(e){
+  var c = String((e && e.code) || ''), m = String((e && e.message) || '');
+  return /popup-closed-by-user|cancelled-popup-request/.test(c) || /^(12501|1001)$/.test(c) ||
+         /^(The user canceled|User canceled|The operation couldn.t be completed\. \(com\.apple\.AuthenticationServices\.AuthorizationError error 1001)/i.test(m);
+}
+function socialErrMsg(e, kind){
+  var c = String((e && (e.code || e.message)) || '');
+  if (/no credentials available|NoCredential/i.test(c + ' ' + ((e && e.message) || ''))) return '이 기기에 로그인된 Google 계정이 없습니다. 휴대폰 설정에서 Google 계정을 추가한 뒤 다시 눌러 주세요.';
+  if (/network/i.test(c)) return '인터넷 연결을 확인해 주세요.';
+  return socialName(kind)+' 로그인을 하지 못했어요. ('+String((e && e.code) || '')+' '+String((e && e.message) || e || '').slice(0,120)+')';   // 시험 동안은 원인을 화면에
+}
 async function socialLogin(kind){
   if (!window.AUTH){ sShowErr('연결 준비 중입니다. 잠시 후 다시 해주세요'); return; }
   sShowErr(''); var btn = document.getElementById(kind === 'google' ? 'socG' : 'socA'); btn.disabled = true;
@@ -6871,7 +6885,8 @@ async function socialLogin(kind){
     await AUTH.dropSocialOrphan();   // 어디에도 연결 안 된, 방금 생긴 계정만 지운다
     sShowErr('아직 연결되지 않은 '+socialName(kind)+' 계정이에요. 학번·이름·PIN(선생님은 비밀번호)으로 들어온 뒤 앱 정보 ⓘ 에서 '+socialName(kind)+' 계정을 연결해 주세요');
   } catch(e){
-    if (!socialCancelled(e)) sShowErr(socialName(kind)+' 로그인을 하지 못했어요. 잠시 뒤 다시 해 주세요');
+    console.log('[SOCIAL] login error', kind, e && e.code, e && e.message);
+    if (!socialCancelled(e)) sShowErr(socialErrMsg(e, kind));
   } finally { btn.disabled = false; }
 }
 /** 앱 정보의 '계정 연결' 줄 */
@@ -6887,13 +6902,15 @@ function socialLinkRows(row){
   return out;
 }
 async function linkSocial(kind){
+  console.log('[SOCIAL] link tap', kind, AUTH.user() && AUTH.user().uid);
+  stToast(socialName(kind)+' 계정 고르는 창을 여는 중…');
   try { await AUTH.linkSocial(kind); closeModal(); alert(socialName(kind)+' 계정을 연결했어요. 다음부터 로그인 화면의 '+socialName(kind)+' 버튼으로 들어오면 돼요.'); }
   catch(e){
     if (socialCancelled(e)) return;
     var c = String((e && e.code) || '');
     if (/credential-already-in-use|email-already-in-use|account-exists/.test(c)) alert('이 '+socialName(kind)+' 계정은 이미 다른 사람(또는 다른 기기의 계정)에 연결돼 있어요. 다른 계정을 골라 주세요.');
     else if (/provider-already-linked/.test(c)) alert('이미 '+socialName(kind)+' 계정이 연결돼 있어요.');
-    else alert(socialName(kind)+' 계정을 연결하지 못했어요. 잠시 뒤 다시 해 주세요.');
+    else { console.log('[SOCIAL] link error', kind, e && e.code, e && e.message); alert(socialErrMsg(e, kind).replace('로그인을 하지 못했어요', '계정을 연결하지 못했어요')); }
   }
 }
 async function teacherBioLogin(){
