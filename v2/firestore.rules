@@ -546,6 +546,56 @@ service cloud.firestore {
       allow delete: if isTeacher();
     }
 
+    // ── 공부 타이머 (2026-10-23) ─────────────────────────
+    // 순위·명예의 전당은 반 전체가 같이 보므로 읽기는 로그인한 사람 모두.
+    // 쓰기는 이 기기에 연결된 본인(isMe) 것만. 지난주 기록을 나중에 채워 넣어 상을 받는 걸 막으려고
+    // 날짜는 서버 시각 기준 하루 전~하루 뒤만 받는다(자정 넘긴 공부를 나눠 저장하는 몫까지).
+    function studyDay(d) {
+      return timestamp.date(int(d[0:4]), int(d[5:7]), int(d[8:10]));
+    }
+    match /study/{docId} {
+      allow read: if signedIn();
+      allow create, update: if
+           isMe(request.resource.data.name)
+        && request.resource.data.keys().hasOnly(['name','date','total','bySubject','longest','first','sessions','at'])
+        && request.resource.data.date is string
+        && request.resource.data.date.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+        && studyDay(request.resource.data.date) > request.time - duration.value(2, 'd')
+        && studyDay(request.resource.data.date) < request.time + duration.value(1, 'd')
+        && request.resource.data.total is int
+        && request.resource.data.total >= 0 && request.resource.data.total <= 86400
+        && request.resource.data.longest is int
+        && request.resource.data.longest <= request.resource.data.total
+        && request.resource.data.sessions is int
+        && request.resource.data.bySubject is string && request.resource.data.bySubject.size() < 2000
+        && request.resource.data.at == request.time
+        && ( resource == null
+             || ( resource.data.name == request.resource.data.name
+                  && resource.data.date == request.resource.data.date
+                  && request.resource.data.total >= resource.data.total ) );
+      allow delete: if isTeacher();
+    }
+    match /studyLive/{name} {
+      allow read: if signedIn();
+      allow create, update: if isMe(name)
+        && request.resource.data.keys().hasOnly(['name','subject','since'])
+        && request.resource.data.name == name
+        && request.resource.data.subject is string && request.resource.data.subject.size() <= 20
+        && request.resource.data.since == request.time;
+      allow delete: if isMe(name) || isTeacher();
+    }
+
+    // ── 지역인재 영단어 진단 (2026-10-23) — 결과는 본인·교사만 ─────
+    match /vocabTest/{id} {
+      allow read: if isTeacher() || isMe(resource.data.name);
+      allow create: if isMe(request.resource.data.name)
+        && request.resource.data.keys().hasOnly(['name','result','at'])
+        && request.resource.data.result is string && request.resource.data.result.size() < 20000
+        && request.resource.data.at == request.time;
+      allow update: if false;
+      allow delete: if isTeacher();
+    }
+
     // ── 그 외 전부 ─────────────────────────────────────
     // 읽기도 쓰기도 막는다. 새 컬렉션을 만들면 위에 명시적으로 열어야 한다.
     // (쓰기는 GAS 서비스 계정이 규칙을 우회하므로 기존 동작에 영향 없음)
