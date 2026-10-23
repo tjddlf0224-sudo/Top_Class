@@ -60,7 +60,7 @@ input,select,textarea{font-family:inherit;font-size:16px;}
 .login-title{font-size:1.55rem;font-weight:800;letter-spacing:-0.5px;}
 .login-sub{font-size:1rem;color:var(--ink-mute);margin-top:6px;}
 .field{margin-bottom:10px;min-width:0;}
-.field label{display:block;font-size:.9rem;font-weight:600;color:var(--ink-soft);margin-bottom:6px;}
+.field label{display:block;font-size:.95rem;font-weight:600;color:var(--ink-soft);margin-bottom:6px;}
 input[type=text],input[type=tel],input[type=password],input[type=date],input[type=time],input[type=number],select,textarea{width:100%;padding:13px 14px;border:1.5px solid var(--line);
   border-radius:var(--radius-sm);color:var(--ink);background:var(--surface);outline:none;
   transition:border-color .15s,box-shadow .15s;-webkit-appearance:none;appearance:none;}
@@ -75,9 +75,9 @@ input::placeholder{color:#b4b4c8;}
 .btn-outline{background:transparent;border:1.5px solid var(--line);color:var(--ink-soft);}
 .btn-outline:hover{background:var(--line-soft);box-shadow:none;border-color:var(--ink-mute);}
 .btn-sm{width:auto;padding:8px 14px;font-size:1rem;margin:0;}
-.login-divider{display:flex;align-items:center;gap:12px;margin:24px 0 16px;color:var(--ink-mute);font-size:.9rem;}
+.login-divider{display:flex;align-items:center;gap:12px;margin:24px 0 16px;color:var(--ink-mute);font-size:.95rem;}
 .login-divider::before,.login-divider::after{content:'';flex:1;height:1px;background:var(--line);}
-.login-links{display:flex;justify-content:center;align-items:center;gap:8px;margin-top:22px;color:var(--ink-mute);font-size:.9rem;}
+.login-links{display:flex;justify-content:center;align-items:center;gap:8px;margin-top:22px;color:var(--ink-mute);font-size:.95rem;}
 .login-links button{background:none;border:none;font-family:inherit;font-size:inherit;color:var(--ink-mute);cursor:pointer;padding:6px 2px;text-decoration:underline;text-underline-offset:3px;}
 .doc-box{background:var(--surface);border-radius:18px;width:100%;max-width:560px;margin-top:auto;margin-bottom:auto;height:86vh;height:86dvh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 60px rgba(26,26,46,.2);}
 .doc-head{display:flex;align-items:center;justify-content:space-between;padding:12px 12px 12px 18px;border-bottom:1px solid var(--line);font-weight:800;}
@@ -91,10 +91,10 @@ input::placeholder{color:#b4b4c8;}
 .header-top{display:flex;align-items:center;justify-content:space-between;padding-bottom:12px;}
 .h-name{font-size:1.22rem;font-weight:800;letter-spacing:-0.4px;line-height:1.2;}
 .h-meta{display:flex;align-items:center;gap:6px;margin-top:4px;}
-.h-role{font-size:.9rem;color:var(--ink-mute);}
+.h-role{font-size:.95rem;color:var(--ink-mute);}
 .h-meta{min-width:0;} .h-meta .h-role{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;} .h-meta .chip{white-space:nowrap;flex-shrink:0;}
 .header-top>div:first-child{min-width:0;}
-.chip{display:inline-flex;align-items:center;gap:3px;font-size:.9rem;font-weight:700;white-space:nowrap;
+.chip{display:inline-flex;align-items:center;gap:3px;font-size:.95rem;font-weight:700;white-space:nowrap;
   padding:2px 8px;border-radius:20px;background:var(--accent-soft);color:var(--accent);}
 .chip-gold{background:var(--gold-soft);color:var(--gold);}
 .chip-risk{background:var(--rose-soft);color:var(--rose);animation:pulse 1.8s ease-in-out infinite;}
@@ -144,8 +144,8 @@ input::placeholder{color:#b4b4c8;}
 .tbl td{text-align:center;padding:8px 4px;border-bottom:1px solid var(--line-soft);}
 .tbl td:first-child,.tbl th:first-child{text-align:left;}
 .cal{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;}
-.cal-h{text-align:center;font-size:.9rem;font-weight:600;color:var(--ink-mute);padding:4px 0;}
-.cal-d{min-height:46px;border-radius:9px;background:var(--line-soft);padding:4px 3px;font-size:.9rem;
+.cal-h{text-align:center;font-size:.95rem;font-weight:600;color:var(--ink-mute);padding:4px 0;}
+.cal-d{min-height:46px;border-radius:9px;background:var(--line-soft);padding:4px 3px;font-size:.95rem;
   display:flex;flex-direction:column;align-items:center;gap:2px;cursor:pointer;border:2px solid transparent;overflow:hidden;}
 .cal-d.x{background:transparent;cursor:default;}
 .cal-d.done{background:var(--green-soft);}
@@ -153,7 +153,7 @@ input::placeholder{color:#b4b4c8;}
 .cal-d.late{border-color:var(--orange);}
 .cal-d.absent{border-color:var(--rose);}
 .cal-d.pick{box-shadow:0 0 0 2px var(--ink) inset;}
-.cal-n{font-size:.9rem;color:#16a34a;font-weight:700;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.cal-n{font-size:.95rem;color:#16a34a;font-weight:700;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 
 /* ── 본문 ─────────────────────────────────── */
 main{padding:6px 18px calc(96px + var(--safe-bottom));}
@@ -162,12 +162,12 @@ main{padding:6px 18px calc(96px + var(--safe-bottom));}
 
 /* 히어로 — 박스 없이 배경 위에 바로 */
 .hero{padding:14px 2px 20px;}
-.hero-lbl{font-size:.9rem;color:var(--ink-mute);font-weight:600;}
+.hero-lbl{font-size:.95rem;color:var(--ink-mute);font-weight:600;}
 .hero-num{font-size:2.7rem;font-weight:800;letter-spacing:-2px;line-height:1.05;margin-top:5px;}
 .hero-num small{font-size:1.05rem;font-weight:700;letter-spacing:0;margin-left:3px;}
-.hero-sub{font-size:.9rem;color:var(--ink-mute);margin-top:8px;}
+.hero-sub{font-size:.95rem;color:var(--ink-mute);margin-top:8px;}
 .hero-inline{display:flex;gap:22px;margin-top:16px;}
-.hero-inline div{font-size:.9rem;color:var(--ink-mute);font-weight:600;}
+.hero-inline div{font-size:.95rem;color:var(--ink-mute);font-weight:600;}
 .hero-inline b{display:block;font-size:1.25rem;color:var(--ink);letter-spacing:-.5px;margin-top:2px;}
 
 /* 카드 = 행 묶음 (테두리 없이 아주 옅은 그림자만) */
@@ -196,7 +196,7 @@ main{padding:6px 18px calc(96px + var(--safe-bottom));}
 .checkin:active{transform:scale(.99);}
 .checkin.done{background:var(--green-soft);color:#16a34a;box-shadow:none;cursor:default;}
 .checkin-t{font-size:1.02rem;font-weight:700;}
-.checkin-s{font-size:.9rem;opacity:.85;margin-top:4px;}
+.checkin-s{font-size:.95rem;opacity:.85;margin-top:4px;}
 
 /* 진행바 */
 .bar{background:var(--line-soft);border-radius:6px;height:7px;overflow:hidden;margin-top:10px;}
@@ -206,9 +206,9 @@ main{padding:6px 18px calc(96px + var(--safe-bottom));}
 /* 주간 도트 */
 .week-row{display:flex;gap:7px;margin-top:13px;}
 .day{flex:1;text-align:center;}
-.day-lbl{font-size:.9rem;color:var(--ink-mute);margin-bottom:6px;}
+.day-lbl{font-size:.95rem;color:var(--ink-mute);margin-bottom:6px;}
 .day-dot{width:100%;aspect-ratio:1;max-width:36px;margin:0 auto;border-radius:12px;
-  display:flex;align-items:center;justify-content:center;font-size:.9rem;font-weight:700;
+  display:flex;align-items:center;justify-content:center;font-size:.95rem;font-weight:700;
   background:var(--line-soft);color:#c0c0d0;}
 .day-dot.ok{background:var(--green-soft);color:#16a34a;}
 .day-dot.late{background:var(--orange-soft);color:var(--orange);}
@@ -225,7 +225,7 @@ main{padding:6px 18px calc(96px + var(--safe-bottom));}
 .qi.g{background:var(--green-soft);color:#16a34a;} .qi.o{background:var(--orange-soft);color:var(--orange);}
 .qi.s{background:var(--sky-soft);color:var(--sky);} .qi.y{background:var(--gold-soft);color:var(--gold);}
 .qi.r{background:var(--rose-soft);color:var(--rose);}
-.ql{font-size:.9rem;font-weight:600;color:var(--ink-soft);}
+.ql{font-size:.95rem;font-weight:600;color:var(--ink-soft);}
 
 /* 알림 한 줄 (배너 박스 대신) */
 .notice{display:flex;align-items:center;gap:7px;padding:11px 2px;font-size:1rem;
@@ -240,7 +240,7 @@ main{padding:6px 18px calc(96px + var(--safe-bottom));}
   background:var(--ink);border-radius:22px;padding:5px;display:flex;gap:3px;z-index:500;
   box-shadow:0 8px 30px rgba(0,0,0,.25);}
 #proto button{background:none;border:none;color:rgba(255,255,255,.55);font-family:inherit;
-  font-size:.9rem;font-weight:600;padding:7px 14px;border-radius:18px;cursor:pointer;white-space:nowrap;}
+  font-size:.95rem;font-weight:600;padding:7px 14px;border-radius:18px;cursor:pointer;white-space:nowrap;}
 #proto button.on{background:rgba(255,255,255,.16);color:#fff;}
 
 /* ══ 태블릿 레이아웃 (2026-10-19, 상담일지 앱과 같은 기준) ══════════════════
@@ -292,7 +292,7 @@ body.wide .hero-num{font-size:3.2rem;}
 }
 body.wide .cal-d{min-height:96px !important;padding:8px 7px !important;}
 body.wide .cal-d > span{font-size:1rem !important;}
-body.wide .cal-d > div{font-size:.9rem !important;}
+body.wide .cal-d > div{font-size:.95rem !important;}
 body.wide .modal-box{max-width:480px;}
 /* 큰 모니터 확대(applyWideZoom) 중엔 vw·vh 가 배율만큼 한 번 더 커진다 → JS 가 넣는 실제 크기(--zvw/--zvh)로 바꿔 계산 */
 html.zoomed body{min-height:var(--zvh);}
@@ -308,7 +308,7 @@ html.zoomed body.wide #app .header{left:max(0px, calc((var(--zvw) - 1180px) / 2)
 .st-subj.on{background:var(--accent);border-color:var(--accent);color:#fff;}
 .st-subj:disabled:not(.on){opacity:.45;}
 .st-stop{margin-top:12px;background:var(--rose);}
-.st-row{display:grid;grid-template-columns:64px 1fr 76px;align-items:center;gap:10px;padding:6px 0;font-size:.9rem;}
+.st-row{display:grid;grid-template-columns:64px 1fr 76px;align-items:center;gap:10px;padding:6px 0;font-size:.95rem;}
 .st-row .bar{margin-top:0;} .st-row b{text-align:right;font-size:1rem;}
 .st-live{display:flex;align-items:center;gap:8px;padding:6px 0;}
 .st-dot{width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 0 0 rgba(34,197,94,.6);animation:stPulse 1.6s infinite;}
@@ -318,11 +318,11 @@ html.zoomed body.wide #app .header{left:max(0px, calc((var(--zvw) - 1180px) / 2)
 .st-no{width:30px;height:30px;flex:none;border-radius:50%;background:var(--line-soft);color:var(--ink-soft);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:1rem;}
 .st-no.top{background:var(--gold-soft);color:var(--gold);}
 .st-who{flex:1;min-width:0;} .st-who b{margin-right:6px;} .st-who .bar{margin-top:6px;height:5px;}
-.st-val{font-weight:800;font-size:.9rem;white-space:nowrap;}
+.st-val{font-weight:800;font-size:.95rem;white-space:nowrap;}
 .st-home{display:flex;align-items:center;gap:12px;cursor:pointer;} .st-home>div:first-child{flex:1;}
 .st-go{color:var(--accent);font-size:1rem;white-space:nowrap;}
 .st-tr{display:grid;grid-template-columns:1.2fr 1fr 1fr 1fr .8fr;gap:6px;padding:8px 0;border-bottom:1px solid var(--line-soft);font-size:1rem;align-items:center;}
-.st-tr span{text-align:right;} .st-th{font-weight:700;color:var(--ink-mute);font-size:.9rem;}
+.st-tr span{text-align:right;} .st-th{font-weight:700;color:var(--ink-mute);font-size:.95rem;}
 .st-toast{position:fixed;left:50%;bottom:calc(90px + env(safe-area-inset-bottom));transform:translateX(-50%);background:rgba(26,26,46,.92);color:#fff;
   padding:11px 18px;border-radius:12px;font-size:1rem;z-index:3000;max-width:88vw;text-align:center;transition:opacity .5s;}
 .st-toast.out{opacity:0;}
@@ -333,13 +333,13 @@ html.zoomed body.wide #app .header{left:max(0px, calc((var(--zvw) - 1180px) / 2)
 .aw-steady{background:linear-gradient(145deg,#7dd3fc,#0284c7);} .aw-growth{background:linear-gradient(145deg,#fda4af,#e11d48);}
 .aw-focus{background:linear-gradient(145deg,#c4b5fd,#7c3aed);} .aw-subj{background:linear-gradient(145deg,#fdba74,#ea580c);}
 .aw-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:8px;}
-.aw-card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:12px 6px;font-size:.9rem;text-align:center;display:flex;flex-direction:column;align-items:center;gap:3px;}
+.aw-card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:12px 6px;font-size:.95rem;text-align:center;display:flex;flex-direction:column;align-items:center;gap:3px;}
 .aw-card.me{border-color:var(--gold);background:var(--gold-soft);}
-.aw-t{font-size:.9rem;font-weight:700;color:var(--ink-mute);margin-top:6px;}
+.aw-t{font-size:.95rem;font-weight:700;color:var(--ink-mute);margin-top:6px;}
 .fame-row{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--line-soft);}
 .fame-row:last-child{border-bottom:none;} .fame-row>b{min-width:52px;}
 .fame-badges{flex:1;display:flex;flex-wrap:wrap;gap:4px;}
-.fame-badge{display:inline-flex;align-items:center;gap:2px;font-size:.9rem;font-weight:700;color:var(--ink-soft);} .fame-badge i{font-style:normal;}
+.fame-badge{display:inline-flex;align-items:center;gap:2px;font-size:.95rem;font-weight:700;color:var(--ink-soft);} .fame-badge i{font-style:normal;}
 .fame-recs{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
 .fame-rec{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px;}
 .fame-rec b{display:block;font-size:1.05rem;margin-top:4px;} .fame-v{font-weight:800;color:var(--accent);margin-top:2px;}
@@ -361,7 +361,7 @@ html.zoomed body.wide #app .header{left:max(0px, calc((var(--zvw) - 1180px) / 2)
 .sc-c.now{outline:2px solid var(--gold);outline-offset:-2px;}
 body.wide .sc-c{min-height:74px;} body.wide .sc-t{font-size:.78rem;}
 .wk-bars{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:6px;align-items:end;}
-.wk-b{text-align:center;} .wk-v{font-size:.9rem;font-weight:700;color:var(--ink-soft);height:16px;}
+.wk-b{text-align:center;} .wk-v{font-size:.95rem;font-weight:700;color:var(--ink-soft);height:16px;}
 .wk-col{height:110px;background:var(--line-soft);border-radius:8px;display:flex;align-items:flex-end;overflow:hidden;}
 .wk-col i{display:block;width:100%;background:var(--accent);border-radius:8px;}
 .aw-reveal{text-align:center;} .aw-reveal-t{font-size:1.35rem;font-weight:900;margin:6px 0 14px;}
@@ -371,9 +371,9 @@ body.wide .sc-c{min-height:74px;} body.wide .sc-t{font-size:.78rem;}
 .confetti{position:fixed;inset:0;width:100vw;height:100vh;pointer-events:none;z-index:4000;}
 
 /* 지역인재 영단어 진단 · 앱 소개 (2026-10-23) */
-.vt-intro{text-align:center;} .vt-badge{display:inline-block;background:var(--accent-soft);color:var(--accent);font-weight:800;font-size:.9rem;padding:4px 10px;border-radius:20px;}
+.vt-intro{text-align:center;} .vt-badge{display:inline-block;background:var(--accent-soft);color:var(--accent);font-weight:800;font-size:.95rem;padding:4px 10px;border-radius:20px;}
 .vt-title{font-size:1.5rem;font-weight:900;margin:8px 0 10px;}
-.vt-past{display:grid;grid-template-columns:90px 60px 1fr;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid var(--line-soft);font-size:.9rem;}
+.vt-past{display:grid;grid-template-columns:90px 60px 1fr;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid var(--line-soft);font-size:.95rem;}
 .vt-past:last-child{border-bottom:none;}
 .vt-top{display:flex;justify-content:space-between;align-items:center;}
 .vt-x{background:none;border:none;color:var(--ink-mute);font-size:1rem;padding:6px 0;cursor:pointer;}
@@ -385,12 +385,12 @@ body.wide .sc-c{min-height:74px;} body.wide .sc-t{font-size:.78rem;}
 .vt-gauge{position:relative;height:10px;background:var(--line-soft);border-radius:6px;margin:12px 0 4px;}
 .vt-gauge i{display:block;height:100%;background:var(--accent);border-radius:6px;}
 .vt-gauge b{position:absolute;top:-4px;width:2px;height:18px;background:var(--rose);}
-.vt-gl{display:flex;justify-content:space-between;font-size:.9rem;margin-bottom:10px;}
+.vt-gl{display:flex;justify-content:space-between;font-size:.95rem;margin-bottom:10px;}
 .vt-bars{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px;align-items:end;}
-.vt-bb{text-align:center;} .vt-bv{font-size:.9rem;font-weight:800;color:var(--ink-soft);height:16px;}
+.vt-bb{text-align:center;} .vt-bv{font-size:.95rem;font-weight:800;color:var(--ink-soft);height:16px;}
 .vt-bc{height:110px;background:var(--line-soft);border-radius:8px;display:flex;align-items:flex-end;overflow:hidden;}
 .vt-bc i{display:block;width:100%;background:var(--accent);border-radius:8px;} .vt-bc i.g{background:var(--green);} .vt-bc i.w{background:var(--orange);}
-.vt-bb .row-s{font-size:.9rem;margin-top:4px;}
+.vt-bb .row-s{font-size:.95rem;margin-top:4px;}
 .vt-wrong{display:grid;grid-template-columns:1fr 1fr;gap:6px 14px;}
 .vt-wrong div{display:flex;flex-direction:column;padding:6px 0;border-bottom:1px solid var(--line-soft);} .vt-wrong span{font-size:1rem;color:var(--ink-soft);}
 .vt-tr{grid-template-columns:1.1fr .9fr 1fr 1fr .6fr;}
@@ -1564,7 +1564,7 @@ async function renderAsCalendar(v){
   var html = '<div class="card pad" style="margin-top:10px"><div style="display:flex;align-items:center;justify-content:space-between">'+
     '<button class="btn btn-outline btn-sm" onclick="ascMonth(-1)">‹ 이전</button>'+
     '<div style="text-align:center"><b>'+y+'년 '+mo+'월</b>'+
-      '<div onclick="ascToday()" style="cursor:pointer;margin-top:3px;font-size:.9rem;font-weight:700;color:var(--accent)">오늘 '+(+today.slice(5,7))+'월 '+(+today.slice(8))+'일 ('+tWd+')'+
+      '<div onclick="ascToday()" style="cursor:pointer;margin-top:3px;font-size:.95rem;font-weight:700;color:var(--accent)">오늘 '+(+today.slice(5,7))+'월 '+(+today.slice(8))+'일 ('+tWd+')'+
       (isWeekend(today) ? ' · 주말' : '')+'</div></div>'+
     '<button class="btn btn-outline btn-sm" onclick="ascMonth(1)">다음 ›</button></div>'+
     '<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:4px;margin-top:12px">'+
@@ -1582,9 +1582,9 @@ async function renderAsCalendar(v){
     if (r.items.length > 3) chips += '<div style="font-size:.8rem;color:var(--ink-mute)">+'+(r.items.length-3)+'</div>';
     var isT = ds === today;
     html += '<div class="cal-d'+(isT?' today':'')+(ds===ASC.pick?' pick':'')+'" style="align-items:stretch;min-height:64px;background:'+(isT?'var(--accent-soft)':'var(--surface)')+';border-color:'+(isT?'var(--accent)':'var(--line-soft)')+'" onclick="ascPick(\''+ds+'\')">'+
-      (isT ? '<span style="display:flex;align-items:center;gap:3px"><span style="font-weight:800;font-size:.9rem;background:var(--accent);color:#fff;border-radius:999px;min-width:19px;height:19px;line-height:19px;text-align:center;padding:0 4px">'+d+'</span>'+
+      (isT ? '<span style="display:flex;align-items:center;gap:3px"><span style="font-weight:800;font-size:.95rem;background:var(--accent);color:#fff;border-radius:999px;min-width:19px;height:19px;line-height:19px;text-align:center;padding:0 4px">'+d+'</span>'+
                '<span style="font-size:.8rem;font-weight:800;color:var(--accent)">오늘</span></span>'
-           : '<span style="font-weight:700;font-size:.9rem">'+d+'</span>')+chips+'</div>';
+           : '<span style="font-weight:700;font-size:.95rem">'+d+'</span>')+chips+'</div>';
   }
   html += '</div></div>';
   if (teacher) html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px">'+
@@ -1788,12 +1788,12 @@ async function fillStudentQuick(){
   Object.keys(R.ov).forEach(function(ds){ if (R.ov[ds][m.name]) ctx.ov[ds] = R.ov[ds][m.name]; });
   var cs = {}; C.forEach(function(r){ if (r.name === m.name) cs[r.date] = r; });
   var att = function(ds){
-    if (isWeekend(ds)) return '<span style="color:var(--ink-mute);font-size:.9rem">주말</span>';
+    if (isWeekend(ds)) return '<span style="color:var(--ink-mute);font-size:.95rem">주말</span>';
     var s = attStatusOf(ds, ctx);
     if (s === '출석') return '<b style="color:#16a34a">✓</b>';
     if (s === '지각') return '<b style="color:var(--orange)">△</b>';
     if (s === '결석') return '<b style="color:var(--rose)">✗</b>';
-    if (s === '공결') return '<span style="color:var(--ink-soft);font-size:.9rem">공결</span>';
+    if (s === '공결') return '<span style="color:var(--ink-soft);font-size:.95rem">공결</span>';
     return '<span style="color:#c0c0d0">—</span>';
   };
   var plan = function(ds){
@@ -1804,7 +1804,7 @@ async function fillStudentQuick(){
   var cns = function(ds){ var r = cs[ds]; return r ? (r.done ? '<b style="color:#16a34a">✓</b>' : '<span style="color:var(--ink-mute)">○</span>') : '<span style="color:#c0c0d0">—</span>'; };
   var lastEx = E.exams.length ? E.exams[E.exams.length-1] : null;
   var html = '<div style="overflow-x:auto;margin-top:10px"><table class="tbl" style="table-layout:fixed"><thead><tr><th style="width:52px">항목</th>'+
-    dates.map(function(ds){ return '<th style="font-size:.9rem">'+(+ds.slice(5,7))+'/'+(+ds.slice(8))+'</th>'; }).join('')+'</tr></thead><tbody>'+
+    dates.map(function(ds){ return '<th style="font-size:.95rem">'+(+ds.slice(5,7))+'/'+(+ds.slice(8))+'</th>'; }).join('')+'</tr></thead><tbody>'+
     '<tr><td>출결</td>'+dates.map(function(ds){ return '<td>'+att(ds)+'</td>'; }).join('')+'</tr>'+
     '<tr><td>플래너</td>'+dates.map(function(ds){ return '<td>'+plan(ds)+'</td>'; }).join('')+'</tr>'+
     '<tr><td>상담</td>'+dates.map(function(ds){ return '<td>'+cns(ds)+'</td>'; }).join('')+'</tr></tbody></table></div>'+
@@ -1813,9 +1813,9 @@ async function fillStudentQuick(){
         '<div style="font-weight:800;font-size:1.05rem;color:'+(W.balance<0?'var(--rose)':'var(--ink)')+'">'+W.balance+'냥</div></div>'+
       '<div style="background:var(--line-soft);border-radius:10px;padding:10px;text-align:center"><div class="row-s">직전 모의고사</div>'+
         (lastEx ? (E.isG ? '<div style="font-weight:800;color:var(--accent)">NCS '+lastEx.korean+'점</div>'
-                         : '<div style="font-size:.9rem">국 '+lastEx.korean+' · 영 '+lastEx.english+' · 한 '+lastEx.history+'</div><div style="font-weight:800">합계 '+lastEx.total+'</div>')
+                         : '<div style="font-size:.95rem">국 '+lastEx.korean+' · 영 '+lastEx.english+' · 한 '+lastEx.history+'</div><div style="font-weight:800">합계 '+lastEx.total+'</div>')
                 : '<div class="row-s">미등록</div>')+'</div></div>'+
-    '<div style="display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;margin-top:8px;font-size:.9rem;color:var(--ink-mute)">'+
+    '<div style="display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;margin-top:8px;font-size:.95rem;color:var(--ink-mute)">'+
       [['#e5e7eb','미제출'],['#f43f5e','0%'],['#fb923c','~49%'],['#facc15','~99%'],['#22c55e','100%']].map(function(x){
         return '<span><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:'+x[0]+';margin-right:3px"></span>'+x[1]+'</span>'; }).join('')+'</div>'+
     (kstToday() < ATT_V2_FROM ? '<div class="row-s" style="margin-top:8px">※ 전환 전에는 구앱의 출결·플래너 기록이 여기에 보이지 않아요(구앱 시트에만 있음).</div>' : '');
@@ -1836,7 +1836,7 @@ async function openBulkGrant(){
   window.__presets = await coinPresets();
   showModal('<div class="modal-box"><div style="text-align:center;padding:4px 0 12px">'+
       '<div style="font-size:1.2rem;font-weight:800">'+names.length+'명 엽전 지급·차감</div>'+
-      '<div style="font-size:.9rem;color:var(--ink-mute);margin-top:6px;line-height:1.5">'+names.map(escapeHtml).join(', ')+'</div></div>'+
+      '<div style="font-size:.95rem;color:var(--ink-mute);margin-top:6px;line-height:1.5">'+names.map(escapeHtml).join(', ')+'</div></div>'+
     presetChips(window.__presets)+
     '<div class="field"><label>한 명당 수량 (뺄 때는 −)</label><input id="gAmt" type="number" inputmode="numeric" placeholder="예: 3 또는 -2"></div>'+
     '<div class="field"><label>사유</label><input id="gWhy" type="text" placeholder="예: 대청소 참여"></div>'+
@@ -1905,7 +1905,7 @@ async function renderOffDays(v){
     (groups.length ? groups.slice().reverse().map(function(g, i){
       var n = g.days.length, past = g.to < today;
       return '<div class="row" style="cursor:default"><div class="row-main"><div class="row-t">'+(g.from===g.to ? g.from : g.from+' ~ '+g.to)+
-        ' <span style="font-weight:500;color:var(--ink-mute);font-size:.9rem">평일 '+n+'일</span></div>'+
+        ' <span style="font-weight:500;color:var(--ink-mute);font-size:.95rem">평일 '+n+'일</span></div>'+
         '<div class="row-s">'+escapeHtml(g.reason)+(past?' · 지난 기간':'')+'</div></div>'+
         '<button class="btn btn-outline btn-sm" style="color:var(--rose)" onclick="clearOffRange(\''+g.days.join(',')+'\')">해제</button></div>';
     }).join('') : '<div class="blk"><div class="row-s">아직 없어요 — 나이스 학사일정의 휴업일은 따로 지정하지 않아도 빠집니다</div></div>')+'</div>';
@@ -2013,7 +2013,7 @@ async function openWeeklyReport(){
     (noCounsel.length ? '이번 주 상담 없음: '+noCounsel.map(function(r){ return r.m.name; }).join(', ') : '');
   window.__wrText = text;
   var stat = function(v, l, col){ return '<div style="flex:1;text-align:center;background:var(--line-soft);border-radius:10px;padding:10px 2px">'+
-    '<div style="font-size:1.2rem;font-weight:800;color:'+(col||'var(--ink)')+'">'+v+'</div><div style="font-size:.9rem;color:var(--ink-mute)">'+l+'</div></div>'; };
+    '<div style="font-size:1.2rem;font-weight:800;color:'+(col||'var(--ink)')+'">'+v+'</div><div style="font-size:.95rem;color:var(--ink-mute)">'+l+'</div></div>'; };
   showModal('<div class="modal-box" style="max-width:420px">'+
     '<div style="display:flex;align-items:center;justify-content:space-between"><button class="btn btn-outline btn-sm" onclick="wrMove(-1)">‹</button>'+
       '<div style="text-align:center"><div style="font-weight:800;font-size:1.05rem">주간 리포트</div><div class="row-s">'+title+(WR_OFF===0?' (이번 주)':'')+'</div></div>'+
@@ -2225,7 +2225,7 @@ async function renderPlannerTeacher(v){
   var got = await Promise.all([ FS.members(), soft(FS.plannersOn(PLD), {}), soft(FS.plannersSince(from), {}) ]);
   var mem = got[0], day = got[1], rng = got[2];
   var sub = mem.filter(function(m){ return day[m.name]; }).length;
-  var html = '<div class="card pad" style="margin-top:10px"><label style="display:block;font-size:.9rem;font-weight:600;color:var(--ink-soft);margin-bottom:6px">날짜</label>'+
+  var html = '<div class="card pad" style="margin-top:10px"><label style="display:block;font-size:.95rem;font-weight:600;color:var(--ink-soft);margin-bottom:6px">날짜</label>'+
     '<input type="date" value="'+PLD+'" onchange="PLD=this.value;renderView()"></div>'+
     '<div class="sec-label">제출 '+sub+' / '+mem.length+'명</div><div class="card">'+
     mem.map(function(m){ var p = day[m.name], tasks = [];
@@ -2883,7 +2883,7 @@ function viewGrowth(d){
   var a = d.avg[cur.name];
   var chip = function(label, val, color, big){
     return '<div style="flex:1;min-width:0;text-align:center;padding:8px 2px;border-radius:10px;background:'+(big?'var(--ink)':'var(--line-soft)')+'">'+
-      '<div style="font-size:.9rem;font-weight:600;color:'+(big?'rgba(255,255,255,.7)':'var(--ink-mute)')+'">'+
+      '<div style="font-size:.95rem;font-weight:600;color:'+(big?'rgba(255,255,255,.7)':'var(--ink-mute)')+'">'+
         '<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:'+color+';margin-right:4px;vertical-align:middle"></span>'+label+'</div>'+
       '<div style="font-size:1.05rem;font-weight:800;margin-top:2px;color:'+(big?'#fff':'var(--ink)')+'">'+val+'</div></div>';
   };
@@ -2897,13 +2897,13 @@ function viewGrowth(d){
              : chip('총점', cur.total, '#fff', true)+chip('국어', cur.korean, '#5b6af0')+chip('영어', cur.english, '#16a34a')+chip('한국사', cur.history, '#f97316'))+
     '</div>'+
     '<div style="margin-top:12px">'+lineChartSVG(labels, series, !d.isG && S.total, sel)+'</div>'+
-    '<div style="text-align:center;font-size:.9rem;color:var(--ink-mute);margin-top:4px">그래프를 누르면 그 시험 점수가 위에 보여요</div></div>';
+    '<div style="text-align:center;font-size:.95rem;color:var(--ink-mute);margin-top:4px">그래프를 누르면 그 시험 점수가 위에 보여요</div></div>';
   // 숫자 표 — 전체를 한눈에
   html += '<div class="sec-label">시험별 점수</div><div class="card pad" style="overflow-x:auto"><table class="tbl"><thead><tr><th>시험</th>'+
     (d.isG ? '<th>NCS</th>' : '<th>국</th><th>영</th><th>한</th><th>총점</th>')+'</tr></thead><tbody>'+
     d.exams.map(function(e, i){ return { e:e, i:i }; }).reverse().map(function(x){ var e = x.e;
       return '<tr onclick="growthSel('+x.i+')" style="cursor:pointer;'+(x.i===sel?'background:var(--accent-soft)':'')+'"><td>'+escapeHtml(e.name)+
-        '<div style="font-size:.9rem;color:var(--ink-mute)">'+e.date+'</div></td>'+
+        '<div style="font-size:.95rem;color:var(--ink-mute)">'+e.date+'</div></td>'+
         (d.isG ? '<td><b>'+e.korean+'</b></td>'
                : '<td>'+e.korean+'</td><td>'+e.english+'</td><td>'+e.history+'</td><td><b>'+e.total+'</b></td>')+'</tr>';
     }).join('')+'</tbody></table></div>';
@@ -2927,14 +2927,14 @@ function viewCompare(d){
     html += '<div style="'+(i?'margin-top:18px':'')+'">'+
       '<div style="display:flex;justify-content:space-between;align-items:baseline;font-size:1rem">'+
         '<b>'+s.label+'</b>'+
-        '<span style="color:var(--ink-mute);font-size:.9rem">내 점수 <b style="color:var(--ink)">'+s.me+'</b>'+
+        '<span style="color:var(--ink-mute);font-size:.95rem">내 점수 <b style="color:var(--ink)">'+s.me+'</b>'+
         (s.avg!==null ? ' · 반평균 '+s.avg+' <b style="color:'+diffColor(df)+'">('+diffTxt(df)+')</b>' : ' · 반평균 없음')+'</span></div>'+
       '<div style="position:relative;height:10px;background:var(--line-soft);border-radius:6px;margin-top:8px">'+
         '<div style="width:'+pct+'%;height:100%;background:var(--accent);border-radius:6px"></div>'+
         (apct!==null ? '<div style="position:absolute;top:-4px;bottom:-4px;left:'+apct+'%;width:3px;background:var(--orange);border-radius:2px;transform:translateX(-50%)"></div>' : '')+
       '</div></div>';
   });
-  html += '<div style="font-size:.9rem;color:var(--ink-mute);margin-top:14px"><span style="display:inline-block;width:10px;height:8px;background:var(--accent);border-radius:2px"></span> 내 점수 &nbsp; '+
+  html += '<div style="font-size:.95rem;color:var(--ink-mute);margin-top:14px"><span style="display:inline-block;width:10px;height:8px;background:var(--accent);border-radius:2px"></span> 내 점수 &nbsp; '+
           '<span style="display:inline-block;width:3px;height:10px;background:var(--orange);vertical-align:middle"></span> 반평균</div></div>';
   var avgN = Object.keys(d.avg).length;
   if (d.exams.length > 1 && avgN){
@@ -2970,7 +2970,7 @@ async function viewLegacy(d){
       pick = L.examNames.filter(function(n){ return normEx(n) === latest; })[0] || '';
     }
   }
-  html += '<div class="card pad" style="margin-top:10px"><label style="display:block;font-size:.9rem;font-weight:600;color:var(--ink-soft);margin-bottom:6px">시험</label>'+
+  html += '<div class="card pad" style="margin-top:10px"><label style="display:block;font-size:.95rem;font-weight:600;color:var(--ink-soft);margin-bottom:6px">시험</label>'+
     '<select onchange="legPick(\''+escapeHtml(d.name)+'\', this.value)"><option value="">— 시험을 고르세요 —</option>'+
     L.examNames.map(function(n){ return '<option'+(n===pick?' selected':'')+'>'+escapeHtml(n)+'</option>'; }).join('')+
     '</select></div>';
@@ -3003,14 +3003,14 @@ function legacyDist(d, dist, me){
       top = '<span class="chip" style="margin-left:6px">상위 '+(100-Math.round(below/x.allScores.length*100))+'%</span>';
     }
     html += '<div style="'+(i?'margin-top:22px':'')+'">'+
-      '<div style="display:flex;justify-content:space-between;align-items:center"><b style="font-size:.9rem">'+s.label+'</b>'+
-        '<span style="font-size:.9rem;color:var(--ink-mute)">역대 '+x.count+'명</span></div>'+
-      '<div style="font-size:.9rem;margin-top:4px">내 점수 <b>'+(s.my!==null?s.my:'-')+'</b>'+
+      '<div style="display:flex;justify-content:space-between;align-items:center"><b style="font-size:.95rem">'+s.label+'</b>'+
+        '<span style="font-size:.95rem;color:var(--ink-mute)">역대 '+x.count+'명</span></div>'+
+      '<div style="font-size:.95rem;margin-top:4px">내 점수 <b>'+(s.my!==null?s.my:'-')+'</b>'+
         (df!==null?' <span style="color:'+diffColor(df)+'">(역대평균 '+diffTxt(df)+')</span>':'')+top+'</div>'+
       (x.passAvg!==null
-        ? '<div style="font-size:.9rem;color:var(--sky);margin-top:2px">합격자 평균 <b>'+x.passAvg+'</b>'+
+        ? '<div style="font-size:.95rem;color:var(--sky);margin-top:2px">합격자 평균 <b>'+x.passAvg+'</b>'+
           (pd!==null?' <span style="color:'+diffColor(pd)+'">('+diffTxt(pd)+')</span>':'')+' · '+x.passCount+'명 합격</div>'
-        : '<div style="font-size:.9rem;color:var(--ink-mute);margin-top:2px">합격자 데이터 없음</div>')+
+        : '<div style="font-size:.95rem;color:var(--ink-mute);margin-top:2px">합격자 데이터 없음</div>')+
       '<div style="position:relative;height:24px;background:var(--line-soft);border-radius:6px;margin-top:8px">'+
         '<div style="position:absolute;left:'+P(x.min)+'%;width:'+(P(x.max)-P(x.min))+'%;height:100%;background:#d9dcfb;border-radius:6px"></div>'+
         '<div style="position:absolute;left:'+P(x.avg)+'%;top:0;bottom:0;width:3px;background:#1a1a2e;transform:translateX(-50%)"></div>'+
@@ -3019,10 +3019,10 @@ function legacyDist(d, dist, me){
         (s.my!==null ? '<div style="position:absolute;left:'+P(s.my)+'%;top:50%;width:16px;height:16px;border-radius:50%;background:var(--orange);'+
           'border:3px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.25);transform:translate(-50%,-50%)"></div>' : '')+
       '</div>'+
-      '<div style="display:flex;justify-content:space-between;font-size:.9rem;color:var(--ink-mute);margin-top:4px">'+
+      '<div style="display:flex;justify-content:space-between;font-size:.95rem;color:var(--ink-mute);margin-top:4px">'+
         '<span>최저 '+x.min+'</span><b style="color:var(--ink)">역대평균 '+x.avg+'</b><span>최고 '+x.max+'</span></div></div>';
   });
-  html += '<div style="font-size:.9rem;color:var(--ink-mute);margin-top:16px;line-height:1.8">'+
+  html += '<div style="font-size:.95rem;color:var(--ink-mute);margin-top:16px;line-height:1.8">'+
     '<span style="display:inline-block;width:14px;height:8px;background:#d9dcfb;border-radius:2px"></span> 역대 범위 &nbsp; '+
     '<span style="display:inline-block;width:3px;height:10px;background:#1a1a2e;vertical-align:middle"></span> 역대 평균 &nbsp; '+
     '<span style="display:inline-block;width:3px;height:10px;background:var(--sky);vertical-align:middle"></span> 합격자 평균 &nbsp; '+
@@ -3085,7 +3085,7 @@ function examAn(k){ EXAM_T.an = k; renderView(); }
 async function renderExamManage(v){
   v.innerHTML='<div class="empty"><span>불러오는 중…</span></div>';
   var mem = await FS.members();
-  var head = '<div class="card pad" style="margin-bottom:6px"><label style="display:block;font-size:.9rem;font-weight:600;color:var(--ink-soft);margin-bottom:6px">보기</label>'+
+  var head = '<div class="card pad" style="margin-bottom:6px"><label style="display:block;font-size:.95rem;font-weight:600;color:var(--ink-soft);margin-bottom:6px">보기</label>'+
     '<select onchange="examWho(this.value)"><option value="">📋 시험별 순위</option>'+
     mem.map(function(m){ return '<option value="'+escapeHtml(m.name)+'"'+(m.name===EXAM_T.who?' selected':'')+'>'+
       escapeHtml(m.name)+' ('+m.track+')</option>'; }).join('')+'</select></div>';
@@ -3261,7 +3261,7 @@ function counselDaily(mem, recs){
   var rows = mem.map(function(m){ return { m:m, r:day[m.name] }; })
                 .sort(function(a,b){ return (a.r&&a.r.done?1:0) - (b.r&&b.r.done?1:0); });
   var done = rows.filter(function(x){ return x.r && x.r.done; }).length;
-  return '<div class="card pad" style="margin-top:10px"><label style="display:block;font-size:.9rem;font-weight:600;color:var(--ink-soft);margin-bottom:6px">날짜</label>'+
+  return '<div class="card pad" style="margin-top:10px"><label style="display:block;font-size:.95rem;font-weight:600;color:var(--ink-soft);margin-bottom:6px">날짜</label>'+
     '<input type="date" value="'+CS.date+'" onchange="csDate(this.value)" style="width:100%;padding:12px 14px;border:1.5px solid var(--line);border-radius:8px"></div>'+
     '<div class="sec-label">전체 '+mem.length+'명 · 완료 <span style="color:#16a34a">'+done+'</span> · 미완료 '+(mem.length-done)+'</div><div class="card">'+
     rows.map(function(x){
@@ -3289,7 +3289,7 @@ function counselList(mem, recs){
       var warn = (days === null || days > 30);
       return '<div class="row" style="cursor:pointer" onclick="csToCal(\''+escapeHtml(m.name)+'\')">'+
         '<div class="avatar">'+m.name.charAt(0)+'</div><div class="row-main"><div class="row-t">'+escapeHtml(m.name)+
-        ' <span style="font-weight:500;color:var(--ink-mute);font-size:.9rem">'+m.track+'반</span></div>'+
+        ' <span style="font-weight:500;color:var(--ink-mute);font-size:.95rem">'+m.track+'반</span></div>'+
         '<div class="row-s" style="'+(warn?'color:var(--rose)':'')+'">'+(r ? '최근 '+r.date+' · '+days+'일 전' : '상담 기록 없음')+'</div>'+
         (c.t ? '<div class="bar" style="margin-top:6px"><i style="width:'+Math.round(c.d/c.t*100)+'%;background:'+(c.d===c.t?'var(--green)':'var(--orange)')+'"></i></div>' : '')+
         '</div><span class="row-v" style="font-size:1rem;color:'+(c.t?'var(--ink)':'var(--ink-mute)')+'">'+(c.t ? c.d+'/'+c.t+'건' : '없음')+'</span></div>';
@@ -3300,7 +3300,7 @@ function counselList(mem, recs){
 async function counselCal(mem, recs){
   var ym = CS.ym, y = +ym.slice(0,4), mo = +ym.slice(5);
   var first = dowOf(ym+'-01'), last = new Date(Date.UTC(y, mo, 0)).getUTCDate(), today = kstToday();
-  var head = '<div class="card pad" style="margin-top:10px"><label style="display:block;font-size:.9rem;font-weight:600;color:var(--ink-soft);margin-bottom:6px">학생</label>'+
+  var head = '<div class="card pad" style="margin-top:10px"><label style="display:block;font-size:.95rem;font-weight:600;color:var(--ink-soft);margin-bottom:6px">학생</label>'+
     '<select onchange="csWho(this.value)"><option value="">— 학생을 고르세요 —</option><option value="__all__"'+(CS.who==='__all__'?' selected':'')+'>👥 학생 전체</option>'+
     mem.map(function(m){ return '<option value="'+escapeHtml(m.name)+'"'+(m.name===CS.who?' selected':'')+'>'+escapeHtml(m.name)+'</option>'; }).join('')+
     '</select><div style="display:flex;align-items:center;justify-content:space-between;margin-top:14px">'+
@@ -3336,7 +3336,7 @@ async function counselCal(mem, recs){
       (!all && st==='지각' ? '<span class="cal-n" style="color:var(--orange)">지각</span>' : '')+
       (!all && st==='결석' ? '<span class="cal-n" style="color:var(--rose)">결석</span>' : '')+'</div>';
   }
-  html += '</div><div style="display:flex;flex-wrap:wrap;gap:10px;margin-top:12px;font-size:.9rem;color:var(--ink-mute)">'+
+  html += '</div><div style="display:flex;flex-wrap:wrap;gap:10px;margin-top:12px;font-size:.95rem;color:var(--ink-mute)">'+
     '<span><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:var(--green-soft)"></span> 상담완료</span>'+
     '<span><span style="display:inline-block;width:10px;height:10px;border-radius:3px;border:2px solid var(--accent)"></span> 오늘</span>'+
     (all ? '' : '<span><span style="display:inline-block;width:10px;height:10px;border-radius:3px;border:2px solid var(--orange)"></span> 지각</span>'+
@@ -3404,7 +3404,7 @@ async function counselStats(mem, recs){
     [[yd.length,'총 상담'],[Object.keys(stu).filter(function(n){ return stu[n]; }).length,'상담 학생'],
      [yd.filter(function(r){ return r.date.slice(0,7) === tm; }).length,'이번 달']].map(function(x){
       return '<div class="card pad" style="text-align:center;padding:14px 6px"><div style="font-size:1.5rem;font-weight:800">'+x[0]+'</div>'+
-        '<div style="font-size:.9rem;color:var(--ink-mute);margin-top:2px">'+x[1]+'</div></div>'; }).join('')+'</div>';
+        '<div style="font-size:.95rem;color:var(--ink-mute);margin-top:2px">'+x[1]+'</div></div>'; }).join('')+'</div>';
 
   // 월별 막대
   var mx = Math.max.apply(null, monthly.concat([1])), W=340, H=150, PL=8, PB=20, bw=(W-PL*2)/12;
@@ -3423,7 +3423,7 @@ async function counselStats(mem, recs){
     if (!items.length) return '<div class="blk"><div class="row-s">'+(why || '데이터가 없어요')+'</div></div>';
     return items.map(function(s, i){
       return '<div class="row" style="cursor:default"><div class="avatar" style="'+(i<3?'background:var(--gold-soft);color:var(--gold)':'')+'">'+(i+1)+'</div>'+
-        '<div class="row-main"><div class="row-t">'+escapeHtml(s.name)+' <span style="font-weight:500;color:var(--ink-mute);font-size:.9rem">'+(s.sub||'')+'</span></div>'+
+        '<div class="row-main"><div class="row-t">'+escapeHtml(s.name)+' <span style="font-weight:500;color:var(--ink-mute);font-size:.95rem">'+(s.sub||'')+'</span></div>'+
         '<div class="bar" style="margin-top:6px"><i style="width:'+s.pct+'%;background:'+s.color+'"></i></div></div>'+
         '<span class="row-v" style="font-size:1rem;color:'+s.color+'">'+s.main+'</span></div>';
     }).join('');
@@ -4120,7 +4120,7 @@ async function renderExamTeacher(v){
   var e = examCache[examPick];
 
   var html='<div class="card pad" style="margin-bottom:14px">'+
-    '<label style="display:block;font-size:.9rem;font-weight:600;color:var(--ink-soft);margin-bottom:6px">시험</label>'+
+    '<label style="display:block;font-size:.95rem;font-weight:600;color:var(--ink-soft);margin-bottom:6px">시험</label>'+
     '<select onchange="examPick=+this.value;renderView()" '+
       'style="width:100%;padding:12px 14px;border:1.5px solid var(--line);border-radius:8px">'+
     examCache.map(function(x,i){
@@ -4486,7 +4486,7 @@ async function renderAmTeacher(v){
   await loadCalendar();
 
   var head='<div class="card pad" style="margin-bottom:14px">'+
-    '<label style="display:block;font-size:.9rem;font-weight:600;color:var(--ink-soft);margin-bottom:6px">날짜</label>'+
+    '<label style="display:block;font-size:.95rem;font-weight:600;color:var(--ink-soft);margin-bottom:6px">날짜</label>'+
     '<input type="date" value="'+amDate+'" onchange="amDate=this.value;renderView()" '+
     'style="width:100%;padding:12px 14px;border:1.5px solid var(--line);border-radius:8px"></div>';
 
@@ -5224,7 +5224,7 @@ async function openStreakModal(){
   if (earned.length)
     html += '<div class="sec-label" style="margin:14px 2px 8px">달성한 배지</div>'+
       '<div style="display:flex;gap:8px;flex-wrap:wrap">'+earned.map(function(m){
-        return '<span class="chip chip-gold" style="padding:6px 12px;font-size:.9rem">🏅 '+m+'일</span>';
+        return '<span class="chip chip-gold" style="padding:6px 12px;font-size:.95rem">🏅 '+m+'일</span>';
       }).join('')+'</div>';
 
   html += '<button class="btn btn-outline" style="margin-top:16px" onclick="closeModal()">닫기</button></div>';
@@ -5306,7 +5306,7 @@ function confirmTyped(msg, word){
     closeConfirmLayer();
     var el = document.createElement('div');
     el.className = 'modal-overlay'; el.id = 'modal2'; el.style.zIndex = 9995;
-    el.innerHTML = '<div class="modal-box"><div style="font-size:.9rem;line-height:1.65;white-space:pre-wrap">'+escapeHtml(msg)+'</div>'+
+    el.innerHTML = '<div class="modal-box"><div style="font-size:.95rem;line-height:1.65;white-space:pre-wrap">'+escapeHtml(msg)+'</div>'+
       '<div class="field" style="margin-top:14px"><label>계속하려면 "'+escapeHtml(word)+'"라고 입력해 주세요</label>'+
       '<input id="ctIn" type="text" autocomplete="off" autocapitalize="none" placeholder="'+escapeHtml(word)+'"></div>'+
       '<div id="ctErr" class="login-err hidden"></div>'+
@@ -5461,7 +5461,7 @@ async function renderAfterSchool(v){
     else                      await renderAsTeacher(v);
   }catch(e){
     v.innerHTML='<div class="empty"><div class="empty-ico">'+ic('warn',40)+'</div>'+
-      '<span>불러오지 못했습니다<br><span style="font-size:.9rem">'+String(e.message||e)+'</span></span></div>';
+      '<span>불러오지 못했습니다<br><span style="font-size:.95rem">'+String(e.message||e)+'</span></span></div>';
   }
   fillIcoSlots(v);
 }
@@ -5511,7 +5511,7 @@ async function renderAsTeacher(v){
   var classes=classesOn(sched,asDate);
 
   var html='<div class="card pad" style="margin-bottom:14px">'+
-    '<label style="display:block;font-size:.9rem;font-weight:600;color:var(--ink-soft);margin-bottom:6px">날짜</label>'+
+    '<label style="display:block;font-size:.95rem;font-weight:600;color:var(--ink-soft);margin-bottom:6px">날짜</label>'+
     '<input type="date" value="'+asDate+'" onchange="asDate=this.value;renderView()" '+
     'style="width:100%;padding:12px 14px;border:1.5px solid var(--line);border-radius:8px"></div>';
 
