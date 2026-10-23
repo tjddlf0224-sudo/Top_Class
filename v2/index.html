@@ -1582,8 +1582,8 @@ async function renderAsCalendar(v){
     if (r.items.length > 3) chips += '<div style="font-size:.8rem;color:var(--ink-mute)">+'+(r.items.length-3)+'</div>';
     var isT = ds === today;
     html += '<div class="cal-d'+(isT?' today':'')+(ds===ASC.pick?' pick':'')+'" style="align-items:stretch;min-height:64px;background:'+(isT?'var(--accent-soft)':'var(--surface)')+';border-color:'+(isT?'var(--accent)':'var(--line-soft)')+'" onclick="ascPick(\''+ds+'\')">'+
-      (isT ? '<span style="display:flex;align-items:center;gap:3px"><span style="font-weight:800;font-size:.95rem;background:var(--accent);color:#fff;border-radius:999px;min-width:19px;height:19px;line-height:19px;text-align:center;padding:0 4px">'+d+'</span>'+
-               '<span style="font-size:.8rem;font-weight:800;color:var(--accent)">오늘</span></span>'
+      (isT ? '<span style="display:flex;align-items:center;gap:3px"><span style="font-weight:800;font-size:.95rem;background:var(--accent);color:#fff;border-radius:999px;min-width:24px;height:24px;line-height:24px;text-align:center;padding:0 5px">'+d+'</span>'+
+               '</span>'   /* '오늘' 글자는 좁은 폰에서 세로로 쪼개져 뺐다 — 파란 동그라미·테두리로 표시(10/23 S9) */
            : '<span style="font-weight:700;font-size:.95rem">'+d+'</span>')+chips+'</div>';
   }
   html += '</div></div>';
