@@ -69,7 +69,7 @@ input,select,textarea{font-family:inherit;font-size:16px;}
 .login-sub{font-size:1rem;color:var(--ink-mute);margin-top:6px;}
 .field{margin-bottom:10px;min-width:0;}
 .field label{display:block;font-size:.95rem;font-weight:600;color:var(--ink-soft);margin-bottom:6px;}
-input[type=text],input[type=tel],input[type=password],input[type=date],input[type=time],input[type=number],select,textarea{width:100%;padding:13px 14px;border:1.5px solid var(--line);
+input[type=text],input[type=email],input[type=tel],input[type=password],input[type=date],input[type=time],input[type=number],select,textarea{width:100%;padding:13px 14px;border:1.5px solid var(--line);
   border-radius:var(--radius-sm);color:var(--ink);background:var(--surface);outline:none;
   transition:border-color .15s,box-shadow .15s;-webkit-appearance:none;appearance:none;}
 input:focus,select:focus,textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(91,106,240,.1);}
@@ -465,18 +465,18 @@ body.wide .big-txt .sc-c{min-height:86px;} body.wide .big-txt .sc-t{font-size:1r
   <button class="btn btn-outline" id="tOpen" onclick="showTeacherLogin()">
     <span class="ico-slot" data-ico="person" data-sz="17"></span>교사 로그인
   </button>
-  <div id="tLogin" class="hidden">
+  <!-- <form> 으로 묶어야 크롬·사파리·iCloud 키체인이 비밀번호 저장·자동 입력을 제안한다(10/23 성일님 "아이디, 비번 자꾸 까먹어서") -->
+  <form id="tLogin" class="hidden" autocomplete="on" onsubmit="event.preventDefault();teacherLogin()">
     <div class="field"><label>이메일</label>
-      <input id="tEmail" type="email" autocomplete="username" placeholder="이메일 주소"
+      <input id="tEmail" name="email" type="email" autocomplete="username" placeholder="이메일 주소"
              autocapitalize="none" autocorrect="off" spellcheck="false" inputmode="email"
-             onkeydown="if(event.key==='Enter')document.getElementById('tPw').focus()"></div>
+             onkeydown="if(event.key==='Enter'){event.preventDefault();document.getElementById('tPw').focus();}"></div>
     <div class="field"><label>비밀번호</label>
-      <input id="tPw" type="password" autocomplete="current-password" placeholder="비밀번호"
-             onkeydown="if(event.key==='Enter')teacherLogin()"></div>
+      <input id="tPw" name="password" type="password" autocomplete="current-password" placeholder="비밀번호"></div>
     <div id="tErr" class="login-err hidden"></div>
-    <button class="btn" id="tGo" onclick="teacherLogin()">로그인</button>
-    <button class="btn btn-outline" onclick="hideTeacherLogin()">취소</button>
-  </div>
+    <button class="btn" id="tGo" type="submit">로그인</button>
+    <button class="btn btn-outline" type="button" onclick="hideTeacherLogin()">취소</button>
+  </form>
   <div class="login-links"><button onclick="openDoc('privacy.html','개인정보 처리방침')">개인정보 처리방침</button><span>·</span><button onclick="openDoc('support.html','문의·도움말')">문의·도움말</button></div>
 </div>
 
@@ -6704,8 +6704,9 @@ async function teacherLogin(){
     await AUTH.signInTeacher(email,pw);
     if (window.FS && FS.__clear) FS.__clear();   // 교사로 바뀌면 볼 수 있는 자료가 늘어난다
     await loadAppConfig();
-    document.getElementById('tPw').value='';
     enterApp('teacher');
+    // 비밀번호 칸은 조금 뒤에 비운다 — 브라우저가 '비밀번호 저장'을 띄울 때 값을 읽어 가야 한다
+    setTimeout(function(){ document.getElementById('tPw').value=''; }, 1500);
   }catch(e){
     tShowErr(tAuthMsg(e));
   }finally{
