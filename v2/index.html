@@ -1,6 +1,14 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
+<script>
+  /* 다시 열 때 로그인 화면이 2~3초 보이지 않게(10/23 S9 계측: 인증 복원+명부 확인에 2.2~3.5초) —
+     지난번 입실 자료가 있으면 로그인 화면을 처음부터 숨기고, 자료로 홈을 바로 띄운다(autoLogin). */
+  try { if (localStorage.getItem('tc_student') && localStorage.getItem('tc_me_snap')) document.documentElement.classList.add('resume'); } catch(e){}
+  // 안전장치: 무슨 일로 홈이 안 뜨면 6초 뒤 로그인 화면을 다시 보인다
+  setTimeout(function(){ var a = document.getElementById('app'); if (a && a.classList.contains('hidden')) document.documentElement.classList.remove('resume'); }, 6000);
+</script>
+<style>html.resume #login{visibility:hidden;}</style>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1,user-scalable=no">
 <title>장원급제반</title>
@@ -5166,6 +5174,7 @@ async function refreshStreakChip(){
   if (!el || ROLE !== 'student' || !ME.name) return;
   try {
     var s = await loadStreak();
+    patchMeSnap({ streak: { n:s.streak, risk:!!s.atRisk } });
     if (!s.streak){ el.style.display = 'none'; return; }
     el.style.display = '';
     el.className = 'chip ' + (s.atRisk ? 'chip-risk' : 'chip-gold');
@@ -6369,7 +6378,8 @@ function logout(){
   document.getElementById('app').classList.add('hidden');
   document.getElementById('login').classList.remove('hidden');
   hideTeacherLogin();
-  try{ localStorage.removeItem(SKEY); }catch(e){}   // 다음엔 다시 학번을 묻는다
+  try{ localStorage.removeItem(SKEY); localStorage.removeItem(SNAP_KEY); }catch(e){}   // 다음엔 다시 학번을 묻는다
+  unresume();
   var pf=document.getElementById('sPin'); if(pf) pf.value='';
   disableNotis();                                   // 남의 기기에 알림이 남지 않게
   if (ST) stStop(Date.now(), 'quiet');
@@ -6404,7 +6414,27 @@ async function applyStudent(m){
   streakCache = null;                 // 다른 학생으로 바뀌었을 수 있다
   scheduleLocalNotis();               // 앞으로 3주치 알림을 다시 깐다(앱에서만)
   stRecover();                        // 꺼지기 전에 돌던 공부 타이머가 있으면 마저 저장
+  saveMeSnap();
 }
+
+/* ═══ 빠른 다시 열기 ═══════════════════════════════════
+   지난번 홈에 보였던 값(엽전·이번 주 출결·플래너·오늘 등교)을 기기에 적어 두고,
+   다음에 열 때 그 값으로 홈을 먼저 띄운 뒤 뒤에서 서버로 확인·새로 고친다.
+   명부에서 빠졌거나 이름이 바뀌었으면 그때 로그인 화면으로 돌아간다. */
+var SNAP_KEY = 'tc_me_snap';
+function saveMeSnap(){
+  if (DEMO_MODE || !ME.id) return;
+  try { localStorage.setItem(SNAP_KEY, JSON.stringify({ v:1, id:ME.id, name:ME.name, track:ME.track, coins:ME.coins, dorm:ME.dorm,
+    week:ME.week, planner:ME.planner, am:amToday, off:CAL_OFF, streak:(readMeSnapRaw()||{}).streak || null, date:kstToday() })); } catch(e){}
+}
+function readMeSnapRaw(){ try { return JSON.parse(localStorage.getItem(SNAP_KEY)||'null'); } catch(e){ return null; } }
+/** 연속 출석 칩 값만 고쳐 적는다(계산이 끝났을 때) */
+function patchMeSnap(o){ var x = readMeSnapRaw(); if (!x || DEMO_MODE) return; Object.assign(x, o); try { localStorage.setItem(SNAP_KEY, JSON.stringify(x)); } catch(e){} }
+function readMeSnap(saved){
+  try { var x = JSON.parse(localStorage.getItem(SNAP_KEY)||'null');
+    return (x && x.v === 1 && x.id === saved.id && x.name === saved.name) ? x : null; } catch(e){ return null; }
+}
+function unresume(){ document.documentElement.classList.remove('resume'); }
 
 async function studentLogin(){
   var btn=document.getElementById('sGo');
@@ -6483,7 +6513,35 @@ async function tryBind(m, pin){
    앱을 다시 켤 때 첫 화면 없이 바로 교사 화면으로 들어간다(로그인 상태는 Firebase가 기기에 보관). */
 async function autoLogin(){
   var saved; try{ saved=JSON.parse(localStorage.getItem(SKEY)||'null'); }catch(e){ saved = null; }
-  if(!saved || !saved.id){ await autoTeacher(); return; }
+  if(!saved || !saved.id){ unresume(); await autoTeacher(); return; }
+  var snap = isDemoStudent({ id:saved.id }) ? null : readMeSnap(saved);
+  if (snap){
+    // 적어 둔 값으로 홈부터 — 날이 바뀌었으면 오늘 칸(등교·플래너)은 비우고, 주가 바뀌었으면 출결 점도 비운다
+    var today = kstToday(), sameDay = snap.date === today, sameWeek = weekMon(snap.date) === weekMon(today);
+    ME.id = snap.id; ME.name = snap.name; ME.track = snap.track; ME.coins = snap.coins; ME.dorm = !!snap.dorm;
+    ME.planner = sameDay ? snap.planner : null;
+    ME.week = (sameWeek && snap.week) ? snap.week : ['월','화','수','목','금'].map(function(d){ return { d:d, s:'' }; });
+    amToday = sameDay && snap.am ? snap.am : { status:null, time:'' };
+    // 쉬는 날 판단이 틀리면 등교 버튼이 '마감·결석'으로 보인다 → 교사 지정 휴업일은 적어 둔 값, 학사일정은 앱 안 파일(빠름)
+    CAL_OFF = snap.off || {};
+    try { CAL = await fetch('calendar.json', {cache:'no-cache'}).then(function(r){ return r.json(); }); } catch(e){}
+    enterApp('student'); unresume();
+    var chip = document.getElementById('uStreak');
+    if (snap.streak && snap.streak.n){ chip.className = 'chip ' + (snap.streak.risk ? 'chip-risk' : 'chip-gold'); chip.textContent = '🔥 ' + snap.streak.n + '일'; }
+    else chip.style.display = 'none';
+    try{
+      await loadCalendar(true);   // 휴업일을 서버 최신으로
+      var m0 = await FS.memberById(saved.id);
+      if (!m0 || m0.name !== saved.name || m0.role === '활동종료'){ logout(); return; }
+      await applyStudent(m0);
+      if (ROLE === 'student' && ME.name === m0.name){
+        if (TAB === 'home') applyRole();      // 새 값으로 홈 다시 그리기(다른 탭으로 옮겼으면 건드리지 않는다)
+        else { document.getElementById('uRole').textContent = ME.track+'반'; refreshStreakChip(); }
+      }
+    }catch(e){ /* 오프라인이면 적어 둔 값으로 그대로 — 쓰기는 각 버튼이 실패를 알린다 */ }
+    return;
+  }
+  unresume();
   try{
     var m = await FS.memberById(saved.id);
     if(!m || m.name !== saved.name) return;   // 명단에서 빠졌거나 이름이 바뀐 경우
@@ -6492,6 +6550,7 @@ async function autoLogin(){
     await applyStudent(m);
     enterApp('student');
   }catch(e){ /* 오프라인이면 그냥 로그인 화면에 머문다 */ }
+  unresume();
 }
 
 async function autoTeacher(){
