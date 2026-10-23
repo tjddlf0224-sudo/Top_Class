@@ -5428,6 +5428,7 @@ async function openDeleteRequest(){
   if (!ME.name) return;
   if (!(await confirmTyped('계정·데이터 삭제를 요청합니다.\n\n선생님이 확인한 뒤 계정(PIN·기기 연결)과 출결·플래너·엽전·성적·상담 기록을 지웁니다. 지운 뒤에는 되돌릴 수 없습니다.', '삭제'))) return;
   try {
+    try { var Bd = await bioAvail(); if (Bd) await Bd.deleteCredentials({ server:BIO_SERVER_S }); localStorage.removeItem('tc_bio_s'); } catch(e){}   // 계정 삭제 요청 — 이 폰의 Face ID·지문 입실 정보도 지운다(로그아웃 땐 남겨 둔다: 성일님 10/23)
     try { await AUTH.revokeApple(); } catch(e){}   // 애플로 연결해 뒀으면 애플 쪽 연결도 끊는다(심사 규정 — 계정 삭제 때 토큰 폐기)
     await FS.addDeleteReq(ME.id, ME.name);
     showModal('<div class="modal-box"><div style="text-align:center;padding:10px 0 6px">'+
@@ -6808,9 +6809,12 @@ async function bioInitStudent(){
 async function bioOfferStudent(id, name, pin){
   if (DEMO_STUDENT) return;                       // 심사용 체험 계정엔 묻지 않는다
   var B = await bioAvail(); if (!B) return;
-  try { if ((await B.isCredentialsSaved({ server:BIO_SERVER_S })).isSaved) return; } catch(e){}
+  // 이미 이 학생 것이 있으면 그만, 다른 학생 것이면 바꿀지 묻는다(같은 폰을 다른 학생이 쓰는 경우)
+  var saved = false; try { saved = (await B.isCredentialsSaved({ server:BIO_SERVER_S })).isSaved; } catch(e){}
+  if (saved && localStorage.getItem('tc_bio_s') === String(id)) return;
   if (!confirm('다음부터 '+bioWord()+' 바로 입실할까요?\n학번·이름·PIN 은 이 기기 잠금 보관함에만 들어가요.')) return;
-  try { await B.setCredentials({ username:String(id)+'|'+String(name), password:String(pin), server:BIO_SERVER_S, accessControl:2 }); } catch(e){}
+  try { await B.setCredentials({ username:String(id)+'|'+String(name), password:String(pin), server:BIO_SERVER_S, accessControl:2 });
+        try { localStorage.setItem('tc_bio_s', String(id)); } catch(e){} } catch(e){}   // 학번만 적어 둔다(PIN 은 보관함에만)
 }
 async function studentBioLogin(){
   var B = await bioAvail(); if (!B) return;
