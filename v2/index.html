@@ -439,6 +439,11 @@ body.wide .big-txt .sc-c{min-height:86px;} body.wide .big-txt .sc-t{font-size:1r
 .mk-card{border:1.5px solid var(--orange);background:var(--orange-soft);cursor:pointer;margin-bottom:8px;}
 .mk-card .row-t{color:#c2410c;} .mk-card .bar>i{background:var(--orange);}
 .mk-card.done{border-color:var(--green);background:var(--green-soft);cursor:default;} .mk-card.done .row-t{color:#15803d;}
+
+/* 구글·애플 로그인 버튼 (2026-10-23) — 구글 브랜딩: 흰 바탕·회색 테두리·G 로고 */
+.soc-btn{background:#fff;color:#1f1f1f;border:1px solid #dadce0;font-weight:600;gap:10px;margin-top:8px;}
+.soc-btn img{flex:none;} .soc-a.official{padding:0;border:none;background:transparent;} .soc-a.official img{display:block;width:100%;height:auto;}
+.soc-note{text-align:center;margin-top:8px;}
 </style>
 </head>
 <body>
@@ -460,6 +465,12 @@ body.wide .big-txt .sc-c{min-height:86px;} body.wide .big-txt .sc-t{font-size:1r
   <div id="sErr" class="login-err hidden"></div>
   <button class="btn" id="sGo" onclick="studentLogin()">입실하기</button>
   <button class="btn btn-outline hidden" id="sBio" type="button" onclick="studentBioLogin()">Face ID로 입실</button>
+  <!-- 구글·애플 — 앱 정보에서 계정을 연결해 둔 학생·선생님만(socialLogin). 로고는 공식 것만(G: signin-assets, Apple: appleid.cdn-apple.com 버튼 이미지) -->
+  <div id="socialBox">
+    <button class="btn soc-btn" id="socG" type="button" onclick="socialLogin('google')"><img src="brand/google-g.png" width="20" height="20" alt="">Google로 계속하기</button>
+    <button class="btn soc-btn soc-a hidden" id="socA" type="button" onclick="socialLogin('apple')" aria-label="Apple로 계속하기">Apple로 계속하기</button>
+    <div class="row-s soc-note">앱 정보에서 구글·애플 계정을 연결해 둔 사람만 쓸 수 있어요</div>
+  </div>
   <div class="login-divider">또는</div>
 
   <!-- 교사 로그인 — 학생에게는 접혀 있다가 눌렀을 때만 펼쳐진다 -->
@@ -515,7 +526,9 @@ import { initializeApp } from "./vendor/firebase/firebase-app.js";
 import { getFirestore, doc, getDoc, setDoc, updateDoc, addDoc, deleteDoc, collection, getDocs, query, where, serverTimestamp, writeBatch, runTransaction }
   from "./vendor/firebase/firebase-firestore.js";
 import { initializeAuth, onAuthStateChanged, signInAnonymously, signInWithEmailAndPassword,
-         signOut, browserLocalPersistence, indexedDBLocalPersistence }
+         signOut, browserLocalPersistence, indexedDBLocalPersistence,
+         GoogleAuthProvider, OAuthProvider, signInWithCredential, linkWithCredential,
+         signInWithPopup, linkWithPopup, browserPopupRedirectResolver, deleteUser }
   from "./vendor/firebase/firebase-auth.js";
 
 /* GAS가 배열·객체를 JSON 문자열로 저장하므로(schedule/attendance 동일 패턴) 읽을 때 되돌린다 */
@@ -571,6 +584,7 @@ const PIN_WINDOW_SEC = 6*3600, PIN_MAX_TRY = 10;
 window.PIN_RULE = { windowSec: PIN_WINDOW_SEC, max: PIN_MAX_TRY };
 
 let _isTeacher = false;
+let _appleCode = null;   // 애플 토큰 폐기용(로그인 때 받은 것, 5분·한 번만 유효)
 
 /* 화이트리스트 UID이거나, 콘솔에서 만든 admins/{uid} 문서가 있으면 교사.
    admins 경로를 같이 두는 이유: 방과후 강사를 추가할 때 규칙을 다시
@@ -632,6 +646,57 @@ window.AUTH = {
     _isTeacher = true;
     _authReady = Promise.resolve(c.user);
     return c.user;
+  },
+
+  /* ═══ 구글·애플 계정 연결 (2026-10-23 성일님 "구글로그인, 애플로그인도 넣어") ═══════════
+     '연결' 방식: 학번·PIN(학생)이나 비밀번호(교사)로 들어온 지금 계정에 구글·애플을 이어 붙인다(같은 UID).
+     그다음부터는 다른 기기에서도 그 버튼 하나로 같은 계정 → 학생은 기기 연결(students/{uid})이 그대로라 PIN 이 필요 없고,
+     교사는 UID 가 그대로라 교사 판정도 그대로다. 앱에서는 네이티브 로그인 창으로 토큰만 받아(skipNativeAuth) 여기서 로그인한다.
+     연결 안 된 구글·애플로 누르면 새 계정이 생기므로, 학생·교사 어느 쪽도 아니면 그 계정을 바로 지우고 안내한다. */
+  socialNative(){ const C = window.Capacitor; return !!(C && C.isNativePlatform && C.isNativePlatform() && C.Plugins && C.Plugins.FirebaseAuthentication); },
+  async _cred(kind){
+    const np = window.Capacitor.Plugins.FirebaseAuthentication;
+    if (kind === 'google'){
+      const r = await np.signInWithGoogle({ scopes: ['profile', 'email'] }); const c = (r && r.credential) || {};
+      return GoogleAuthProvider.credential(c.idToken, c.accessToken);
+    }
+    const r = await np.signInWithApple({ scopes: [] }); const c = (r && r.credential) || {};   // 이메일·이름은 받지 않는다
+    _appleCode = { c: c.authorizationCode, t: Date.now() };
+    return new OAuthProvider('apple.com').credential({ idToken: c.idToken, rawNonce: c.nonce });
+  },
+  _prov(kind){ return kind === 'google' ? new GoogleAuthProvider() : new OAuthProvider('apple.com'); },
+  async signInSocial(kind){
+    let u;
+    if (this.socialNative()) u = (await signInWithCredential(auth, await this._cred(kind))).user;
+    else u = (await signInWithPopup(auth, this._prov(kind), browserPopupRedirectResolver)).user;
+    _isTeacher = (u.uid === DEMO_TEACHER_UID) ? true : await verifyTeacher(u);
+    if (u.uid === DEMO_TEACHER_UID && window.enterDemoMode) window.enterDemoMode();
+    _authReady = Promise.resolve(u);
+    return { user: u, teacher: _isTeacher };
+  },
+  /** 연결 안 된 계정으로 들어왔을 때 — 방금 생긴 그 계정을 지우고 다시 익명으로 */
+  async dropSocialOrphan(){
+    const u = auth.currentUser; if (!u || u.isAnonymous) return;
+    try { await this.revokeApple(); } catch(e){}
+    try { await deleteUser(u); } catch(e){ try { await signOut(auth); } catch(e2){} }
+    _isTeacher = false; _authReady = _bootGuarded(); return _authReady;
+  },
+  async linkSocial(kind){
+    const cur = auth.currentUser; if (!cur) throw new Error('로그인 상태가 아니에요');
+    if (this.socialNative()) await linkWithCredential(cur, await this._cred(kind));
+    else await linkWithPopup(cur, this._prov(kind), browserPopupRedirectResolver);
+    await cur.reload().catch(function(){});
+    return true;
+  },
+  linked(){ const u = auth.currentUser; return u ? (u.providerData || []).map(function(p){ return p.providerId; }) : []; },
+  /** 애플 연결을 끊을 때(계정 삭제 요청) — 애플 쪽 토큰도 폐기해야 '애플로 로그인하는 앱' 목록에서 빠진다(심사 규정) */
+  async revokeApple(){
+    if (!this.socialNative() || this.linked().indexOf('apple.com') < 0) return false;
+    const np = window.Capacitor.Plugins.FirebaseAuthentication; if (!np.revokeAccessToken) return false;
+    let code = (_appleCode && Date.now() - _appleCode.t < 4.5*60*1000) ? _appleCode.c : null;
+    if (!code){ const r = await np.signInWithApple({ scopes: [] }); code = r && r.credential && r.credential.authorizationCode; }
+    if (!code) return false;
+    await np.revokeAccessToken({ token: code }); _appleCode = null; return true;
   },
 
   /* 로그아웃 — 교사 세션을 끊고 다시 익명으로 돌아간다.
@@ -5318,6 +5383,7 @@ async function openAppInfo(){
     '<div style="margin-top:6px">'+
     row('clipboard','개인정보 처리방침','',"openDoc('privacy.html','개인정보 처리방침')")+
     row('chat','문의·도움말','',"openDoc('support.html','문의·도움말')")+
+    socialLinkRows(row)+
     (t ? '' : '<div id="aiDel">'+row('warn','계정·데이터 삭제 요청','선생님이 확인한 뒤 계정과 기록을 지웁니다','openDeleteRequest()','var(--rose)')+'</div>')+
     '</div><div class="row-s" id="aiVer" style="margin-top:12px;text-align:center">장원급제반 · 화면 '+APP_BUILD+'</div>'+
     '<button class="btn btn-outline" style="margin-top:12px" onclick="closeModal()">닫기</button></div>');
@@ -5362,6 +5428,7 @@ async function openDeleteRequest(){
   if (!ME.name) return;
   if (!(await confirmTyped('계정·데이터 삭제를 요청합니다.\n\n선생님이 확인한 뒤 계정(PIN·기기 연결)과 출결·플래너·엽전·성적·상담 기록을 지웁니다. 지운 뒤에는 되돌릴 수 없습니다.', '삭제'))) return;
   try {
+    try { await AUTH.revokeApple(); } catch(e){}   // 애플로 연결해 뒀으면 애플 쪽 연결도 끊는다(심사 규정 — 계정 삭제 때 토큰 폐기)
     await FS.addDeleteReq(ME.id, ME.name);
     showModal('<div class="modal-box"><div style="text-align:center;padding:10px 0 6px">'+
       '<div style="font-size:1.2rem;font-weight:800">삭제 요청을 보냈습니다</div>'+
@@ -6759,6 +6826,72 @@ async function studentBioLogin(){
     bioInitStudent();
   }
 }
+/* ═══ 구글·애플 로그인 화면 쪽 ═══════════════════════════════ */
+function socialKinds(){
+  var C = window.Capacitor, plat = C && C.getPlatform ? C.getPlatform() : 'web';
+  return { google: true, apple: plat === 'ios' };      // 애플은 아이폰·아이패드 앱만(웹·안드로이드는 따로 설정이 필요해 뺐다)
+}
+function socialInit(){
+  var k = socialKinds(), a = document.getElementById('socA');
+  if (a){ a.classList.toggle('hidden', !k.apple); if (k.apple) officialAppleButton(a); }
+}
+/** Apple 공식 버튼 이미지(직접 그린 로고는 심사 거절 — 전산회계 3.0 사례). 못 받으면 글자 버튼 그대로 */
+function officialAppleButton(btn){
+  if (btn._done || !btn.offsetWidth) { if (!btn._done) setTimeout(function(){ officialAppleButton(btn); }, 500); return; }
+  btn._done = true;
+  var w = Math.max(130, Math.min(375, Math.round(btn.offsetWidth))), h = Math.max(30, Math.min(64, Math.round(btn.offsetHeight || 50)));
+  var img = new Image(); img.alt = 'Apple로 계속하기';
+  img.onload = function(){ btn.textContent = ''; btn.appendChild(img); btn.classList.add('official'); };
+  img.src = 'https://appleid.cdn-apple.com/appleid/button?type=continue&color=white&border=true&border_radius=12&height='+h+'&width='+w+'&scale=3&locale=ko_KR';
+}
+function socialName(k){ return k === 'google' ? '구글' : '애플'; }
+function socialCancelled(e){ var c = String((e && (e.code || e.message)) || ''); return /cancel|popup-closed|canceled|12501|1001/i.test(c); }
+async function socialLogin(kind){
+  if (!window.AUTH){ sShowErr('연결 준비 중입니다. 잠시 후 다시 해주세요'); return; }
+  sShowErr(''); var btn = document.getElementById(kind === 'google' ? 'socG' : 'socA'); btn.disabled = true;
+  try {
+    var r = await AUTH.signInSocial(kind);
+    if (FS.__clear) FS.__clear();
+    if (r.teacher){ await loadAppConfig(); enterApp('teacher'); return; }
+    // 학생 — 이 계정에 이어 둔 기기 연결이 있으면 바로 입실(계정이 막 바뀌어 잠깐 권한 오류가 날 수 있어 다시 묻는다)
+    var b = null;
+    for (var i = 0; i < 15; i++){ try { b = await FS.myBinding(); break; } catch(e){ if (!e || e.code !== 'permission-denied') break; await new Promise(function(z){ setTimeout(z, 700); }); } }
+    var m = b && b.sid ? await FS.memberById(b.sid) : null;
+    if (m && m.name === b.name && m.role !== '활동종료'){
+      if (isDemoStudent(m)) enterDemoMode(m);
+      for (var j = 0; ; j++){ try { await applyStudent(m); break; } catch(e){ if (!e || e.code !== 'permission-denied' || j >= 14) throw e; FS.__clear(); await new Promise(function(z){ setTimeout(z, 700); }); } }
+      try{ localStorage.setItem(SKEY, JSON.stringify({ id:m.id, name:m.name })); }catch(e){}
+      enterApp('student'); return;
+    }
+    if (b && b.sid){ await AUTH.leave(); sShowErr('연결된 학생 정보를 찾지 못했어요(명부에서 빠졌거나 이름이 바뀜). 선생님께 말씀해 주세요'); return; }
+    await AUTH.dropSocialOrphan();   // 어디에도 연결 안 된, 방금 생긴 계정만 지운다
+    sShowErr('아직 연결되지 않은 '+socialName(kind)+' 계정이에요. 학번·이름·PIN(선생님은 비밀번호)으로 들어온 뒤 앱 정보 ⓘ 에서 '+socialName(kind)+' 계정을 연결해 주세요');
+  } catch(e){
+    if (!socialCancelled(e)) sShowErr(socialName(kind)+' 로그인을 하지 못했어요. 잠시 뒤 다시 해 주세요');
+  } finally { btn.disabled = false; }
+}
+/** 앱 정보의 '계정 연결' 줄 */
+function socialLinkRows(row){
+  if (!window.AUTH || !AUTH.user()) return '';
+  var k = socialKinds(), have = AUTH.linked(), out = '';
+  ['google','apple'].forEach(function(kind){
+    if (!k[kind]) return;
+    var pid = kind === 'google' ? 'google.com' : 'apple.com', on = have.indexOf(pid) >= 0;
+    out += on ? row('check', socialName(kind)+' 계정 연결됨', '다른 기기에서도 '+socialName(kind)+' 버튼으로 바로 들어와요', "void 0", '#16a34a')
+              : row('person', socialName(kind)+' 계정 연결', '연결하면 폰을 바꿔도 '+(ROLE==='teacher'?'비밀번호':'PIN')+' 없이 '+socialName(kind)+' 버튼 하나로 들어와요', "linkSocial('"+kind+"')");
+  });
+  return out;
+}
+async function linkSocial(kind){
+  try { await AUTH.linkSocial(kind); closeModal(); alert(socialName(kind)+' 계정을 연결했어요. 다음부터 로그인 화면의 '+socialName(kind)+' 버튼으로 들어오면 돼요.'); }
+  catch(e){
+    if (socialCancelled(e)) return;
+    var c = String((e && e.code) || '');
+    if (/credential-already-in-use|email-already-in-use|account-exists/.test(c)) alert('이 '+socialName(kind)+' 계정은 이미 다른 사람(또는 다른 기기의 계정)에 연결돼 있어요. 다른 계정을 골라 주세요.');
+    else if (/provider-already-linked/.test(c)) alert('이미 '+socialName(kind)+' 계정이 연결돼 있어요.');
+    else alert(socialName(kind)+' 계정을 연결하지 못했어요. 잠시 뒤 다시 해 주세요.');
+  }
+}
 async function teacherBioLogin(){
   var B = await bioAvail(); if (!B) return;
   var c = null;
@@ -6814,7 +6947,7 @@ fillIcoSlots();
 /* 모듈(FS/AUTH)은 defer라 이 스크립트보다 늦게 뜬다 — 준비되면 자동 입실 */
 if(window.FS) autoLogin();
 else window.addEventListener('fs-ready', function(){ autoLogin(); });
-setTimeout(function(){ bioInit(); bioInitStudent(); }, 800);   // 앱이고 저장해 둔 게 있으면 로그인 화면에 Face ID·지문 버튼
+setTimeout(function(){ bioInit(); bioInitStudent(); socialInit(); }, 800);   // 앱이고 저장해 둔 게 있으면 로그인 화면에 Face ID·지문 버튼
 
 /* 앱이 다시 앞으로 나올 때 알림을 새로 깐다 —
    예약분이 3주치뿐이라 오래 안 열면 바닥난다. 열 때마다 채워준다. */
