@@ -545,7 +545,7 @@ body.wide .big-txt .sc-c{min-height:86px;} body.wide .big-txt .sc-t{font-size:1r
     <span class="ico-slot" data-ico="person" data-sz="17"></span>교사 로그인
   </button>
   <!-- 앱에서만: 한 번 비밀번호로 로그인한 뒤 Face ID·지문으로(bioInit 이 보인다) -->
-  <button class="btn hidden" id="tBio" type="button" onclick="teacherBioLogin()">Face ID로 교사 로그인</button>
+  <button class="btn hidden" id="tBio" type="button" style="min-height:50px" onclick="teacherBioLogin()">Face ID로 교사 로그인</button>
   <!-- <form> 으로 묶어야 크롬·사파리·iCloud 키체인이 비밀번호 저장·자동 입력을 제안한다(10/23 성일님 "아이디, 비번 자꾸 까먹어서") -->
   <form id="tLogin" class="hidden" autocomplete="on" onsubmit="event.preventDefault();teacherLogin()">
     <div class="field"><label>이메일</label>
@@ -5963,12 +5963,14 @@ function homeLayout(parts){
 
 /* 교사 홈 — 틀만 먼저 그리고 조회가 끝나면 채운다.
    renderView가 문자열을 받아 넣는 구조라 비동기 값은 자리를 잡아두고 나중에 주입한다. */
+/** 홈 채우기는 뒤에서 돈다 — 그사이 로그아웃하면 교사 전용 읽기가 permission-denied 로 끝나므로 조용히 버린다(10/23 실기기) */
+function thLater(fn){ setTimeout(function(){ Promise.resolve().then(fn).catch(function(e){ if (ROLE === 'teacher' && window.AUTH && AUTH.isTeacher()) console.warn('[home]', e && (e.code || e.message)); }); }, 0); }
 function homeTeacher(){
-  setTimeout(renderQuietBanner, 0);
-  setTimeout(fillDeleteReqs, 0);
-  setTimeout(fillTeacherHome, 0);
-  setTimeout(fillStudentQuick, 0);
-  setTimeout(fillHomeExtras, 0);
+  thLater(renderQuietBanner);
+  thLater(fillDeleteReqs);
+  thLater(fillTeacherHome);
+  thLater(fillStudentQuick);
+  thLater(fillHomeExtras);
   return homeLayout([
   ['side', '<div id="quietBox"></div><div id="delReqBox"></div><div id="homeExtra"></div>'],
 
