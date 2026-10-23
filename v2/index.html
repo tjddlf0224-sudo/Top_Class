@@ -3428,7 +3428,8 @@ function renderTabs(){
   }).join('');
   renderSubBar();
 }
-function go(t){TAB=t;renderTabs();renderView();window.scrollTo(0,0);}
+// sub: 그 탭의 어느 화면으로 갈지(바로가기 버튼용). 없으면 마지막으로 보던 화면
+function go(t, sub){TAB=t;if(sub)SUB[ROLE+':'+t]=sub;renderTabs();renderView();window.scrollTo(0,0);}
 
 function showLoadError(v, e){
   var denied = e && e.code === 'permission-denied';
@@ -5599,7 +5600,7 @@ function homeStudent(){
     quick('calendar','s','방과후',"go('after')")+quick('chart','o','내 성적',"go('exam')")+
   '</div>'+
   '<div class="quick" style="margin-top:10px">'+
-    quick('clock','r','공부 타이머',"go('study')")+quick('cap','o','명예의 전당',"go('study');goSub('fame')")+
+    quick('clock','r','공부 타이머',"go('study','timer')")+quick('cap','o','명예의 전당',"go('study','fame')")+
     quick('clipboard','s','단어 진단',"go('vocab')")+quick('info','y','추천 앱',"go('apps')")+
   '</div>']
   ]);
@@ -5657,7 +5658,7 @@ function homeTeacher(){
     quick('people','y','명부 등록','openAddMember()')+quick('cap','r','학년도 전환','openPromote()')+
   '</div>'+
   '<div class="quick" style="margin-top:10px">'+
-    quick('clock','s','공부 기록',"go('study')")+quick('cap','o','명예의 전당',"go('study');goSub('fame')")+
+    quick('clock','s','공부 기록',"go('study','students')")+quick('cap','o','명예의 전당',"go('study','fame')")+
     quick('clipboard','y','단어 진단',"go('vocab')")+quick('info','r','앱 소개',"go('apps')")+
   '</div>']
   ]);
@@ -6064,11 +6065,11 @@ async function fillStudyHome(){
   try {
     var data = await stData(), today = kstToday(), mon = weekMon(today), last = shiftDay(mon,-7);
     var aw = stAwards(data.recs, last), mine = data.recs.filter(function(r){ return r.name === ME.name && r.date === today; })[0];
-    var html = '<div class="card pad st-home" onclick="go(\'study\')"><div><div class="row-t">'+(ST ? ST.subject+' 공부 중' : '오늘 공부 '+fmtDur(mine ? mine.total : 0))+'</div>'+
+    var html = '<div class="card pad st-home" onclick="go(\'study\',ROLE===\'student\'?\'timer\':\'students\')"><div><div class="row-t">'+(ST ? ST.subject+' 공부 중' : '오늘 공부 '+fmtDur(mine ? mine.total : 0))+'</div>'+
       '<div class="row-s">'+(ST ? '타이머가 돌아가고 있어요' : '공부 타이머를 켜고 친구들과 같이 공부해요')+'</div></div><b class="st-go">'+(ST?'보기':'시작')+' →</b></div>';
     if (aw.length){
       var top = aw.filter(function(a){ return a.k === 'gold'; })[0] || aw[0];
-      html += '<div class="card pad st-home" style="margin-top:8px" onclick="go(\'study\');goSub(\'fame\')">'+awardImg(top.k, 40, top.sub)+
+      html += '<div class="card pad st-home" style="margin-top:8px" onclick="go(\'study\',\'fame\')">'+awardImg(top.k, 40, top.sub)+
         '<div style="flex:1"><div class="row-t">지난주 시상 '+aw.length+'개</div><div class="row-s">'+escapeHtml(AWARDS[top.k].t)+' '+escapeHtml(top.name)+(aw.length>1?' 외':'')+'</div></div><b class="st-go">명예의 전당 →</b></div>';
     }
     box.innerHTML = html;
@@ -6084,7 +6085,7 @@ function stRevealAwards(mine, lastMon){
     '<div class="aw-reveal-t">축하해요, '+escapeHtml(ME.name)+'!</div>'+
     '<div class="aw-reveal-list">'+mine.map(function(a, i){ return '<div class="aw-pop" style="animation-delay:'+(0.25+i*0.35)+'s">'+awardImg(a.k, 84, a.sub)+
       '<b>'+(a.k==='subj'?escapeHtml(a.sub)+'왕':AWARDS[a.k].t)+'</b><span class="row-s">'+escapeHtml(a.v)+'</span></div>'; }).join('')+'</div>'+
-    '<button class="btn" onclick="closeModal();go(\'study\');goSub(\'fame\')">명예의 전당 보기</button>'+
+    '<button class="btn" onclick="closeModal();go(\'study\',\'fame\')">명예의 전당 보기</button>'+
     '<button class="btn btn-outline" style="margin-top:8px" onclick="closeModal()">닫기</button></div>');
   confetti(2600);
 }
