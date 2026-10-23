@@ -2561,6 +2561,9 @@ async function _gasFetchOnce(action, params) {
 }
 
 function gasRequest(action, params, front) {
+    // 2026-10-23 학생 등교 인증·플래너 저장은 새 앱에서만 — 시트에만 남으면 새 앱이 결석·미작성으로 본다(팀장 #25)
+    if (action === 'checkIn' || action === 'savePlanner')
+        return Promise.reject(new Error('이 기능은 새 앱(청양고 장원급제반)에서 해 주세요.'));
     const key = AppCache.key(action, params);
     // ★ 진행 중 요청 합류(dedup)는 읽기(get*)에만 적용.
     //   쓰기까지 dedup하면 같은 조건의 연속 지급/구매가 서버로 전송되지 않은 채
@@ -3801,7 +3804,7 @@ function loadHome() {
         if (planCard) planCard.style.borderColor = planDone ? 'var(--green)' : hasPlan ? 'var(--gold)' : '';
         const planContent = currentUser.todayPlanner && currentUser.todayPlanner.content;
         const hasContent = planContent && safeParseArray(planContent).length > 0;
-        if (planDesc) planDesc.textContent = planDone ? '100% 달성!' : hasPlan ? `${planPct}% 진행 중` : hasContent ? '등록됨' : '오늘 계획 미등록';
+        if (planDesc) planDesc.textContent = '새 앱에서 작성';   // 2026-10-23 플래너는 새 앱에서만
     }
 
     // ★ ② 오늘 출석 여부에 따라 등교 인증 버튼 즉시 설정 (API 호출 없음)
@@ -4282,7 +4285,12 @@ async function doCheckIn() {
  * ★ ② 일괄 조회: currentUser.todayPlanner가 있으면 API 호출 없이 즉시 렌더링
  *     todayPlanner가 이미 채워져 있으므로 로딩 없이 화면이 바로 뜸
  */
+/** 2026-10-23 전환 뒤: 학생 플래너는 새 앱에서만(여기 저장은 새 앱에 안 잡혀 미작성 −1냥이 된다) */
+function legacyGoNewApp(what){
+    if (confirm(what + '은(는) 이제 새 앱 \'청양고 장원급제반\'에서만 돼요.\n여기서 하면 새 앱에 기록되지 않아요.\n\n앱 설치 화면으로 갈까요?')) location.href = './';
+}
 async function openPlanner() {
+    return legacyGoNewApp('플래너');
     showSection('sec-planner');
     plannerBaseDate = new Date(); // 항상 오늘부터 시작
     plannerViewDate = toDateStr();
@@ -4514,6 +4522,7 @@ function deletePlan(idx) {
  *   또한 currentUser.todayPlanner 갱신 → 플래너 다시 열 때 최신 반영
  */
 function savePlannerData() {
+    return legacyGoNewApp('플래너 저장');
     // ★ 오늘이 아닌 날짜를 보는 중이면 저장 금지 (서버는 항상 오늘에 저장하므로 덮어쓰기 사고 방지)
     if (plannerViewDate !== toDateStr()) {
         return showToast('오늘 플래너만 저장할 수 있어요.');
