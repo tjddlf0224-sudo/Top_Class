@@ -434,6 +434,11 @@ body.wide .big-txt .sc-c{min-height:86px;} body.wide .big-txt .sc-t{font-size:1r
 .big-txt .st-go,#studyHome .st-go{font-size:1rem;}
 .big-txt .hero-lbl{font-size:1rem;} .big-txt .hero-inline div{font-size:1rem;}
 .big-txt .fame-badge .aw-medal{width:28px!important;height:28px!important;font-size:13px!important;}
+
+/* 만회 미션 카드 (2026-10-23) */
+.mk-card{border:1.5px solid var(--orange);background:var(--orange-soft);cursor:pointer;margin-bottom:8px;}
+.mk-card .row-t{color:#c2410c;} .mk-card .bar>i{background:var(--orange);}
+.mk-card.done{border-color:var(--green);background:var(--green-soft);cursor:default;} .mk-card.done .row-t{color:#15803d;}
 </style>
 </head>
 <body>
@@ -3744,6 +3749,16 @@ async function doAmCheckIn(){
 var COIN_RULE = { 출석:+1, 지각:-1, 결석:-2, 공결:0, 주간개근:+5,
                   플래너100:+2, 플래너미작성:-1 };
 
+/* 만회 미션 (2026-10-23 성일님 "듀오링고처럼 경고는 날리되 봐주는 게 많게, 마이너스를 최대한 막게") —
+   감점이 생긴 그날(자정 전까지) 공부 타이머로 이만큼 공부하면 그 감점은 없던 일로 한다.
+   출결 기록·연속 출석·주간 개근 판정은 그대로다(엽전만 지켜 준다). 새 앱 계산이 시작된 날부터 적용. */
+var MAKEUP_SEC  = { 결석:3600, 지각:1800, 플래너미작성:1800 };
+var MAKEUP_FROM = '2026-10-23';
+function makeupOk(st, ds, ctx){
+  var need = MAKEUP_SEC[st]; if (!need || ds < MAKEUP_FROM) return false;
+  return ((ctx.study || {})[ds] || 0) >= need;
+}
+
 /** 두 날짜 사이의 평일을 훑는다(양끝 포함) */
 function eachWeekday(fromDs, toDs, fn){
   // UTC 정오를 기준점으로 하루씩 더한다 — 기기 시간대·서머타임에 흔들리지 않는다
@@ -3778,7 +3793,9 @@ function coinFromAttendance(fromDs, toDs, ctx){
     if (st === null) return;                    // 판정 보류(오늘·데이터 공백)
 
     var amt = COIN_RULE[st];
-    if (amt) {
+    if (amt < 0 && makeupOk(st, ds, ctx)) {
+      items.push({ date: ds, amount: 0, reason: st+' → 공부 '+fmtDur(ctx.study[ds])+'으로 만회', by: '계산' });
+    } else if (amt) {
       total += amt;
       items.push({ date: ds, amount: amt, reason: st, by: '계산' });
     }
@@ -3809,7 +3826,9 @@ function coinFromPlanner(fromDs, toDs, plannerByDate, ctx){
     if (st === '결석') return;                 // 결석자는 미작성 감점 제외
 
     var pl = plannerByDate[ds];
-    if (!pl){
+    if (!pl && makeupOk('플래너미작성', ds, ctx)){
+      items.push({ date: ds, amount: 0, reason: '플래너미작성 → 공부 '+fmtDur(ctx.study[ds])+'으로 만회', by: '계산' });
+    } else if (!pl){
       total += COIN_RULE.플래너미작성;
       items.push({ date: ds, amount: COIN_RULE.플래너미작성, reason: '플래너미작성', by: '계산' });
     } else if (pl.progress === 100){
@@ -3840,7 +3859,7 @@ async function loadWallet(m){
     FS.ledgerOf(name), FS.attendanceOf(name),
     soft(FS.amCheckInsOf(name), {}), soft(FS.amOverridesOf(name), {}),
     soft(FS.marketBuys(), []), soft(FS.freezeOf(name), { bought:0 }),
-    soft(FS.plannerOf(name), {})
+    soft(FS.plannerOf(name), {}), soft(FS.studySince(MAKEUP_FROM), [])
   ]);
   var ledger = got[0];
   var ledgerSum = ledger.reduce(function(a,b){ return a + b.amount; }, 0);
@@ -3852,8 +3871,9 @@ async function loadWallet(m){
   // 이름으로 한 번씩만 읽는다. 날짜별 전체 조회는 (1) 규칙상 학생이 못 읽고
   // (2) 개시일 이후 날짜 수만큼 쿼리가 늘어 느리다.
   var am = got[2], ov = got[3];
+  var study = {}; (got[7] || []).forEach(function(r){ if (r.name === name) study[r.date] = r.total; });   // 만회 미션
   var ctx = { days:days, legacyLast:legacyLast, today:today,
-              dorm:!!m.dorm, am:am, ov:ov };
+              dorm:!!m.dorm, am:am, ov:ov, study:study };
 
   // 개시일 다음날부터 센다 — 개시잔액에 그날까지가 이미 반영돼 있다
   var from = new Date(new Date(open.date+'T12:00:00Z').getTime() + 24*60*60*1000)
@@ -5753,7 +5773,7 @@ async function fillTeacherHome(){
 function openCoinGuide(){
   var R = COIN_RULE, t = function(m){ return pad2(Math.floor(m/60))+':'+pad2(m%60); };
   var row = function(k, v, sub){ return '<div class="row" style="cursor:default;padding:12px 0"><div class="row-main"><div class="row-t">'+k+'</div>'+
-    (sub?'<div class="row-s">'+sub+'</div>':'')+'</div><span class="row-v" style="color:'+(v>0?'#16a34a':v<0?'var(--rose)':'var(--ink-mute)')+'">'+(v>0?'+':'')+v+'냥</span></div>'; };
+    (sub?'<div class="row-s">'+sub+'</div>':'')+'</div><span class="row-v" style="color:'+(typeof v==='string'?'#16a34a':v>0?'#16a34a':v<0?'var(--rose)':'var(--ink-mute)')+'">'+(typeof v==='string'?v:(v>0?'+':'')+v+'냥')+'</span></div>'; };
   showModal('<div class="modal-box"><div style="font-weight:800;font-size:1.15rem;text-align:center">엽전 안내</div>'+
     '<div class="sec-label">등교</div>'+
     row('출석', R.출석, t(AM_LATE_MIN)+' 전 인증')+row('지각', R.지각, t(AM_LATE_MIN)+'~'+t(AM_CLOSE_MIN)+' (기숙사생은 '+t(AM_CLOSE_MIN)+' 전이면 출석)')+
@@ -5761,6 +5781,10 @@ function openCoinGuide(){
     row('주간 개근', R.주간개근, '그 주 수업일을 모두 출석')+
     '<div class="sec-label">플래너</div>'+
     row('100% 달성', R.플래너100, '그날 할 일을 모두 완료')+row('미작성', R.플래너미작성, '수업일에 플래너를 쓰지 않음(결석한 날은 제외)')+
+    '<div class="sec-label">만회 미션 — 그날 공부하면 감점이 없어져요</div>'+
+    row('결석 만회', '감점 없음', '결석한 날 자정까지 공부 타이머 '+(MAKEUP_SEC.결석/60)+'분')+
+    row('지각 만회', '감점 없음', '지각한 날 자정까지 공부 타이머 '+(MAKEUP_SEC.지각/60)+'분')+
+    row('플래너 만회', '감점 없음', '플래너를 못 쓴 날 자정까지 공부 타이머 '+(MAKEUP_SEC.플래너미작성/60)+'분')+
     '<div class="sec-label">그 밖에</div>'+
     row('스트릭 프리즈', -FREEZE_COST, '연속 출석이 끊기지 않게 하루를 지켜 줌')+
     '<div class="row-s" style="margin-top:12px;line-height:1.6">쉬는 날(주말·공휴일·학교 휴업일)은 계산하지 않습니다. 선생님이 직접 주거나 뺀 엽전과 저잣거리 구매는 엽전 내역에서 볼 수 있어요.</div>'+
@@ -6112,7 +6136,7 @@ async function fillStudyHome(){
   try {
     var data = await stData(), today = kstToday(), mon = weekMon(today), last = shiftDay(mon,-7);
     var aw = stAwards(data.recs, last), mine = data.recs.filter(function(r){ return r.name === ME.name && r.date === today; })[0];
-    var html = '<div class="card pad st-home" onclick="go(\'study\',ROLE===\'student\'?\'timer\':\'students\')"><div><div class="row-t">'+(ST ? ST.subject+' 공부 중' : '오늘 공부 '+fmtDur(mine ? mine.total : 0))+'</div>'+
+    var html = makeupHomeHtml(mine ? mine.total : 0) + '<div class="card pad st-home" onclick="go(\'study\',ROLE===\'student\'?\'timer\':\'students\')"><div><div class="row-t">'+(ST ? ST.subject+' 공부 중' : '오늘 공부 '+fmtDur(mine ? mine.total : 0))+'</div>'+
       '<div class="row-s">'+(ST ? '타이머가 돌아가고 있어요' : '공부 타이머를 켜고 친구들과 같이 공부해요')+'</div></div><b class="st-go">'+(ST?'보기':'시작')+' →</b></div>';
     if (aw.length){
       var top = aw.filter(function(a){ return a.k === 'gold'; })[0] || aw[0];
@@ -6122,6 +6146,26 @@ async function fillStudyHome(){
     box.innerHTML = html;
     if (ROLE === 'student') stRevealAwards(aw.filter(function(a){ return a.name === ME.name; }), last);
   } catch(e){ box.innerHTML = ''; }
+}
+/** 홈 '만회 미션' 카드 — 오늘 감점이 생겼거나 생길 참이면, 공부로 지울 수 있다고 알려 준다 */
+function makeupHomeHtml(sec){
+  var today = kstToday();
+  if (ROLE !== 'student' || today < MAKEUP_FROM || !isSchoolDay(today)) return '';
+  var min = DEMO_STUDENT ? AM_CLOSE_MIN + 60 : kstMinutes(), st = amToday && amToday.status, list = [];
+  if (!st && min >= AM_CLOSE_MIN) st = '결석';                     // 08:30 이 지나도록 인증이 없으면 오늘은 결석으로 계산된다
+  if (st === '결석' || st === '지각') list.push(st);
+  if (st !== '결석' && st !== '공결' && !ME.planner && min >= 15*60) list.push('플래너미작성');   // 오후 3시부터 알려 준다
+  return list.map(function(k){
+    var need = MAKEUP_SEC[k], done = sec >= need, lbl = k === '플래너미작성' ? '플래너 미작성' : k;
+    if (done) return '<div class="card pad mk-card done"><div class="row-t">만회 성공! 오늘 '+lbl+' 감점 없어요</div>'+
+      '<div class="row-s">공부 '+fmtDur(sec)+' — 엽전 '+(-COIN_RULE[k])+'냥을 지켰어요</div></div>';
+    return '<div class="card pad mk-card" onclick="go(\'study\',\'timer\')">'+
+      '<div class="row-t">'+(k === '플래너미작성' ? '플래너를 안 쓰면 −1냥 — 공부 '+(need/60)+'분이면 괜찮아요'
+                              : k+' −'+(-COIN_RULE[k])+'냥 — 공부 '+(need/60)+'분이면 없던 일로!')+'</div>'+
+      '<div class="row-s">'+(k === '플래너미작성' ? '플래너를 쓰거나, ' : '')+'오늘 자정까지 공부 타이머 '+(need/60)+'분 · 지금 '+fmtDur(sec)+'</div>'+
+      '<div class="bar"><i style="width:'+Math.min(100, Math.round(sec/need*100))+'%"></i></div>'+
+      '<b class="st-go" style="display:block;margin-top:8px">타이머 켜고 만회하기 →</b></div>';
+  }).join('');
 }
 function stRevealAwards(mine, lastMon){
   if (!mine.length) return;
