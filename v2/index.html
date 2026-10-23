@@ -483,7 +483,7 @@ body.wide .big-txt .sc-c{min-height:86px;} body.wide .big-txt .sc-t{font-size:1r
         <div class="h-name" id="uName"></div>
         <div class="h-meta">
           <span class="h-role" id="uRole">공기업반</span>
-          <span class="chip chip-gold" id="uStreak">🔥 3일 연속</span>
+          <span class="chip chip-gold" id="uStreak" style="display:none"></span>   <!-- 값은 refreshStreakChip 이 채운다(예시 글자가 잠깐 보이던 것, 10/23) -->
         </div>
       </div>
       <div style="display:flex;gap:2px;">
@@ -6361,7 +6361,7 @@ function applyRole(){
   var t=ROLE==='teacher';
   document.getElementById('uName').textContent = t?'교사':ME.name;
   document.getElementById('uRole').textContent = t?(DEMO_MODE?'데모 모드 · 가상 학생 데이터':'장원급제반 담임'):(ME.track+'반'+(DEMO_STUDENT?' · 체험 모드(예시 데이터)':''));
-  document.getElementById('uStreak').style.display = t?'none':'';
+  var stc = document.getElementById('uStreak'); if (t || !stc.textContent) stc.style.display = 'none';   // 학생은 계산이 끝나면 보인다
   document.getElementById('btnBell').style.display = t?'none':'';
   renderTabs();renderView();
   if (!t) refreshStreakChip().then(syncHeroStreak);
@@ -6384,10 +6384,13 @@ function logout(){
   disableNotis();                                   // 남의 기기에 알림이 남지 않게
   if (ST) stStop(Date.now(), 'quiet');
   VT = null; ST_CAL = null;
+  var stc0 = document.getElementById('uStreak'); if (stc0){ stc0.textContent = ''; stc0.style.display = 'none'; }   // 다음 사람에게 앞사람 연속출석이 보이지 않게
   ME={id:'',name:'',track:'공무원',coins:0,dorm:false,week:[],planner:null};
   streakCache=null; sShowErr('');
   if(window.FS && FS.__clear) FS.__clear();   // 사람이 바뀌면 볼 수 있는 자료도 다르다
-  if(window.AUTH) AUTH.leave();      // 교사 세션을 끊고 다시 익명으로
+  // 교사 세션만 끊고 다시 익명으로. 학생은 익명 계정을 그대로 둔다 — 계정이 바뀌면 Firestore SDK 가 6~8초 옛 인증으로 읽어
+  // 다시 입실할 때 '불러오지 못했습니다'가 났다(10/23 계측, REST 는 즉시 200). 다른 학생이 들어오면 studentLogin 이 새 계정을 받는다.
+  if(window.AUTH && (AUTH.isTeacher() || (AUTH.user() && !AUTH.user().isAnonymous))) AUTH.leave();
   protoSync();}
 
 /* ═══ 학생 로그인 ═══════════════════════════════════════
@@ -6481,7 +6484,13 @@ async function studentLogin(){
     }
 
     if (isDemoStudent(m)) enterDemoMode(m);   // 심사용 테스트 학생 — 체험 모드
-    await applyStudent(m);
+    // 로그아웃 직후 다시 입실하면 새 익명 계정으로 연결은 됐어도 서버 읽기가 잠깐(1초 안쪽) 옛 인증 상태로 처리돼
+    // '권한 없음'이 난다(10/23 아이폰·웹 재현, 수정 전 코드도 같음) → 0.7초 간격으로 다시 읽는다(최대 약 10초)
+    for (var tryN = 0; ; tryN++){
+      try { await applyStudent(m); break; }
+      catch(e){ if (!e || e.code !== 'permission-denied' || tryN >= 14) throw e;   // 계정이 바뀐 직후면 6~8초 걸린다(10/23 웹 계측)
+        if (FS.__clear) FS.__clear(); await new Promise(function(r){ setTimeout(r, 700); }); }
+    }
     try{ localStorage.setItem(SKEY, JSON.stringify({id:m.id,name:m.name})); }catch(e){}
     enterApp('student');
   }catch(e){
@@ -6527,7 +6536,7 @@ async function autoLogin(){
     try { CAL = await fetch('calendar.json', {cache:'no-cache'}).then(function(r){ return r.json(); }); } catch(e){}
     enterApp('student'); unresume();
     var chip = document.getElementById('uStreak');
-    if (snap.streak && snap.streak.n){ chip.className = 'chip ' + (snap.streak.risk ? 'chip-risk' : 'chip-gold'); chip.textContent = '🔥 ' + snap.streak.n + '일'; }
+    if (snap.streak && snap.streak.n){ chip.className = 'chip ' + (snap.streak.risk ? 'chip-risk' : 'chip-gold'); chip.textContent = '🔥 ' + snap.streak.n + '일'; chip.style.display = ''; }
     else chip.style.display = 'none';
     try{
       await loadCalendar(true);   // 휴업일을 서버 최신으로
