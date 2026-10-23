@@ -9,6 +9,7 @@
   setTimeout(function(){ var a = document.getElementById('app'); if (a && a.classList.contains('hidden')) document.documentElement.classList.remove('resume'); }, 6000);
 </script>
 <style>html.resume #login{visibility:hidden;}</style>
+<link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@500&display=swap" rel="stylesheet">   <!-- 구글 로그인 버튼 글꼴(공식 규격, OFL) -->
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1,user-scalable=no">
 <title>장원급제반</title>
@@ -440,9 +441,16 @@ body.wide .big-txt .sc-c{min-height:86px;} body.wide .big-txt .sc-t{font-size:1r
 .mk-card .row-t{color:#c2410c;} .mk-card .bar>i{background:var(--orange);}
 .mk-card.done{border-color:var(--green);background:var(--green-soft);cursor:default;} .mk-card.done .row-t{color:#15803d;}
 
-/* 구글·애플 로그인 버튼 (2026-10-23) — 구글 브랜딩: 흰 바탕·회색 테두리·G 로고 */
-.soc-btn{background:#fff;color:#1f1f1f;border:1px solid #dadce0;font-weight:600;gap:10px;margin-top:8px;}
-.soc-btn img{flex:none;} .soc-a.official{padding:0;border:none;background:transparent;} .soc-a.official img{display:block;width:100%;height:auto;}
+/* 구글·애플 로그인 버튼 (2026-10-23) — 공식 규격(전산회계 오락실 login.html·로그인버튼_공식규격_작업지시.md 와 같게).
+   Google: 공식 signin-assets 의 G(brand/google-g.png, 다른 앱과 같은 파일) · 바탕 #FFF · 안쪽 1px #747775 · 글자 #1F1F1F ·
+   Google Sans Medium(OFL) · iOS 여백 16/12/16 · G 20px · 알약형. Apple: appleid.cdn-apple.com 공식 버튼 이미지 통째로(직접 그린 로고 금지 — 2026-09-28 거절 사례). */
+.soc-btn{height:50px;margin-top:8px;border-radius:25px;box-shadow:none;}
+.soc-btn#socG{background:#fff;color:#1f1f1f;border:1px solid #747775;padding:0 16px;gap:12px;
+  font-family:'Google Sans','Apple SD Gothic Neo','Noto Sans KR',sans-serif;font-weight:500;font-size:1rem;}
+.soc-btn#socG img{width:20px;height:20px;flex:none;}
+.soc-a{background:#fff;color:#000;border:1px solid #000;}
+.soc-a.waiting{color:transparent;}
+.soc-a.official{padding:0;border:none;background:#fff;overflow:hidden;} .soc-a.official img{display:block;width:100%;height:100%;}
 .soc-note{text-align:center;margin-top:8px;}
 </style>
 </head>
@@ -468,7 +476,7 @@ body.wide .big-txt .sc-c{min-height:86px;} body.wide .big-txt .sc-t{font-size:1r
   <!-- 구글·애플 — 앱 정보에서 계정을 연결해 둔 학생·선생님만(socialLogin). 로고는 공식 것만(G: signin-assets, Apple: appleid.cdn-apple.com 버튼 이미지) -->
   <div id="socialBox">
     <button class="btn soc-btn" id="socG" type="button" onclick="socialLogin('google')"><img src="brand/google-g.png" width="20" height="20" alt="">Google로 계속하기</button>
-    <button class="btn soc-btn soc-a hidden" id="socA" type="button" onclick="socialLogin('apple')" aria-label="Apple로 계속하기">Apple로 계속하기</button>
+    <button class="btn soc-btn soc-a waiting hidden" id="socA" type="button" onclick="socialLogin('apple')" aria-label="Apple로 계속하기">Apple로 계속하기</button>
     <div class="row-s soc-note">앱 정보에서 구글·애플 계정을 연결해 둔 사람만 쓸 수 있어요</div>
   </div>
   <div class="login-divider">또는</div>
@@ -677,7 +685,8 @@ window.AUTH = {
   /** 연결 안 된 계정으로 들어왔을 때 — 방금 생긴 그 계정을 지우고 다시 익명으로 */
   async dropSocialOrphan(){
     const u = auth.currentUser; if (!u || u.isAnonymous) return;
-    try { await this.revokeApple(); } catch(e){}
+    // 애플 토큰 폐기가 응답 없이 멈춘 적이 있다(10/23 아이폰 12 Pro) — 4초만 기다린다
+    try { await Promise.race([ this.revokeApple(), new Promise(function(r){ setTimeout(r, 4000); }) ]); } catch(e){}
     try { await deleteUser(u); } catch(e){ try { await signOut(auth); } catch(e2){} }
     _isTeacher = false; _authReady = _bootGuarded(); return _authReady;
   },
@@ -5431,7 +5440,7 @@ async function openDeleteRequest(){
   if (!(await confirmTyped('계정·데이터 삭제를 요청합니다.\n\n선생님이 확인한 뒤 계정(PIN·기기 연결)과 출결·플래너·엽전·성적·상담 기록을 지웁니다. 지운 뒤에는 되돌릴 수 없습니다.', '삭제'))) return;
   try {
     try { var Bd = await bioAvail(); if (Bd) await Bd.deleteCredentials({ server:BIO_SERVER_S }); localStorage.removeItem('tc_bio_s'); } catch(e){}   // 계정 삭제 요청 — 이 폰의 Face ID·지문 입실 정보도 지운다(로그아웃 땐 남겨 둔다: 성일님 10/23)
-    try { await AUTH.revokeApple(); } catch(e){}   // 애플로 연결해 뒀으면 애플 쪽 연결도 끊는다(심사 규정 — 계정 삭제 때 토큰 폐기)
+    try { await Promise.race([ AUTH.revokeApple(), new Promise(function(r){ setTimeout(r, 6000); }) ]); } catch(e){}   // 애플로 연결해 뒀으면 애플 쪽 연결도 끊는다(심사 규정 — 계정 삭제 때 토큰 폐기)
     await FS.addDeleteReq(ME.id, ME.name);
     showModal('<div class="modal-box"><div style="text-align:center;padding:10px 0 6px">'+
       '<div style="font-size:1.2rem;font-weight:800">삭제 요청을 보냈습니다</div>'+
@@ -6843,12 +6852,17 @@ function socialInit(){
 }
 /** Apple 공식 버튼 이미지(직접 그린 로고는 심사 거절 — 전산회계 3.0 사례). 못 받으면 글자 버튼 그대로 */
 function officialAppleButton(btn){
-  if (btn._done || !btn.offsetWidth) { if (!btn._done) setTimeout(function(){ officialAppleButton(btn); }, 500); return; }
+  if (btn._done) return;
+  if (!btn.offsetWidth){ setTimeout(function(){ officialAppleButton(btn); }, 500); return; }   // 화면에 보인 뒤라야 크기가 잡힌다
   btn._done = true;
-  var w = Math.max(130, Math.min(375, Math.round(btn.offsetWidth))), h = Math.max(30, Math.min(64, Math.round(btn.offsetHeight || 50)));
+  var g = document.getElementById('socG');
+  var w = Math.max(130, Math.min(375, Math.round(btn.offsetWidth))), h = Math.max(30, Math.min(64, Math.round((g && g.offsetHeight) || 50)));
   var img = new Image(); img.alt = 'Apple로 계속하기';
-  img.onload = function(){ btn.textContent = ''; btn.appendChild(img); btn.classList.add('official'); };
-  img.src = 'https://appleid.cdn-apple.com/appleid/button?type=continue&color=white&border=true&border_radius=12&height='+h+'&width='+w+'&scale=3&locale=ko_KR';
+  var giveUp = setTimeout(function(){ btn.classList.remove('waiting'); }, 4000);   // 못 받으면 로고 없이 글자만
+  img.onload = function(){ clearTimeout(giveUp); btn.textContent = ''; btn.style.height = h+'px'; btn.appendChild(img); btn.classList.add('official'); btn.classList.remove('waiting'); };
+  img.onerror = function(){ clearTimeout(giveUp); btn.classList.remove('waiting'); };
+  // 밝은 카드 위라 흰 버튼 + 테두리(한국사와 같은 white&border=true), 알약형(50)
+  img.src = 'https://appleid.cdn-apple.com/appleid/button?type=continue&color=white&border=true&border_radius=50&height='+h+'&width='+w+'&scale=3&locale=ko_KR';
 }
 function socialName(k){ return k === 'google' ? '구글' : '애플'; }
 /* 확실한 '사용자 취소'만 조용히 넘긴다 — /cancel/ 처럼 넓게 잡으면 안드로이드 Credential Manager 오류
