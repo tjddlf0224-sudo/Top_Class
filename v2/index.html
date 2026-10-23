@@ -1591,6 +1591,15 @@ async function renderAsCalendar(v){
 
   // 고른 날(기본: 오늘이 이 달이면 오늘)
   var pick = ASC.pick || (today.slice(0,7) === ASC.ym && !isWeekend(today) ? today : '');
+  // 학생이 오늘을 보고 있으면 내 수업 카드에 출석 체크를 붙인다(예전 '오늘 출석' 화면이 하던 일)
+  var chk = null;
+  if (!teacher && pick === today && ME.name){
+    var both = await Promise.all([ soft(FS.checkIns(today), []), soft(FS.asOverrides(today), {}) ]);
+    chk = { done:{}, open: DEMO_STUDENT || kstMinutes() >= AS_START_MIN, mine:0 };
+    both[0].forEach(function(r){ if (r.name === ME.name) chk.done[r.subject] = 1; });
+    Object.keys(both[1]).forEach(function(sub){ var st = (both[1][sub]||{})[ME.name];   // 선생님 정정이 우선
+      if (st === '출석') chk.done[sub] = 1; else if (st === '결석') delete chk.done[sub]; });
+  }
   if (pick){
     var r2 = asResolveDay(sched, pick);
     asDayItems = r2.items; ASC.pickShown = pick;
@@ -1607,11 +1616,14 @@ async function renderAsCalendar(v){
         '<div class="row-t" style="margin-top:2px">'+escapeHtml(it.subject)+'</div>'+
         '<div class="row-s">'+escapeHtml((it.teacher||'')+(place?' · '+place:''))+'</div>'+period+
         (it.note ? '<div class="row-s" style="margin-top:2px">'+escapeHtml(it.note)+'</div>' : '')+'</div>'+
+        (chk && chk.done[it.subject] ? '<span class="chip" style="flex-shrink:0;background:var(--green-soft);color:#16a34a">✓ 출석완료</span>' : '')+
         (teacher ? '<div style="display:flex;flex-direction:column;gap:6px;flex-shrink:0">'+
           '<button class="btn btn-outline btn-sm" onclick="asChooseEdit('+idx+')">수정</button>'+
           '<button class="btn btn-outline btn-sm" style="color:var(--rose)" onclick="asChooseDelete('+idx+')">삭제</button></div>' : '')+
-        '</div></div>';
+        '</div>'+asCheckRow(chk, it)+'</div>';
     }).join('');
+    if (chk && chk.mine) html += '<div class="notice" style="color:var(--ink-mute);cursor:default">'+ic('clock',15)+
+      '<span>오늘 24시까지 체크하지 않으면 결석 처리됩니다</span></div>';
     if (teacher) html += '<button class="btn btn-outline" onclick="asOpenForm(\'date\',null,\''+pick+'\')">+ 이 날 수업 추가</button>';
   } else {
     html += '<div class="empty" style="padding:24px"><span>날짜를 누르면 그 날 수업이 보여요</span></div>';
@@ -2739,7 +2751,7 @@ function enterDemoMode(stu){
 var SUBTABS = {
   student:{ exam:[['scores','성적'],['growth','성장'],['compare','반비교'],['legacy','선배비교']],
             study:[['timer','타이머'],['rank','순위'],['fame','명예의 전당'],['mine','내 기록']],
-            after:[['today','오늘 출석'],['cal','달력']] },
+            /* 방과후는 하위 탭 없이 달력 한 화면 — 오늘 수업 카드에서 바로 출석(2026-10-23 성일님 "별도 탭 말고") */ },
   teacher:{ exam:[['input','성적 등록'],['manage','성적 관리']],
             study:[['students','학생별'],['rank','순위'],['fame','명예의 전당']],
             after:[['att','출석 현황'],['cal','달력']],
@@ -3487,7 +3499,7 @@ function renderView(){
   root.replaceChildren(v);
   // 넓은 화면에서 본문 폭을 다 쓰는 화면(홈 두 단·달력). 나머지 목록 화면은 읽기 좋은 폭으로 가운데에 둔다
   var su = subOf();
-  root.classList.toggle('view-wide', TAB==='home' || su==='cal');
+  root.classList.toggle('view-wide', TAB==='home' || su==='cal' || (TAB==='after' && ROLE==='student'));   // 학생 방과후는 하위 탭 없이 달력
   // 10/23 새 화면(공부·단어 진단·추천 앱)은 글씨를 키운다(성일님 "16~18 정도는 돼야 잘 보여")
   root.classList.toggle('big-txt', TAB==='study' || TAB==='vocab' || TAB==='apps');
   var p=renderViewInner(v);
@@ -5443,8 +5455,7 @@ async function renderAfterSchool(v){
   v.innerHTML='<div class="empty"><span>불러오는 중...</span></div>';
   if(!window.FS){v.innerHTML='<div class="empty"><span>연결 준비 중입니다<br>잠시 후 다시 시도해주세요</span></div>';return;}
   try{
-    if(subOf()==='cal')       await renderAsCalendar(v);
-    else if(ROLE==='student') await renderAsStudent(v);
+    if(subOf()==='cal' || ROLE==='student') await renderAsCalendar(v);
     else                      await renderAsTeacher(v);
   }catch(e){
     v.innerHTML='<div class="empty"><div class="empty-ico">'+ic('warn',40)+'</div>'+
@@ -5453,56 +5464,16 @@ async function renderAfterSchool(v){
   fillIcoSlots(v);
 }
 
-/* ── 학생: 오늘 수업 + 체크인 ── */
-async function renderAsStudent(v){
-  if(!ME.name){                       // 빈 이름으로 체크인 기록이 남으면 안 된다
-    v.innerHTML='<div class="empty"><div class="empty-ico">'+ic('person',44)+'</div>'+
-      '<span>로그인이 필요합니다</span></div>';
-    return;
-  }
-  var today=kstToday();
-  var sched=await FS.schedule();
-  var all=classesOn(sched,today);
-  var mine=all.filter(function(c){var t=classTrack(c);return t==='공통'||t===ME.track;});
-
-  if(!mine.length){
-    v.innerHTML='<div class="empty"><div class="empty-ico">'+ic('calendar',44)+'</div>'+
-      '<span>오늘은 방과후 수업이 없어요</span></div>';
-    return;
-  }
-
-  var both=await Promise.all([ FS.checkIns(today), soft(FS.asOverrides(today), {}) ]);
-  var recs=both[0], fx=both[1];
-  var doneSet={};
-  recs.forEach(function(r){ if(r.name===ME.name) doneSet[r.subject]=1; });
-  // 선생님이 정정한 것이 우선
-  Object.keys(fx).forEach(function(sub){ var st=(fx[sub]||{})[ME.name];
-    if (st==='출석') doneSet[sub]=1; else if (st==='결석') delete doneSet[sub]; });
-
-  var min=kstMinutes(), open=DEMO_STUDENT || min>=AS_START_MIN;
-  var html='<div class="sec-label">'+today.slice(5).replace('-','월 ')+'일 방과후</div>';
-
-  mine.forEach(function(c){
-    var done=!!doneSet[c.subject];
-    html+='<div class="card pad" style="margin-bottom:10px">'+
-      '<div style="display:flex;align-items:center;justify-content:space-between;gap:12px">'+
-        '<div><div class="row-t">'+c.subject+'</div>'+
-        '<div class="row-s">'+(c.teacher?c.teacher+' 선생님 · ':'')+'18:30 시작</div></div>'+
-        (done?'<span class="chip" style="background:var(--green-soft);color:#16a34a">✓ 출석완료</span>':'')+
-      '</div>'+
-      (done?'':
-        open
-          ? '<button class="btn" style="margin-top:14px" onclick="doAsCheckIn(\''+c.subject.replace(/'/g,"\\'")+'\')">출석 체크하기</button>'
-          : '<div style="margin-top:12px;padding:12px;background:var(--line-soft);border-radius:8px;'+
-            'font-size:.82rem;color:var(--ink-mute);text-align:center">18:30부터 체크할 수 있어요</div>')+
-    '</div>';
-  });
-
-  html+='<div class="notice" style="color:var(--ink-mute);cursor:default">'+ic('clock',15)+
-        '<span>오늘 24시까지 체크하지 않으면 결석 처리됩니다</span></div>';
-  v.innerHTML=html;
+/** 오늘 내 수업 카드 아래 출석 체크 줄 — 내 반(공통·내 트랙) 수업만 */
+function asCheckRow(chk, it){
+  if (!chk) return '';
+  var t = classTrack(it); if (t !== '공통' && t !== ME.track) return '';
+  chk.mine++;
+  if (chk.done[it.subject]) return '';
+  return chk.open
+    ? '<button class="btn" style="margin-top:12px" onclick="doAsCheckIn(\''+String(it.subject).replace(/'/g,"\\'")+'\')">출석 체크하기</button>'
+    : '<div style="margin-top:12px;padding:12px;background:var(--line-soft);border-radius:8px;font-size:.88rem;color:var(--ink-mute);text-align:center">18:30부터 출석 체크할 수 있어요</div>';
 }
-
 async function doAsCheckIn(subject){
   if(!DEMO_STUDENT && kstMinutes()<AS_START_MIN){alert('18:30부터 체크할 수 있어요.');return;}
   try{
