@@ -2603,6 +2603,8 @@ function gasRequest(action, params, front) {
 }
 
 async function callApi(action, params = {}) {
+    // 2026-10-23 학생 등교 인증은 새 앱에서만 — 어떤 경로로도 여기서 보내지 않는다
+    if (action === 'checkIn') throw new Error('등교 인증은 새 앱(청양고 장원급제반)에서 해 주세요.');
     // ★ 조회(get*)만 캐시 사용 — 쓰기 요청을 캐시하면 같은 파라미터의
     //   두 번째 쓰기가 서버에 안 가고 조용히 무시되는 버그가 생김
     const cacheable = action.startsWith('get');
@@ -3826,8 +3828,8 @@ function loadHome() {
             btnWrap.style.borderColor = '';
             btnWrap.onclick = doCheckIn;
             btnWrap.style.cursor = 'pointer';
-            if (btnLabel) btnLabel.textContent = '등교 인증';
-            if (descEl)   descEl.textContent   = '미인증';
+            if (btnLabel) btnLabel.textContent = '새 앱에서 인증';   // 2026-10-23 학생 등교 인증은 새 앱에서만(아래 doCheckIn)
+            if (descEl)   descEl.textContent   = '눌러서 앱 설치';
         }
     }
 }
@@ -4226,6 +4228,10 @@ async function processSingleAlert(msg) {
  *   실패 시 버튼 원복
  */
 async function doCheckIn() {
+    /* 2026-10-23 전환 뒤: 여기서 인증하면 GAS 시트에만 남고 새 앱(Firestore) 출결엔 안 잡혀
+       새 앱 계산에서 결석이 된다(팀장 세션 #25). 인증을 보내지 않고 새 앱 설치 안내로 보낸다. */
+    if (confirm('등교 인증은 이제 새 앱 \'청양고 장원급제반\'에서만 돼요.\n여기서 누르면 결석으로 처리될 수 있어요.\n\n앱 설치 화면으로 갈까요?')) location.href = './';
+    return;
     const wrap  = document.getElementById('btn-checkin-wrap');
     const label = document.getElementById('btn-checkin-label');
     if (wrap) { wrap.style.opacity = '0.5'; wrap.onclick = null; }
